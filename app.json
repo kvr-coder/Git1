@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Git1",
+    "slug": "git1-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "git1",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.example.git1",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.example.git1",
+      "supportsTablet": true
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
