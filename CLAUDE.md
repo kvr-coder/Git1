@@ -38,13 +38,27 @@ Cross-platform mobile app built with React Native + Expo. Targets Android (prima
 - Test on Android first via Expo Go (QR scan from `npm start`)
 - Verify iOS layout in the simulator or via EAS build before merging
 
-## Local preview workflow
-1. `npm start` on the PC
-2. Open Expo Go on the Android phone, scan the QR code
-3. Edits hot-reload instantly — no recompile needed for JS/TS changes
-4. Recompile (`npm run android`) only when adding native modules
+## Preview workflows
+
+There are two ways to preview changes when commands are sent from the phone via Claude Code (web/mobile) and pushed to git.
+
+### Option A — PC-as-dev-server (instant hot reload)
+Use when the PC is on. Phone connects from anywhere via tunnel.
+1. On the PC: `./scripts/dev-watch.sh`
+   - Auto-pulls the current branch every 5s and runs `expo start --tunnel`
+2. Open Expo Go on the phone, scan the QR
+3. Push from Claude → PC pulls → Metro reloads on the phone
+
+### Option B — EAS Update (no PC needed)
+Use when the PC is off; updates take ~30–60s.
+1. One-time: install a dev build of the app on the phone
+   - `npx eas build --profile development -p android` then install the APK
+2. Set `EXPO_TOKEN` in GitHub repo secrets (from expo.dev → access tokens)
+3. Push to a branch — `.github/workflows/eas-update.yml` publishes an OTA update
+   - `main` → `production` channel; other branches → `preview` channel
+4. Open the dev build app on the phone — it pulls the latest bundle
 
 ## Build & ship
-- Dev iteration: Expo Go (no compile)
+- Dev iteration: Expo Go (Option A) or dev build + EAS Update (Option B)
 - Internal testing: `eas build --profile preview` produces an installable APK
 - Production: `eas build --profile production` then submit via `eas submit`
