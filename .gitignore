@@ -29,3 +29,12 @@ yarn-error.*
 
 # Expo
 expo-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+
+# Server
+server/git1.db
+server/git1.db-*
+server/node_modules/
