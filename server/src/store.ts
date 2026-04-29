@@ -28,10 +28,32 @@ export interface PairCode {
   deviceId: string | null;
 }
 
+export interface ScheduleRow {
+  id: string;
+  userId: string;
+  deviceId: string;
+  name: string;
+  days: string[];
+  startMinute: number;
+  endMinute: number;
+  enabled: boolean;
+}
+
+export interface ActivityRow {
+  id: string;
+  userId: string;
+  deviceId: string;
+  kind: string;
+  message: string;
+  timestamp: number;
+}
+
 const users = new Map<string, User>();
 const tokens = new Map<string, string>(); // bearer → userId
 const devices = new Map<string, DeviceRow>();
 const pairCodes = new Map<string, PairCode>();
+const schedules = new Map<string, ScheduleRow>();
+const activity: ActivityRow[] = [];
 
 const id = () => randomBytes(8).toString('hex');
 const token = () => randomBytes(24).toString('hex');
@@ -109,5 +131,31 @@ export const store = {
   updateDevice(deviceId: string, patch: Partial<DeviceRow>) {
     const d = devices.get(deviceId);
     if (d) Object.assign(d, patch);
+  },
+
+  listSchedules(userId: string) {
+    return [...schedules.values()].filter((s) => s.userId === userId);
+  },
+  upsertSchedule(userId: string, s: Omit<ScheduleRow, 'userId'>) {
+    const row: ScheduleRow = { ...s, userId };
+    schedules.set(row.id, row);
+    return row;
+  },
+  deleteSchedule(userId: string, scheduleId: string) {
+    const s = schedules.get(scheduleId);
+    if (s && s.userId === userId) schedules.delete(scheduleId);
+  },
+
+  appendActivity(row: Omit<ActivityRow, 'id' | 'timestamp'>) {
+    const a: ActivityRow = { ...row, id: id(), timestamp: Date.now() };
+    activity.push(a);
+    if (activity.length > 1000) activity.splice(0, activity.length - 1000);
+    return a;
+  },
+  listActivity(userId: string, limit = 100) {
+    return activity
+      .filter((a) => a.userId === userId)
+      .slice(-limit)
+      .reverse();
   },
 };

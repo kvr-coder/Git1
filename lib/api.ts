@@ -1,13 +1,11 @@
+import { realApi } from './api.real';
+import { USE_MOCK } from './config';
 import { mockActivity, mockDevices, mockSchedules } from './mock';
 import type { ActivityEvent, Device, Schedule } from './types';
 
-// TODO: replace with real backend (REST/WS) once the agent service is built.
-// The agent on each child PC will connect to the backend; this client is the
-// parent-side phone client that issues commands and reads state.
-
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export const api = {
+const mockApi = {
   async listDevices(): Promise<Device[]> {
     await delay(150);
     return mockDevices;
@@ -31,14 +29,6 @@ export const api = {
     const d = mockDevices.find((x) => x.id === id);
     if (d) d.dailyLimitMinutes += minutes;
   },
-  async listSchedules(): Promise<Schedule[]> {
-    await delay(150);
-    return mockSchedules;
-  },
-  async listActivity(): Promise<ActivityEvent[]> {
-    await delay(150);
-    return mockActivity;
-  },
   async pairDevice(code: string): Promise<Device> {
     await delay(400);
     if (!/^\d{6}$/.test(code)) throw new Error('Invalid code');
@@ -55,6 +45,14 @@ export const api = {
     mockDevices.push(next);
     return next;
   },
+  async listSchedules(): Promise<Schedule[]> {
+    await delay(150);
+    return mockSchedules;
+  },
+  async getSchedule(id: string): Promise<Schedule | undefined> {
+    await delay(80);
+    return mockSchedules.find((s) => s.id === id);
+  },
   async upsertSchedule(s: Schedule): Promise<void> {
     await delay(150);
     const i = mockSchedules.findIndex((x) => x.id === s.id);
@@ -66,13 +64,14 @@ export const api = {
     const i = mockSchedules.findIndex((x) => x.id === id);
     if (i >= 0) mockSchedules.splice(i, 1);
   },
-  async getSchedule(id: string): Promise<Schedule | undefined> {
-    await delay(80);
-    return mockSchedules.find((s) => s.id === id);
+  async listActivity(): Promise<ActivityEvent[]> {
+    await delay(150);
+    return mockActivity;
   },
   async registerPushToken(token: string): Promise<void> {
     await delay(80);
-    // TODO: POST /push/register { token } to backend
-    console.log('[api] push token registered:', token);
+    console.log('[mock api] push token:', token);
   },
 };
+
+export const api = USE_MOCK ? mockApi : realApi;

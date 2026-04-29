@@ -1,0 +1,120 @@
+import { API_BASE } from './config';
+import { KEYS, storage } from './storage';
+import type { ActivityEvent, Device, Schedule } from './types';
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = await storage.get(KEYS.authToken);
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+interface ServerDevice {
+  id: string;
+  name: string;
+  status: 'online' | 'offline' | 'locked';
+  lastSeen: number | null;
+  dailyLimitMinutes: number;
+  usedTodayMinutes: number;
+}
+
+const adaptDevice = (d: ServerDevice): Device => ({
+  id: d.id,
+  name: d.name,
+  ownerName: '',
+  platform: 'windows',
+  status: d.status,
+  lastSeen: d.lastSeen ? new Date(d.lastSeen).toISOString() : new Date(0).toISOString(),
+  dailyLimitMinutes: d.dailyLimitMinutes,
+  usedTodayMinutes: d.usedTodayMinutes,
+});
+
+interface ServerActivity {
+  id: string;
+  deviceId: string;
+  kind: string;
+  message: string;
+  timestamp: number;
+}
+
+export const realApi = {
+  async login(email: string, password: string): Promise<string> {
+    const r = await request<{ token: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    return r.token;
+  },
+  async listDevices(): Promise<Device[]> {
+    const ds = await request<ServerDevice[]>('/devices');
+    return ds.map(adaptDevice);
+  },
+  async getDevice(id: string): Promise<Device | undefined> {
+    const all = await this.listDevices();
+    return all.find((d) => d.id === id);
+  },
+  async lockDevice(id: string) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'lock' }),
+    });
+  },
+  async unlockDevice(id: string) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'unlock' }),
+    });
+  },
+  async grantBonusMinutes(id: string, minutes: number) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'grant_minutes', payload: { minutes } }),
+    });
+  },
+  async pairDevice(code: string): Promise<Device> {
+    const d = await request<ServerDevice>('/devices/pair', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+    return adaptDevice(d);
+  },
+  async listSchedules(): Promise<Schedule[]> {
+    return request<Schedule[]>('/schedules');
+  },
+  async getSchedule(id: string) {
+    const all = await this.listSchedules();
+    return all.find((s) => s.id === id);
+  },
+  async upsertSchedule(s: Schedule) {
+    await request(`/schedules/${s.id}`, { method: 'PUT', body: JSON.stringify(s) });
+  },
+  async deleteSchedule(id: string) {
+    await request(`/schedules/${id}`, { method: 'DELETE' });
+  },
+  async listActivity(): Promise<ActivityEvent[]> {
+    const events = await request<ServerActivity[]>('/activity');
+    return events.map((e) => ({
+      id: e.id,
+      deviceId: e.deviceId,
+      kind: (['lock', 'unlock', 'limit_reached', 'app_blocked', 'login'].includes(e.kind)
+        ? e.kind
+        : 'login') as ActivityEvent['kind'],
+      message: e.message,
+      timestamp: new Date(e.timestamp).toISOString(),
+    }));
+  },
+  async registerPushToken(token: string) {
+    await request('/push/register', { method: 'POST', body: JSON.stringify({ token }) });
+  },
+};

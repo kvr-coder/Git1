@@ -2,7 +2,9 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { realApi } from '../lib/api.real';
 import { AuthContext } from '../lib/auth';
+import { USE_MOCK } from '../lib/config';
 import { registerForPush } from '../lib/push';
 import { KEYS, storage } from '../lib/storage';
 import { colors } from '../lib/theme';
@@ -33,10 +35,9 @@ export default function RootLayout() {
       signedIn,
       email,
       ready,
-      signIn: async (e: string, _p: string) => {
-        // TODO: real backend auth — POST /auth/login → { token }
-        const fakeToken = `demo-${Date.now()}`;
-        await storage.set(KEYS.authToken, fakeToken);
+      signIn: async (e: string, p: string) => {
+        const token = USE_MOCK ? `demo-${Date.now()}` : await realApi.login(e, p);
+        await storage.set(KEYS.authToken, token);
         await storage.set(KEYS.authEmail, e);
         setEmail(e);
         setSignedIn(true);

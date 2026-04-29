@@ -103,6 +103,37 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   res.json({ enqueued: true, delivered: sent, command: cmd });
 });
 
+// ---------- Schedules ----------
+const scheduleSchema = z.object({
+  id: z.string(),
+  deviceId: z.string(),
+  name: z.string(),
+  days: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])),
+  startMinute: z.number().int().min(0).max(24 * 60 - 1),
+  endMinute: z.number().int().min(0).max(24 * 60 - 1),
+  enabled: z.boolean(),
+});
+
+app.get('/schedules', auth, (req: AuthedRequest, res) => {
+  res.json(store.listSchedules(req.userId!));
+});
+
+app.put('/schedules/:id', auth, (req: AuthedRequest, res) => {
+  const p = scheduleSchema.safeParse({ ...req.body, id: req.params.id });
+  if (!p.success) return res.status(400).json(p.error);
+  res.json(store.upsertSchedule(req.userId!, p.data));
+});
+
+app.delete('/schedules/:id', auth, (req: AuthedRequest, res) => {
+  store.deleteSchedule(req.userId!, req.params.id);
+  res.json({ ok: true });
+});
+
+// ---------- Activity ----------
+app.get('/activity', auth, (req: AuthedRequest, res) => {
+  res.json(store.listActivity(req.userId!));
+});
+
 // ---------- Agent WebSocket ----------
 const agentSockets = new Map<string, WebSocket>();
 
@@ -140,10 +171,16 @@ wss.on('connection', (ws, req) => {
         usedTodayMinutes: msg.usedTodayMinutes,
       });
     } else if (msg.kind === 'event') {
-      // TODO: persist activity, fan out push to user's pushTokens
       console.log(`[event] ${device.id} ${msg.name}`, msg.payload ?? {});
+      store.appendActivity({
+        userId: device.userId,
+        deviceId: device.id,
+        kind: msg.name,
+        message: `${device.name}: ${msg.name}`,
+      });
       if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
       if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
+      // TODO: fan out Expo push to user's pushTokens for important events
     }
   });
 
