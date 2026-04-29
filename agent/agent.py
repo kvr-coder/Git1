@@ -1,8 +1,10 @@
 """Git1 child-PC agent.
 
-Pairs once with the Git1 server, then maintains a WebSocket and executes
-lock/unlock commands sent from the parent's mobile app. Tracks active
-session time using Windows GetLastInputInfo so idle minutes don't count.
+Pairs once with the Git1 server, then maintains a WebSocket and enforces:
+  - daily session-time limit (idle-aware via GetLastInputInfo)
+  - schedules (allowed windows pushed from server)
+  - process deny-list (kills blocked apps)
+  - internet kill-switch (via Windows Firewall)
 """
 from __future__ import annotations
 
@@ -18,6 +20,10 @@ from pathlib import Path
 import requests
 import websockets
 
+import enforcer_apps
+import enforcer_net
+import enforcer_schedule
+
 SERVER_HTTP = os.environ.get("GIT1_SERVER", "http://localhost:8080")
 SERVER_WS = SERVER_HTTP.replace("http://", "ws://").replace("https://", "wss://")
 
@@ -25,9 +31,10 @@ CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home() / ".config"))) / "Gi
 CONFIG_PATH = CONFIG_DIR / "agent.json"
 USAGE_PATH = CONFIG_DIR / "usage.json"
 
-IDLE_THRESHOLD_SEC = 60        # seconds of no input before we stop counting
-SAMPLE_INTERVAL_SEC = 30       # how often to sample activity
-HEARTBEAT_INTERVAL_SEC = 60    # how often to push heartbeat to server
+IDLE_THRESHOLD_SEC = 60
+SAMPLE_INTERVAL_SEC = 15
+HEARTBEAT_INTERVAL_SEC = 60
+RELOCK_INTERVAL_SEC = 5     # how often to re-lock if outside allowed window
 
 
 # ---------- Config ----------
@@ -51,7 +58,6 @@ class LASTINPUTINFO(ctypes.Structure):
 
 
 def idle_seconds() -> float:
-    """Seconds since last keyboard/mouse input. 0 on non-Windows."""
     if sys.platform != "win32":
         return 0.0
     lii = LASTINPUTINFO()
@@ -69,7 +75,7 @@ def lock_workstation() -> bool:
     return bool(ctypes.windll.user32.LockWorkStation())
 
 
-# ---------- Usage tracking ----------
+# ---------- Usage ----------
 def today_key() -> str:
     return dt.date.today().isoformat()
 
@@ -132,69 +138,103 @@ def pair() -> str:
             return body["agentToken"]
 
 
-# ---------- WebSocket loop ----------
+# ---------- Command handler ----------
+async def emit_event(ws, name: str, payload: dict | None = None) -> None:
+    try:
+        await ws.send(json.dumps({"kind": "event", "name": name, "payload": payload or {}}))
+    except websockets.ConnectionClosed:
+        pass
+
+
 async def handle_command(ws, command: dict, usage: Usage) -> None:
     kind = command.get("kind")
     cid = command.get("id")
     payload = command.get("payload") or {}
-    print(f"[cmd] {kind} ({cid})")
+    print(f"[cmd] {kind} ({cid}) payload={payload}")
 
     if kind == "lock":
         ok = lock_workstation()
-        await ws.send(json.dumps({"kind": "event", "name": "lock", "payload": {"ok": ok}}))
+        await emit_event(ws, "lock", {"ok": ok})
+
     elif kind == "unlock":
-        await ws.send(json.dumps({"kind": "event", "name": "unlock"}))
+        # Cannot programmatically unlock Windows; clear net block as a
+        # convenience so a kid blocked from the web is restored.
+        enforcer_net.unblock_internet()
+        await emit_event(ws, "unlock")
+
     elif kind == "grant_minutes":
         usage.grant(int(payload.get("minutes", 0)))
-        await ws.send(
-            json.dumps(
-                {"kind": "event", "name": "grant_minutes", "payload": {"limit": usage.limit_minutes}},
-            )
-        )
+        await emit_event(ws, "grant_minutes", {"limit": usage.limit_minutes})
+
     elif kind == "set_limit":
         usage.set_limit(int(payload.get("minutes", 120)))
-        await ws.send(
-            json.dumps(
-                {"kind": "event", "name": "set_limit", "payload": {"limit": usage.limit_minutes}},
-            )
-        )
+        await emit_event(ws, "set_limit", {"limit": usage.limit_minutes})
+
+    elif kind == "block_internet":
+        ok = enforcer_net.block_internet()
+        await emit_event(ws, "block_internet", {"ok": ok})
+
+    elif kind == "unblock_internet":
+        ok = enforcer_net.unblock_internet()
+        await emit_event(ws, "unblock_internet", {"ok": ok})
+
+    elif kind == "set_blocklist":
+        names = list(payload.get("apps") or [])
+        enforcer_apps.set_blocklist(names)
+        await emit_event(ws, "set_blocklist", {"count": len(names)})
+
+    elif kind == "set_schedules":
+        items = list(payload.get("schedules") or [])
+        enforcer_schedule.set_schedules(items)
+        await emit_event(ws, "set_schedules", {"count": len(items)})
 
     await ws.send(json.dumps({"kind": "ack", "id": cid}))
 
 
-async def tracker(ws, usage: Usage) -> None:
+# ---------- Enforcement loop ----------
+async def enforcer(ws, usage: Usage) -> None:
     last_sample = time.time()
     last_heartbeat = 0.0
+    last_relock = 0.0
     limit_notified = False
+
     while True:
         await asyncio.sleep(SAMPLE_INTERVAL_SEC)
         usage.roll_if_new_day()
         now = time.time()
+
+        # 1. Track active session time
         active = idle_seconds() < IDLE_THRESHOLD_SEC
         elapsed = now - last_sample
         last_sample = now
         if active:
             usage.add_seconds(elapsed)
 
-        if usage.over_limit() and not limit_notified:
-            limit_notified = True
-            try:
-                await ws.send(
-                    json.dumps(
-                        {
-                            "kind": "event",
-                            "name": "limit_reached",
-                            "payload": {"minutes": int(usage.minutes)},
-                        },
-                    )
-                )
+        # 2. Kill blocked apps
+        killed = enforcer_apps.kill_blocked()
+        if killed:
+            print(f"[apps] killed: {killed}")
+            await emit_event(ws, "app_blocked", {"apps": killed})
+
+        # 3. Daily-limit gate
+        if usage.over_limit():
+            if not limit_notified:
+                limit_notified = True
+                await emit_event(ws, "limit_reached", {"minutes": int(usage.minutes)})
+            if now - last_relock >= RELOCK_INTERVAL_SEC:
+                last_relock = now
                 lock_workstation()
-                await ws.send(json.dumps({"kind": "event", "name": "lock", "payload": {"auto": True}}))
-            except websockets.ConnectionClosed:
-                return
-        if not usage.over_limit():
+        else:
             limit_notified = False
 
+        # 4. Schedule gate
+        if not enforcer_schedule.is_currently_allowed():
+            if now - last_relock >= RELOCK_INTERVAL_SEC:
+                last_relock = now
+                lock_workstation()
+                await emit_event(ws, "schedule_lock")
+
+        # 5. Heartbeat
         if now - last_heartbeat >= HEARTBEAT_INTERVAL_SEC:
             last_heartbeat = now
             try:
@@ -212,14 +252,18 @@ async def run(token: str, usage: Usage) -> None:
     print(f"[ws] connecting to {url}")
     async with websockets.connect(url) as ws:
         print("[ws] connected")
-        track = asyncio.create_task(tracker(ws, usage))
+        loop = asyncio.create_task(enforcer(ws, usage))
         try:
             async for raw in ws:
                 msg = json.loads(raw)
                 if msg.get("kind") == "command":
                     await handle_command(ws, msg["command"], usage)
+                elif msg.get("kind") == "snapshot":
+                    enforcer_schedule.set_schedules(msg.get("schedules") or [])
+                    enforcer_apps.set_blocklist(msg.get("blocklist") or [])
+                    print("[snapshot] schedules + blocklist applied")
         finally:
-            track.cancel()
+            loop.cancel()
 
 
 def main() -> None:

@@ -11,6 +11,8 @@ export interface Device {
   lastSeen: string;
   dailyLimitMinutes: number;
   usedTodayMinutes: number;
+  internetBlocked: boolean;
+  blocklist: string[];
 }
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';

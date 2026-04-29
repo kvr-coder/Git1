@@ -17,6 +17,8 @@ export interface DeviceRow {
   status: 'online' | 'offline' | 'locked';
   dailyLimitMinutes: number;
   usedTodayMinutes: number;
+  internetBlocked: boolean;
+  blocklist: string[];
 }
 
 export interface ScheduleRow {
@@ -68,8 +70,11 @@ CREATE TABLE IF NOT EXISTS devices (
   lastSeen INTEGER,
   status TEXT NOT NULL DEFAULT 'offline',
   dailyLimitMinutes INTEGER NOT NULL DEFAULT 120,
-  usedTodayMinutes INTEGER NOT NULL DEFAULT 0
+  usedTodayMinutes INTEGER NOT NULL DEFAULT 0,
+  internetBlocked INTEGER NOT NULL DEFAULT 0,
+  blocklist TEXT NOT NULL DEFAULT '[]'
 );
+-- Best-effort migrations for existing DBs (ignore errors if columns exist).
 CREATE TABLE IF NOT EXISTS pair_codes (
   code TEXT PRIMARY KEY,
   agentToken TEXT NOT NULL,
@@ -98,6 +103,13 @@ CREATE TABLE IF NOT EXISTS activity (
 CREATE INDEX IF NOT EXISTS activity_user_ts ON activity(userId, timestamp DESC);
 `);
 
+for (const stmt of [
+  "ALTER TABLE devices ADD COLUMN internetBlocked INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE devices ADD COLUMN blocklist TEXT NOT NULL DEFAULT '[]'",
+]) {
+  try { db.exec(stmt); } catch { /* column already exists */ }
+}
+
 const id = () => randomBytes(8).toString('hex');
 const token = () => randomBytes(24).toString('hex');
 
@@ -111,6 +123,8 @@ const rowToDevice = (r: any): DeviceRow => ({
   status: r.status,
   dailyLimitMinutes: r.dailyLimitMinutes,
   usedTodayMinutes: r.usedTodayMinutes,
+  internetBlocked: !!r.internetBlocked,
+  blocklist: r.blocklist ? JSON.parse(r.blocklist) : [],
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
@@ -187,8 +201,8 @@ export const store = {
       usedTodayMinutes: 0,
     };
     db.prepare(
-      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]')`,
     ).run(
       d.id,
       d.userId,
@@ -231,7 +245,12 @@ export const store = {
     const fields = Object.keys(patch).filter((k) => k !== 'id');
     if (!fields.length) return;
     const sets = fields.map((f) => `${f} = ?`).join(', ');
-    const values = fields.map((f) => (patch as any)[f]);
+    const values = fields.map((f) => {
+      const v = (patch as any)[f];
+      if (f === 'blocklist') return JSON.stringify(v ?? []);
+      if (f === 'internetBlocked') return v ? 1 : 0;
+      return v;
+    });
     db.prepare(`UPDATE devices SET ${sets} WHERE id = ?`).run(...values, deviceId);
   },
 

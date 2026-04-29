@@ -10,6 +10,8 @@ export const mockDevices: Device[] = [
     lastSeen: new Date().toISOString(),
     dailyLimitMinutes: 120,
     usedTodayMinutes: 47,
+    internetBlocked: false,
+    blocklist: [],
   },
   {
     id: 'd2',
@@ -20,6 +22,8 @@ export const mockDevices: Device[] = [
     lastSeen: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     dailyLimitMinutes: 90,
     usedTodayMinutes: 90,
+    internetBlocked: true,
+    blocklist: ['steam.exe'],
   },
   {
     id: 'd3',
@@ -30,6 +34,8 @@ export const mockDevices: Device[] = [
     lastSeen: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
     dailyLimitMinutes: 180,
     usedTodayMinutes: 0,
+    internetBlocked: false,
+    blocklist: [],
   },
 ];
 

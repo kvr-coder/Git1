@@ -41,9 +41,21 @@ const mockApi = {
       lastSeen: new Date().toISOString(),
       dailyLimitMinutes: 120,
       usedTodayMinutes: 0,
+      internetBlocked: false,
+      blocklist: [],
     };
     mockDevices.push(next);
     return next;
+  },
+  async setInternetBlocked(id: string, blocked: boolean): Promise<void> {
+    await delay(150);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) d.internetBlocked = blocked;
+  },
+  async setBlocklist(id: string, apps: string[]): Promise<void> {
+    await delay(150);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) d.blocklist = apps;
   },
   async listSchedules(): Promise<Schedule[]> {
     await delay(150);

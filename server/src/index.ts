@@ -84,7 +84,16 @@ app.get('/devices', auth, (req: AuthedRequest, res) => {
 });
 
 const commandSchema = z.object({
-  kind: z.enum(['lock', 'unlock', 'grant_minutes', 'set_limit']),
+  kind: z.enum([
+    'lock',
+    'unlock',
+    'grant_minutes',
+    'set_limit',
+    'block_internet',
+    'unblock_internet',
+    'set_blocklist',
+    'set_schedules',
+  ]),
   payload: z.record(z.unknown()).optional(),
 });
 
@@ -93,6 +102,15 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   if (!d) return res.status(404).json({ error: 'device not found' });
   const p = commandSchema.safeParse(req.body);
   if (!p.success) return res.status(400).json(p.error);
+
+  // Apply server-side state for commands the parent expects to persist.
+  if (p.data.kind === 'block_internet') store.updateDevice(d.id, { internetBlocked: true });
+  if (p.data.kind === 'unblock_internet') store.updateDevice(d.id, { internetBlocked: false });
+  if (p.data.kind === 'set_blocklist') {
+    const apps = (p.data.payload?.apps as string[]) ?? [];
+    store.updateDevice(d.id, { blocklist: apps });
+  }
+
   const cmd: Command = {
     id: randomBytes(6).toString('hex'),
     deviceId: d.id,
@@ -122,11 +140,14 @@ app.get('/schedules', auth, (req: AuthedRequest, res) => {
 app.put('/schedules/:id', auth, (req: AuthedRequest, res) => {
   const p = scheduleSchema.safeParse({ ...req.body, id: req.params.id });
   if (!p.success) return res.status(400).json(p.error);
-  res.json(store.upsertSchedule(req.userId!, p.data));
+  const row = store.upsertSchedule(req.userId!, p.data);
+  pushSchedulesToAllAgentsFor(req.userId!);
+  res.json(row);
 });
 
 app.delete('/schedules/:id', auth, (req: AuthedRequest, res) => {
   store.deleteSchedule(req.userId!, req.params.id);
+  pushSchedulesToAllAgentsFor(req.userId!);
   res.json({ ok: true });
 });
 
@@ -148,6 +169,21 @@ function sendToAgent(deviceId: string, msg: ServerMessage): boolean {
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: '/agent/ws' });
 
+function pushSchedulesToAllAgentsFor(userId: string) {
+  for (const d of store.listDevices(userId)) {
+    const ws = agentSockets.get(d.id);
+    if (!ws || ws.readyState !== ws.OPEN) continue;
+    ws.send(
+      JSON.stringify({
+        kind: 'snapshot',
+        schedules: store.schedulesForDevice(d.id),
+        blocklist: d.blocklist,
+        internetBlocked: d.internetBlocked,
+      }),
+    );
+  }
+}
+
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url ?? '', 'http://localhost');
   const t = url.searchParams.get('token') ?? '';
@@ -158,6 +194,28 @@ wss.on('connection', (ws, req) => {
   }
   agentSockets.set(device.id, ws);
   store.updateDevice(device.id, { status: 'online', lastSeen: Date.now() });
+
+  // Push current schedules + blocklist + internet state immediately.
+  ws.send(
+    JSON.stringify({
+      kind: 'snapshot',
+      schedules: store.schedulesForDevice(device.id),
+      blocklist: device.blocklist,
+      internetBlocked: device.internetBlocked,
+    }),
+  );
+  // If internet should be blocked but we just (re)connected, re-issue.
+  if (device.internetBlocked) {
+    sendToAgent(device.id, {
+      kind: 'command',
+      command: {
+        id: randomBytes(6).toString('hex'),
+        deviceId: device.id,
+        kind: 'block_internet',
+        createdAt: Date.now(),
+      },
+    });
+  }
 
   ws.on('message', (raw) => {
     let msg: AgentMessage;
@@ -203,6 +261,8 @@ function toPublicDevice(d: DeviceRow) {
     lastSeen: d.lastSeen,
     dailyLimitMinutes: d.dailyLimitMinutes,
     usedTodayMinutes: d.usedTodayMinutes,
+    internetBlocked: d.internetBlocked,
+    blocklist: d.blocklist,
   };
 }
 

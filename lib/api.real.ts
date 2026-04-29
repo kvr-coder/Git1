@@ -27,6 +27,8 @@ interface ServerDevice {
   lastSeen: number | null;
   dailyLimitMinutes: number;
   usedTodayMinutes: number;
+  internetBlocked?: boolean;
+  blocklist?: string[];
 }
 
 const adaptDevice = (d: ServerDevice): Device => ({
@@ -38,6 +40,8 @@ const adaptDevice = (d: ServerDevice): Device => ({
   lastSeen: d.lastSeen ? new Date(d.lastSeen).toISOString() : new Date(0).toISOString(),
   dailyLimitMinutes: d.dailyLimitMinutes,
   usedTodayMinutes: d.usedTodayMinutes,
+  internetBlocked: !!d.internetBlocked,
+  blocklist: d.blocklist ?? [],
 });
 
 interface ServerActivity {
@@ -80,6 +84,18 @@ export const realApi = {
     await request(`/devices/${id}/command`, {
       method: 'POST',
       body: JSON.stringify({ kind: 'grant_minutes', payload: { minutes } }),
+    });
+  },
+  async setInternetBlocked(id: string, blocked: boolean) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: blocked ? 'block_internet' : 'unblock_internet' }),
+    });
+  },
+  async setBlocklist(id: string, apps: string[]) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'set_blocklist', payload: { apps } }),
     });
   },
   async pairDevice(code: string): Promise<Device> {
