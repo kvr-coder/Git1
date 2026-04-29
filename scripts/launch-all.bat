@@ -33,7 +33,7 @@ if not exist "%REPO_DIR%\node_modules" (
   call npm install
   popd
 )
-start "Git1 Mobile (Expo)" cmd /k "cd /d %REPO_DIR% && bash scripts/dev-watch.sh"
+start "Git1 Mobile (Expo)" cmd /k "cd /d %REPO_DIR% && powershell -ExecutionPolicy Bypass -File scripts\dev-watch.ps1"
 
 REM ---- 3. Agent (child PC service) ----
 echo [3/3] Starting agent...
