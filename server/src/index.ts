@@ -4,6 +4,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { WebSocketServer, type WebSocket } from 'ws';
 import { z } from 'zod';
 import { store, type DeviceRow } from './store.js';
+import { sendPush, shouldNotify } from './push.js';
 import type { AgentMessage, Command, ServerMessage } from './types.js';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -172,15 +173,19 @@ wss.on('connection', (ws, req) => {
       });
     } else if (msg.kind === 'event') {
       console.log(`[event] ${device.id} ${msg.name}`, msg.payload ?? {});
+      const message = `${device.name}: ${msg.name.replace(/_/g, ' ')}`;
       store.appendActivity({
         userId: device.userId,
         deviceId: device.id,
         kind: msg.name,
-        message: `${device.name}: ${msg.name}`,
+        message,
       });
       if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
       if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
-      // TODO: fan out Expo push to user's pushTokens for important events
+      if (shouldNotify(msg.name)) {
+        const tokens = store.pushTokensForUser(device.userId);
+        sendPush(tokens, 'Git1', message, { deviceId: device.id, kind: msg.name });
+      }
     }
   });
 
