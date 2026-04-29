@@ -39,4 +39,40 @@ export const api = {
     await delay(150);
     return mockActivity;
   },
+  async pairDevice(code: string): Promise<Device> {
+    await delay(400);
+    if (!/^\d{6}$/.test(code)) throw new Error('Invalid code');
+    const next: Device = {
+      id: `d${mockDevices.length + 1}`,
+      name: `New PC (${code})`,
+      ownerName: 'Unassigned',
+      platform: 'windows',
+      status: 'online',
+      lastSeen: new Date().toISOString(),
+      dailyLimitMinutes: 120,
+      usedTodayMinutes: 0,
+    };
+    mockDevices.push(next);
+    return next;
+  },
+  async upsertSchedule(s: Schedule): Promise<void> {
+    await delay(150);
+    const i = mockSchedules.findIndex((x) => x.id === s.id);
+    if (i >= 0) mockSchedules[i] = s;
+    else mockSchedules.push(s);
+  },
+  async deleteSchedule(id: string): Promise<void> {
+    await delay(150);
+    const i = mockSchedules.findIndex((x) => x.id === id);
+    if (i >= 0) mockSchedules.splice(i, 1);
+  },
+  async getSchedule(id: string): Promise<Schedule | undefined> {
+    await delay(80);
+    return mockSchedules.find((s) => s.id === id);
+  },
+  async registerPushToken(token: string): Promise<void> {
+    await delay(80);
+    // TODO: POST /push/register { token } to backend
+    console.log('[api] push token registered:', token);
+  },
 };

@@ -1,0 +1,169 @@
+import { createHash, randomBytes } from 'node:crypto';
+import { createServer } from 'node:http';
+import express, { type Request, type Response, type NextFunction } from 'express';
+import { WebSocketServer, type WebSocket } from 'ws';
+import { z } from 'zod';
+import { store, type DeviceRow } from './store.js';
+import type { AgentMessage, Command, ServerMessage } from './types.js';
+
+const PORT = Number(process.env.PORT ?? 8080);
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+
+const app = express();
+app.use(express.json());
+
+interface AuthedRequest extends Request {
+  userId?: string;
+}
+
+const auth = (req: AuthedRequest, res: Response, next: NextFunction) => {
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const user = store.userFromToken(token);
+  if (!user) return res.status(401).json({ error: 'unauthorized' });
+  req.userId = user.id;
+  next();
+};
+
+// ---------- Auth ----------
+const credSchema = z.object({ email: z.string().email(), password: z.string().min(6) });
+
+app.post('/auth/register', (req, res) => {
+  const p = credSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  if (store.findUserByEmail(p.data.email))
+    return res.status(409).json({ error: 'email taken' });
+  const u = store.createUser(p.data.email, sha(p.data.password));
+  res.json({ token: store.issueToken(u.id) });
+});
+
+app.post('/auth/login', (req, res) => {
+  const p = credSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const u = store.findUserByEmail(p.data.email);
+  if (!u || u.passwordHash !== sha(p.data.password))
+    return res.status(401).json({ error: 'bad credentials' });
+  res.json({ token: store.issueToken(u.id) });
+});
+
+app.post('/push/register', auth, (req: AuthedRequest, res) => {
+  const t = z.object({ token: z.string() }).safeParse(req.body);
+  if (!t.success) return res.status(400).json(t.error);
+  store.addPushToken(req.userId!, t.data.token);
+  res.json({ ok: true });
+});
+
+// ---------- Pairing ----------
+app.post('/agent/pair/start', (_req, res) => {
+  const pc = store.startPairing();
+  res.json({ code: pc.code });
+});
+
+app.get('/agent/pair/poll', (req, res) => {
+  const code = String(req.query.code ?? '');
+  const pc = store.pollPairing(code);
+  if (!pc) return res.status(404).json({ error: 'unknown code' });
+  if (!pc.deviceId) return res.json({ status: 'pending' });
+  res.json({ status: 'paired', agentToken: pc.agentToken, deviceId: pc.deviceId });
+});
+
+app.post('/devices/pair', auth, (req: AuthedRequest, res) => {
+  const p = z.object({ code: z.string().regex(/^\d{6}$/), name: z.string().optional() }).safeParse(
+    req.body,
+  );
+  if (!p.success) return res.status(400).json(p.error);
+  const d = store.claimPairing(p.data.code, req.userId!, p.data.name ?? 'New PC');
+  if (!d) return res.status(400).json({ error: 'invalid or expired code' });
+  res.json(toPublicDevice(d));
+});
+
+// ---------- Devices ----------
+app.get('/devices', auth, (req: AuthedRequest, res) => {
+  res.json(store.listDevices(req.userId!).map(toPublicDevice));
+});
+
+const commandSchema = z.object({
+  kind: z.enum(['lock', 'unlock', 'grant_minutes', 'set_limit']),
+  payload: z.record(z.unknown()).optional(),
+});
+
+app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  const p = commandSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const cmd: Command = {
+    id: randomBytes(6).toString('hex'),
+    deviceId: d.id,
+    kind: p.data.kind,
+    payload: p.data.payload,
+    createdAt: Date.now(),
+  };
+  const sent = sendToAgent(d.id, { kind: 'command', command: cmd });
+  res.json({ enqueued: true, delivered: sent, command: cmd });
+});
+
+// ---------- Agent WebSocket ----------
+const agentSockets = new Map<string, WebSocket>();
+
+function sendToAgent(deviceId: string, msg: ServerMessage): boolean {
+  const ws = agentSockets.get(deviceId);
+  if (!ws || ws.readyState !== ws.OPEN) return false;
+  ws.send(JSON.stringify(msg));
+  return true;
+}
+
+const httpServer = createServer(app);
+const wss = new WebSocketServer({ server: httpServer, path: '/agent/ws' });
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url ?? '', 'http://localhost');
+  const t = url.searchParams.get('token') ?? '';
+  const device = store.deviceByAgentToken(t);
+  if (!device) {
+    ws.close(4401, 'unauthorized');
+    return;
+  }
+  agentSockets.set(device.id, ws);
+  store.updateDevice(device.id, { status: 'online', lastSeen: Date.now() });
+
+  ws.on('message', (raw) => {
+    let msg: AgentMessage;
+    try {
+      msg = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+    if (msg.kind === 'heartbeat') {
+      store.updateDevice(device.id, {
+        lastSeen: Date.now(),
+        usedTodayMinutes: msg.usedTodayMinutes,
+      });
+    } else if (msg.kind === 'event') {
+      // TODO: persist activity, fan out push to user's pushTokens
+      console.log(`[event] ${device.id} ${msg.name}`, msg.payload ?? {});
+      if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
+      if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
+    }
+  });
+
+  ws.on('close', () => {
+    agentSockets.delete(device.id);
+    store.updateDevice(device.id, { status: 'offline' });
+  });
+});
+
+function toPublicDevice(d: DeviceRow) {
+  return {
+    id: d.id,
+    name: d.name,
+    status: d.status,
+    lastSeen: d.lastSeen,
+    dailyLimitMinutes: d.dailyLimitMinutes,
+    usedTodayMinutes: d.usedTodayMinutes,
+  };
+}
+
+httpServer.listen(PORT, () => {
+  console.log(`git1-server listening on http://localhost:${PORT}`);
+});

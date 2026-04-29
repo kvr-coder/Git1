@@ -1,35 +1,71 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AuthContext } from '../lib/auth';
+import { registerForPush } from '../lib/push';
+import { KEYS, storage } from '../lib/storage';
+import { colors } from '../lib/theme';
 
 export default function RootLayout() {
   const [signedIn, setSignedIn] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const router = useRouter();
   const segments = useSegments();
+
+  useEffect(() => {
+    (async () => {
+      const [token, savedEmail] = await Promise.all([
+        storage.get(KEYS.authToken),
+        storage.get(KEYS.authEmail),
+      ]);
+      if (token) {
+        setSignedIn(true);
+        setEmail(savedEmail);
+      }
+      setReady(true);
+    })();
+  }, []);
 
   const auth = useMemo(
     () => ({
       signedIn,
       email,
+      ready,
       signIn: async (e: string, _p: string) => {
+        // TODO: real backend auth — POST /auth/login → { token }
+        const fakeToken = `demo-${Date.now()}`;
+        await storage.set(KEYS.authToken, fakeToken);
+        await storage.set(KEYS.authEmail, e);
         setEmail(e);
         setSignedIn(true);
       },
-      signOut: () => {
+      signOut: async () => {
+        await storage.del(KEYS.authToken);
+        await storage.del(KEYS.authEmail);
         setEmail(null);
         setSignedIn(false);
       },
     }),
-    [signedIn, email],
+    [signedIn, email, ready],
   );
 
   useEffect(() => {
+    if (!ready) return;
     const inAuth = segments[0] === 'login';
     if (!signedIn && !inAuth) router.replace('/login');
     if (signedIn && inAuth) router.replace('/');
-  }, [signedIn, segments, router]);
+    if (signedIn) registerForPush();
+  }, [signedIn, segments, router, ready]);
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <AuthContext.Provider value={auth}>
@@ -37,7 +73,18 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" />
-        <Stack.Screen name="device/[id]" options={{ headerShown: true, title: 'Device' }} />
+        <Stack.Screen
+          name="device/[id]"
+          options={{ headerShown: true, title: 'Device', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
+        />
+        <Stack.Screen
+          name="pair"
+          options={{ headerShown: true, title: 'Pair device', presentation: 'modal', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
+        />
+        <Stack.Screen
+          name="schedule/[id]"
+          options={{ headerShown: true, title: 'Edit schedule', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
+        />
       </Stack>
     </AuthContext.Provider>
   );
