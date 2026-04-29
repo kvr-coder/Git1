@@ -20,7 +20,12 @@ $pullJob = Start-Job -ScriptBlock {
 } -ArgumentList $branch, $pullInterval, (Get-Location).Path
 
 try {
-    npx expo start --tunnel
+    # LAN mode (phone + PC on same Wi-Fi). Set GIT1_TUNNEL=1 to use ngrok tunnel instead.
+    if ($env:GIT1_TUNNEL -eq "1") {
+        npx expo start --tunnel
+    } else {
+        npx expo start --lan
+    }
 }
 finally {
     Stop-Job $pullJob -ErrorAction SilentlyContinue
