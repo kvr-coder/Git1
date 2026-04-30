@@ -17,6 +17,8 @@ export interface Device {
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
+export type ScheduleAction = 'lock' | 'block_internet' | 'block_apps';
+
 export interface Schedule {
   id: string;
   deviceId: string;
@@ -25,6 +27,7 @@ export interface Schedule {
   startMinute: number;
   endMinute: number;
   enabled: boolean;
+  actions: ScheduleAction[];
 }
 
 export type ActivityKind =

@@ -39,18 +39,28 @@ def _in_window(start: int, end: int, minute: int) -> bool:
 
 
 def is_currently_allowed(now: dt.datetime | None = None) -> bool:
-    """True if at least one enabled schedule's allowed window covers now.
+    """Back-compat: True if at least one enabled schedule covers now."""
+    return not active_actions(now)
 
-    If there are no enabled schedules at all, default to allowed (the
-    daily-limit gate still applies).
+
+def active_actions(now: dt.datetime | None = None) -> set[str]:
+    """Union of enforcement actions whose windows are currently *outside*.
+
+    A schedule is in deny-mode when its day matches today AND `now` falls
+    OUTSIDE the schedule's allowed window. Each deny-mode schedule
+    contributes its `actions` (e.g. {"lock", "block_internet"}). Schedules
+    that don't apply today (wrong weekday) are ignored entirely so that a
+    'School nights' Mon-Thu schedule doesn't lock the PC on Friday.
     """
-    enabled = [s for s in _schedules if s.get("enabled")]
-    if not enabled:
-        return True
+    actions: set[str] = set()
     day, minute = _now_minute(now)
-    for s in enabled:
+    for s in _schedules:
+        if not s.get("enabled"):
+            continue
         if day not in (s.get("days") or []):
             continue
         if _in_window(int(s["startMinute"]), int(s["endMinute"]), minute):
-            return True
-    return False
+            continue  # currently allowed by this schedule
+        for a in s.get("actions") or ["lock"]:
+            actions.add(a)
+    return actions

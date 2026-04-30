@@ -131,6 +131,7 @@ const scheduleSchema = z.object({
   startMinute: z.number().int().min(0).max(24 * 60 - 1),
   endMinute: z.number().int().min(0).max(24 * 60 - 1),
   enabled: z.boolean(),
+  actions: z.array(z.enum(['lock', 'block_internet', 'block_apps'])).optional(),
 });
 
 app.get('/schedules', auth, (req: AuthedRequest, res) => {

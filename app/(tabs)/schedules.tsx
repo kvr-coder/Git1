@@ -11,6 +11,14 @@ import type { Schedule } from '../../lib/types';
 
 const dayLabel = (d: string) => d[0].toUpperCase() + d.slice(1);
 
+const ACTION_SHORT: Record<string, string> = {
+  lock: 'Lock',
+  block_internet: 'No internet',
+  block_apps: 'Block apps',
+};
+const summarizeActions = (acts: string[] | undefined) =>
+  (acts && acts.length ? acts : ['lock']).map((a) => ACTION_SHORT[a] ?? a).join(' · ');
+
 export default function Schedules() {
   const [items, setItems] = useState<Schedule[]>([]);
   const router = useRouter();
@@ -42,6 +50,9 @@ export default function Schedules() {
                 <Text style={[typography.caption, { color: colors.textMuted }]}>
                   {s.days.map(dayLabel).join(' ')} · {formatMinutes(s.startMinute)}–
                   {formatMinutes(s.endMinute)}
+                </Text>
+                <Text style={[typography.caption, { color: colors.primary, marginTop: 2 }]}>
+                  Outside: {summarizeActions(s.actions)}
                 </Text>
               </View>
               <Switch

@@ -30,6 +30,7 @@ export interface ScheduleRow {
   startMinute: number;
   endMinute: number;
   enabled: boolean;
+  actions: string[];
 }
 
 export interface ActivityRow {
@@ -90,7 +91,8 @@ CREATE TABLE IF NOT EXISTS schedules (
   days TEXT NOT NULL,
   startMinute INTEGER NOT NULL,
   endMinute INTEGER NOT NULL,
-  enabled INTEGER NOT NULL
+  enabled INTEGER NOT NULL,
+  actions TEXT NOT NULL DEFAULT '["lock"]'
 );
 CREATE TABLE IF NOT EXISTS activity (
   id TEXT PRIMARY KEY,
@@ -117,6 +119,7 @@ CREATE INDEX IF NOT EXISTS time_requests_user_status ON time_requests(userId, st
 for (const stmt of [
   "ALTER TABLE devices ADD COLUMN internetBlocked INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN blocklist TEXT NOT NULL DEFAULT '[]'",
+  "ALTER TABLE schedules ADD COLUMN actions TEXT NOT NULL DEFAULT '[\"lock\"]'",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -147,6 +150,7 @@ const rowToSchedule = (r: any): ScheduleRow => ({
   startMinute: r.startMinute,
   endMinute: r.endMinute,
   enabled: !!r.enabled,
+  actions: r.actions ? JSON.parse(r.actions) : ['lock'],
 });
 
 export const store = {
@@ -271,12 +275,14 @@ export const store = {
     ).map(rowToSchedule);
   },
   upsertSchedule(userId: string, s: Omit<ScheduleRow, 'userId'>): ScheduleRow {
+    const actions = s.actions && s.actions.length ? s.actions : ['lock'];
     db.prepare(
-      `INSERT INTO schedules (id, userId, deviceId, name, days, startMinute, endMinute, enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO schedules (id, userId, deviceId, name, days, startMinute, endMinute, enabled, actions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          deviceId=excluded.deviceId, name=excluded.name, days=excluded.days,
-         startMinute=excluded.startMinute, endMinute=excluded.endMinute, enabled=excluded.enabled`,
+         startMinute=excluded.startMinute, endMinute=excluded.endMinute,
+         enabled=excluded.enabled, actions=excluded.actions`,
     ).run(
       s.id,
       userId,
@@ -286,8 +292,9 @@ export const store = {
       s.startMinute,
       s.endMinute,
       s.enabled ? 1 : 0,
+      JSON.stringify(actions),
     );
-    return { ...s, userId };
+    return { ...s, actions, userId };
   },
   deleteSchedule(userId: string, scheduleId: string) {
     db.prepare('DELETE FROM schedules WHERE id = ? AND userId = ?').run(scheduleId, userId);

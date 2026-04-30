@@ -232,6 +232,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
     last_vpn_check = 0.0
     last_clock_check = 0.0
     limit_notified = False
+    was_schedule_blocking_net = False
 
     while True:
         await asyncio.sleep(SAMPLE_INTERVAL_SEC)
@@ -267,8 +268,9 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
                 print(f"[clock] drift {drift:.1f}s — tamper")
                 await emit_event(ws, "clock_tamper", {"driftSec": drift})
 
-        # 5. Daily-limit gate
-        schedule_allowed = enforcer_schedule.is_currently_allowed(clock.now_trusted_dt())
+        # 5. Daily-limit gate (always locks)
+        schedule_actions = enforcer_schedule.active_actions(clock.now_trusted_dt())
+        schedule_allowed = not schedule_actions
         if usage.over_limit():
             if not limit_notified:
                 limit_notified = True
@@ -279,12 +281,29 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         else:
             limit_notified = False
 
-        # 6. Schedule gate
-        if not schedule_allowed:
+        # 6. Schedule gate — apply each requested action
+        if "lock" in schedule_actions:
             if now - last_relock >= RELOCK_INTERVAL_SEC:
                 last_relock = now
                 lock_workstation()
                 await emit_event(ws, "schedule_lock")
+        # Internet block (idempotent; only flip when state changes)
+        want_net_block = "block_internet" in schedule_actions
+        if want_net_block and not enforcer_net.is_blocked():
+            enforcer_net.block_internet()
+            await emit_event(ws, "schedule_internet_block")
+        elif (
+            not want_net_block
+            and not schedule_actions  # no schedule requesting block
+            and was_schedule_blocking_net
+            and enforcer_net.is_blocked()
+        ):
+            # Only lift the firewall block if *we* (schedule) put it there.
+            enforcer_net.unblock_internet()
+            await emit_event(ws, "schedule_internet_unblock")
+        was_schedule_blocking_net = want_net_block
+        # block_apps action — kill loop already runs every tick (#2 above).
+        # Future: we could maintain a separate per-schedule app list.
 
         # 7. Update kid dashboard state
         dash.update(

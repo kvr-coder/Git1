@@ -48,6 +48,7 @@ export const mockSchedules: Schedule[] = [
     startMinute: 16 * 60,
     endMinute: 20 * 60,
     enabled: true,
+    actions: ['lock'],
   },
   {
     id: 's2',
@@ -57,6 +58,7 @@ export const mockSchedules: Schedule[] = [
     startMinute: 21 * 60,
     endMinute: 7 * 60,
     enabled: true,
+    actions: ['lock'],
   },
 ];
 

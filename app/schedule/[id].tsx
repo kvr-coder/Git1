@@ -8,9 +8,16 @@ import { api } from '../../lib/api';
 import { formatMinutes } from '../../lib/format';
 import { mockDevices } from '../../lib/mock';
 import { colors, radius, spacing, typography } from '../../lib/theme';
-import type { DayOfWeek, Schedule } from '../../lib/types';
+import type { DayOfWeek, Schedule, ScheduleAction } from '../../lib/types';
 
 const ALL_DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+const ACTION_LABELS: Record<ScheduleAction, string> = {
+  lock: 'Lock PC',
+  block_internet: 'Block internet',
+  block_apps: 'Kill blocked apps',
+};
+const ALL_ACTIONS: ScheduleAction[] = ['lock', 'block_internet', 'block_apps'];
 
 const blank = (): Schedule => ({
   id: `s${Date.now()}`,
@@ -20,6 +27,7 @@ const blank = (): Schedule => ({
   startMinute: 16 * 60,
   endMinute: 20 * 60,
   enabled: true,
+  actions: ['lock'],
 });
 
 export default function ScheduleEditor() {
@@ -37,6 +45,12 @@ export default function ScheduleEditor() {
 
   const toggleDay = (d: DayOfWeek) =>
     setS({ ...s, days: s.days.includes(d) ? s.days.filter((x) => x !== d) : [...s.days, d] });
+
+  const toggleAction = (a: ScheduleAction) => {
+    const has = s.actions.includes(a);
+    const next = has ? s.actions.filter((x) => x !== a) : [...s.actions, a];
+    setS({ ...s, actions: next.length ? next : ['lock'] }); // keep at least one
+  };
 
   const bumpMinute = (key: 'startMinute' | 'endMinute', delta: number) =>
     setS({ ...s, [key]: ((s[key] + delta) % (24 * 60) + 24 * 60) % (24 * 60) });
@@ -103,6 +117,28 @@ export default function ScheduleEditor() {
               >
                 <Text style={{ color: on ? colors.primaryText : colors.text }}>
                   {d.toUpperCase()}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Card>
+
+      <Card>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>
+          What happens outside the allowed window
+        </Text>
+        <View style={styles.chipRow}>
+          {ALL_ACTIONS.map((a) => {
+            const on = s.actions.includes(a);
+            return (
+              <Pressable
+                key={a}
+                onPress={() => toggleAction(a)}
+                style={[styles.chip, on && styles.chipActive]}
+              >
+                <Text style={{ color: on ? colors.primaryText : colors.text }}>
+                  {ACTION_LABELS[a]}
                 </Text>
               </Pressable>
             );
