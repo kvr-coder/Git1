@@ -5,6 +5,10 @@ Pairs once with the Git1 server, then maintains a WebSocket and enforces:
   - schedules (allowed windows pushed from server)
   - process deny-list (kills blocked apps)
   - internet kill-switch (via Windows Firewall)
+  - VPN / Tor adapter detection
+  - clock-tamper detection (NTP-anchored time)
+Also serves a localhost dashboard the kid can open in a browser, with a
+"request more time" button that round-trips through the parent's app.
 """
 from __future__ import annotations
 
@@ -14,15 +18,20 @@ import datetime as dt
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import requests
 import websockets
 
+import clock
+import dashboard
 import enforcer_apps
 import enforcer_net
 import enforcer_schedule
+import enforcer_vpn
 
 SERVER_HTTP = os.environ.get("GIT1_SERVER", "http://localhost:8080")
 SERVER_WS = SERVER_HTTP.replace("http://", "ws://").replace("https://", "wss://")
@@ -34,7 +43,9 @@ USAGE_PATH = CONFIG_DIR / "usage.json"
 IDLE_THRESHOLD_SEC = 60
 SAMPLE_INTERVAL_SEC = 15
 HEARTBEAT_INTERVAL_SEC = 60
-RELOCK_INTERVAL_SEC = 5     # how often to re-lock if outside allowed window
+RELOCK_INTERVAL_SEC = 5
+VPN_CHECK_INTERVAL_SEC = 30
+CLOCK_CHECK_INTERVAL_SEC = 600
 
 
 # ---------- Config ----------
@@ -77,7 +88,7 @@ def lock_workstation() -> bool:
 
 # ---------- Usage ----------
 def today_key() -> str:
-    return dt.date.today().isoformat()
+    return dt.datetime.fromtimestamp(clock.now_trusted()).date().isoformat()
 
 
 class Usage:
@@ -138,15 +149,39 @@ def pair() -> str:
             return body["agentToken"]
 
 
+# ---------- Outgoing event helper (thread-safe) ----------
+class WSBridge:
+    """Allows non-async code (HTTP request handler thread, etc.) to enqueue
+    events that get sent on the asyncio websocket.
+    """
+
+    def __init__(self) -> None:
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.ws: Any = None  # type: ignore[var-annotated]
+
+    def bind(self, loop: asyncio.AbstractEventLoop, ws: Any) -> None:
+        self.loop = loop
+        self.ws = ws
+
+    def emit(self, name: str, payload: dict | None = None) -> None:
+        if self.loop is None or self.ws is None:
+            return
+        msg = json.dumps({"kind": "event", "name": name, "payload": payload or {}})
+        asyncio.run_coroutine_threadsafe(self.ws.send(msg), self.loop)
+
+
+bridge = WSBridge()
+
+
 # ---------- Command handler ----------
-async def emit_event(ws, name: str, payload: dict | None = None) -> None:
+async def emit_event(ws: Any, name: str, payload: dict | None = None) -> None:
     try:
         await ws.send(json.dumps({"kind": "event", "name": name, "payload": payload or {}}))
     except websockets.ConnectionClosed:
         pass
 
 
-async def handle_command(ws, command: dict, usage: Usage) -> None:
+async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
     kind = command.get("kind")
     cid = command.get("id")
     payload = command.get("payload") or {}
@@ -157,8 +192,6 @@ async def handle_command(ws, command: dict, usage: Usage) -> None:
         await emit_event(ws, "lock", {"ok": ok})
 
     elif kind == "unlock":
-        # Cannot programmatically unlock Windows; clear net block as a
-        # convenience so a kid blocked from the web is restored.
         enforcer_net.unblock_internet()
         await emit_event(ws, "unlock")
 
@@ -192,10 +225,12 @@ async def handle_command(ws, command: dict, usage: Usage) -> None:
 
 
 # ---------- Enforcement loop ----------
-async def enforcer(ws, usage: Usage) -> None:
+async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
     last_sample = time.time()
     last_heartbeat = 0.0
     last_relock = 0.0
+    last_vpn_check = 0.0
+    last_clock_check = 0.0
     limit_notified = False
 
     while True:
@@ -216,7 +251,24 @@ async def enforcer(ws, usage: Usage) -> None:
             print(f"[apps] killed: {killed}")
             await emit_event(ws, "app_blocked", {"apps": killed})
 
-        # 3. Daily-limit gate
+        # 3. VPN / Tor adapter check
+        if now - last_vpn_check >= VPN_CHECK_INTERVAL_SEC:
+            last_vpn_check = now
+            new_tunnels = enforcer_vpn.detect_new_tunnels()
+            if new_tunnels:
+                print(f"[vpn] new tunnel adapter(s): {new_tunnels}")
+                await emit_event(ws, "vpn_detected", {"adapters": new_tunnels})
+
+        # 4. Clock tamper check
+        if now - last_clock_check >= CLOCK_CHECK_INTERVAL_SEC:
+            last_clock_check = now
+            drift = clock.check_drift()
+            if clock.is_tampered():
+                print(f"[clock] drift {drift:.1f}s — tamper")
+                await emit_event(ws, "clock_tamper", {"driftSec": drift})
+
+        # 5. Daily-limit gate
+        schedule_allowed = enforcer_schedule.is_currently_allowed(clock.now_trusted_dt())
         if usage.over_limit():
             if not limit_notified:
                 limit_notified = True
@@ -227,14 +279,24 @@ async def enforcer(ws, usage: Usage) -> None:
         else:
             limit_notified = False
 
-        # 4. Schedule gate
-        if not enforcer_schedule.is_currently_allowed():
+        # 6. Schedule gate
+        if not schedule_allowed:
             if now - last_relock >= RELOCK_INTERVAL_SEC:
                 last_relock = now
                 lock_workstation()
                 await emit_event(ws, "schedule_lock")
 
-        # 5. Heartbeat
+        # 7. Update kid dashboard state
+        dash.update(
+            usedTodayMinutes=int(usage.minutes),
+            limitMinutes=int(usage.limit_minutes),
+            internetBlocked=enforcer_net.is_blocked(),
+            blocklist=enforcer_apps.get_blocklist(),
+            schedules=enforcer_schedule.get_schedules(),
+            scheduleAllowed=schedule_allowed,
+        )
+
+        # 8. Heartbeat
         if now - last_heartbeat >= HEARTBEAT_INTERVAL_SEC:
             last_heartbeat = now
             try:
@@ -247,12 +309,13 @@ async def enforcer(ws, usage: Usage) -> None:
                 return
 
 
-async def run(token: str, usage: Usage) -> None:
+async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
     url = f"{SERVER_WS}/agent/ws?token={token}"
     print(f"[ws] connecting to {url}")
     async with websockets.connect(url) as ws:
         print("[ws] connected")
-        loop = asyncio.create_task(enforcer(ws, usage))
+        bridge.bind(asyncio.get_running_loop(), ws)
+        loop = asyncio.create_task(enforcer(ws, usage, dash))
         try:
             async for raw in ws:
                 msg = json.loads(raw)
@@ -275,11 +338,25 @@ def main() -> None:
         save_json(CONFIG_PATH, cfg)
         print("[pair] success, token saved")
 
+    # Initialise NTP anchor + VPN baseline before the loop runs.
+    if clock.refresh(force=True) is None:
+        print("[clock] NTP unreachable; falling back to local clock")
+    enforcer_vpn.init_baseline()
+    enforcer_vpn.block_tor_ports()
+
     usage = Usage()
+
+    # Kid dashboard on http://127.0.0.1:8765
+    dash = dashboard.Dashboard()
+    dash.on_request(lambda minutes, reason: bridge.emit(
+        "request_minutes", {"minutes": minutes, "reason": reason}
+    ))
+    dash.start()
+
     backoff = 2
     while True:
         try:
-            asyncio.run(run(token, usage))
+            asyncio.run(run(token, usage, dash))
             backoff = 2
         except Exception as e:
             print(f"[ws] disconnected: {e}; retrying in {backoff}s")

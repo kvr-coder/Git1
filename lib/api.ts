@@ -1,7 +1,19 @@
 import { realApi } from './api.real';
 import { USE_MOCK } from './config';
 import { mockActivity, mockDevices, mockSchedules } from './mock';
-import type { ActivityEvent, Device, Schedule } from './types';
+import type { ActivityEvent, Device, Schedule, TimeRequest } from './types';
+
+const mockRequests: TimeRequest[] = [
+  {
+    id: 'r1',
+    deviceId: 'd1',
+    minutes: 15,
+    reason: 'Just one more episode!',
+    status: 'pending',
+    createdAt: Date.now() - 1000 * 60 * 3,
+    resolvedAt: null,
+  },
+];
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -83,6 +95,21 @@ const mockApi = {
   async registerPushToken(token: string): Promise<void> {
     await delay(80);
     console.log('[mock api] push token:', token);
+  },
+  async listRequests(status?: 'pending' | 'approved' | 'denied'): Promise<TimeRequest[]> {
+    await delay(120);
+    return status ? mockRequests.filter((r) => r.status === status) : mockRequests;
+  },
+  async resolveRequest(id: string, status: 'approved' | 'denied'): Promise<void> {
+    await delay(150);
+    const r = mockRequests.find((x) => x.id === id);
+    if (!r) return;
+    r.status = status;
+    r.resolvedAt = Date.now();
+    if (status === 'approved') {
+      const d = mockDevices.find((x) => x.id === r.deviceId);
+      if (d) d.dailyLimitMinutes += r.minutes;
+    }
   },
 };
 

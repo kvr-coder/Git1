@@ -33,7 +33,15 @@ export async function sendPush(tokens: string[], title: string, body: string, da
   }
 }
 
-const NOTIFY_KINDS = new Set(['limit_reached', 'app_blocked', 'lock', 'boot_blocked']);
+const NOTIFY_KINDS = new Set([
+  'limit_reached',
+  'app_blocked',
+  'lock',
+  'boot_blocked',
+  'vpn_detected',
+  'clock_tamper',
+  'request_minutes',
+]);
 
 export function shouldNotify(kind: string): boolean {
   return NOTIFY_KINDS.has(kind);

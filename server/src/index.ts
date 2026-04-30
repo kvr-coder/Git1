@@ -156,6 +156,34 @@ app.get('/activity', auth, (req: AuthedRequest, res) => {
   res.json(store.listActivity(req.userId!));
 });
 
+// ---------- Time requests (kid → parent) ----------
+app.get('/requests', auth, (req: AuthedRequest, res) => {
+  const status = (req.query.status as 'pending' | 'approved' | 'denied' | undefined) ?? undefined;
+  res.json(store.listTimeRequests(req.userId!, status));
+});
+
+app.post('/requests/:id/resolve', auth, (req: AuthedRequest, res) => {
+  const p = z.object({ status: z.enum(['approved', 'denied']) }).safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const r = store.getTimeRequest(req.userId!, req.params.id);
+  if (!r) return res.status(404).json({ error: 'not found' });
+  if (r.status !== 'pending') return res.status(409).json({ error: 'already resolved' });
+  store.resolveTimeRequest(req.userId!, r.id, p.data.status);
+  if (p.data.status === 'approved') {
+    sendToAgent(r.deviceId, {
+      kind: 'command',
+      command: {
+        id: randomBytes(6).toString('hex'),
+        deviceId: r.deviceId,
+        kind: 'grant_minutes',
+        payload: { minutes: r.minutes },
+        createdAt: Date.now(),
+      },
+    });
+  }
+  res.json({ ok: true, status: p.data.status });
+});
+
 // ---------- Agent WebSocket ----------
 const agentSockets = new Map<string, WebSocket>();
 
@@ -231,18 +259,37 @@ wss.on('connection', (ws, req) => {
       });
     } else if (msg.kind === 'event') {
       console.log(`[event] ${device.id} ${msg.name}`, msg.payload ?? {});
-      const message = `${device.name}: ${msg.name.replace(/_/g, ' ')}`;
-      store.appendActivity({
-        userId: device.userId,
-        deviceId: device.id,
-        kind: msg.name,
-        message,
-      });
-      if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
-      if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
-      if (shouldNotify(msg.name)) {
+      let message = `${device.name}: ${msg.name.replace(/_/g, ' ')}`;
+      if (msg.name === 'request_minutes') {
+        const minutes = Number((msg.payload as any)?.minutes ?? 0);
+        const reason = String((msg.payload as any)?.reason ?? '');
+        const req = store.createTimeRequest(device.userId, device.id, minutes, reason);
+        message = `${device.name}: requested ${minutes} more minutes${reason ? ` — "${reason}"` : ''}`;
+        store.appendActivity({
+          userId: device.userId,
+          deviceId: device.id,
+          kind: 'request_minutes',
+          message,
+        });
         const tokens = store.pushTokensForUser(device.userId);
-        sendPush(tokens, 'Git1', message, { deviceId: device.id, kind: msg.name });
+        sendPush(tokens, 'Time request', message, {
+          deviceId: device.id,
+          kind: 'request_minutes',
+          requestId: req.id,
+        });
+      } else {
+        store.appendActivity({
+          userId: device.userId,
+          deviceId: device.id,
+          kind: msg.name,
+          message,
+        });
+        if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
+        if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
+        if (shouldNotify(msg.name)) {
+          const tokens = store.pushTokensForUser(device.userId);
+          sendPush(tokens, 'Git1', message, { deviceId: device.id, kind: msg.name });
+        }
       }
     }
   });

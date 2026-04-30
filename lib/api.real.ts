@@ -1,6 +1,6 @@
 import { API_BASE } from './config';
 import { KEYS, storage } from './storage';
-import type { ActivityEvent, Device, Schedule } from './types';
+import type { ActivityEvent, Device, Schedule, TimeRequest } from './types';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await storage.get(KEYS.authToken);
@@ -123,7 +123,16 @@ export const realApi = {
     return events.map((e) => ({
       id: e.id,
       deviceId: e.deviceId,
-      kind: (['lock', 'unlock', 'limit_reached', 'app_blocked', 'login'].includes(e.kind)
+      kind: ([
+        'lock',
+        'unlock',
+        'limit_reached',
+        'app_blocked',
+        'login',
+        'vpn_detected',
+        'clock_tamper',
+        'request_minutes',
+      ].includes(e.kind)
         ? e.kind
         : 'login') as ActivityEvent['kind'],
       message: e.message,
@@ -132,5 +141,15 @@ export const realApi = {
   },
   async registerPushToken(token: string) {
     await request('/push/register', { method: 'POST', body: JSON.stringify({ token }) });
+  },
+  async listRequests(status?: 'pending' | 'approved' | 'denied'): Promise<TimeRequest[]> {
+    const qs = status ? `?status=${status}` : '';
+    return request<TimeRequest[]>(`/requests${qs}`);
+  },
+  async resolveRequest(id: string, status: 'approved' | 'denied') {
+    await request(`/requests/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
   },
 };

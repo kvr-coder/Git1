@@ -14,6 +14,9 @@ const iconFor: Record<ActivityKind, keyof typeof Ionicons.glyphMap> = {
   limit_reached: 'alarm',
   app_blocked: 'ban',
   login: 'log-in',
+  vpn_detected: 'shield',
+  clock_tamper: 'time',
+  request_minutes: 'hand-left',
 };
 
 export default function Activity() {

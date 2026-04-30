@@ -27,7 +27,25 @@ export interface Schedule {
   enabled: boolean;
 }
 
-export type ActivityKind = 'lock' | 'unlock' | 'limit_reached' | 'app_blocked' | 'login';
+export type ActivityKind =
+  | 'lock'
+  | 'unlock'
+  | 'limit_reached'
+  | 'app_blocked'
+  | 'login'
+  | 'vpn_detected'
+  | 'clock_tamper'
+  | 'request_minutes';
+
+export interface TimeRequest {
+  id: string;
+  deviceId: string;
+  minutes: number;
+  reason: string;
+  status: 'pending' | 'approved' | 'denied';
+  createdAt: number;
+  resolvedAt: number | null;
+}
 
 export interface ActivityEvent {
   id: string;

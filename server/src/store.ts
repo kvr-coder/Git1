@@ -101,6 +101,17 @@ CREATE TABLE IF NOT EXISTS activity (
   timestamp INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS activity_user_ts ON activity(userId, timestamp DESC);
+CREATE TABLE IF NOT EXISTS time_requests (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL,
+  minutes INTEGER NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  createdAt INTEGER NOT NULL,
+  resolvedAt INTEGER
+);
+CREATE INDEX IF NOT EXISTS time_requests_user_status ON time_requests(userId, status);
 `);
 
 for (const stmt of [
@@ -298,5 +309,56 @@ export const store = {
     return db
       .prepare('SELECT * FROM activity WHERE userId = ? ORDER BY timestamp DESC LIMIT ?')
       .all(userId, limit) as ActivityRow[];
+  },
+
+  createTimeRequest(userId: string, deviceId: string, minutes: number, reason: string) {
+    const r = {
+      id: id(),
+      userId,
+      deviceId,
+      minutes,
+      reason,
+      status: 'pending' as const,
+      createdAt: Date.now(),
+      resolvedAt: null as number | null,
+    };
+    db.prepare(
+      `INSERT INTO time_requests (id, userId, deviceId, minutes, reason, status, createdAt, resolvedAt)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL)`,
+    ).run(r.id, r.userId, r.deviceId, r.minutes, r.reason, r.createdAt);
+    return r;
+  },
+  listTimeRequests(userId: string, status?: 'pending' | 'approved' | 'denied') {
+    if (status) {
+      return db
+        .prepare(
+          'SELECT * FROM time_requests WHERE userId = ? AND status = ? ORDER BY createdAt DESC',
+        )
+        .all(userId, status);
+    }
+    return db
+      .prepare('SELECT * FROM time_requests WHERE userId = ? ORDER BY createdAt DESC LIMIT 50')
+      .all(userId);
+  },
+  getTimeRequest(userId: string, requestId: string) {
+    return db
+      .prepare('SELECT * FROM time_requests WHERE id = ? AND userId = ?')
+      .get(requestId, userId) as
+      | {
+          id: string;
+          userId: string;
+          deviceId: string;
+          minutes: number;
+          reason: string;
+          status: string;
+          createdAt: number;
+          resolvedAt: number | null;
+        }
+      | undefined;
+  },
+  resolveTimeRequest(userId: string, requestId: string, status: 'approved' | 'denied') {
+    db.prepare(
+      `UPDATE time_requests SET status = ?, resolvedAt = ? WHERE id = ? AND userId = ?`,
+    ).run(status, Date.now(), requestId, userId);
   },
 };
