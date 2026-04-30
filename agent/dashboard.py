@@ -14,7 +14,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 17654
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -240,12 +240,26 @@ class Dashboard:
                         return self._send_json(500, {"error": str(e)})
                 self._send_json(200, {"ok": True})
 
-        self._server = ThreadingHTTPServer(("127.0.0.1", self.port), Handler)
+        # If the requested port is taken (another dev server, etc.) try the
+        # next 9 ports before giving up. The chosen port is printed loudly.
+        last_err: Exception | None = None
+        for candidate in range(self.port, self.port + 10):
+            try:
+                self._server = ThreadingHTTPServer(("127.0.0.1", candidate), Handler)
+                self.port = candidate
+                break
+            except OSError as e:
+                last_err = e
+                continue
+        if self._server is None:
+            raise RuntimeError(
+                f"[dashboard] no free port in {self.port}-{self.port + 9}: {last_err}"
+            )
         self._thread = threading.Thread(
             target=self._server.serve_forever, name="git1-dashboard", daemon=True
         )
         self._thread.start()
-        print(f"[dashboard] http://127.0.0.1:{self.port}")
+        print(f"\n[dashboard] kid dashboard at http://127.0.0.1:{self.port}\n")
 
     def stop(self) -> None:
         if self._server is not None:
