@@ -19,6 +19,8 @@ export interface DeviceRow {
   usedTodayMinutes: number;
   internetBlocked: boolean;
   blocklist: string[];
+  selfBorrowEnabled: boolean;
+  selfBorrowCapMinutes: number;
 }
 
 export interface ScheduleRow {
@@ -120,6 +122,8 @@ for (const stmt of [
   "ALTER TABLE devices ADD COLUMN internetBlocked INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN blocklist TEXT NOT NULL DEFAULT '[]'",
   "ALTER TABLE schedules ADD COLUMN actions TEXT NOT NULL DEFAULT '[\"lock\"]'",
+  "ALTER TABLE devices ADD COLUMN selfBorrowEnabled INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE devices ADD COLUMN selfBorrowCapMinutes INTEGER NOT NULL DEFAULT 30",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -139,6 +143,8 @@ const rowToDevice = (r: any): DeviceRow => ({
   usedTodayMinutes: r.usedTodayMinutes,
   internetBlocked: !!r.internetBlocked,
   blocklist: r.blocklist ? JSON.parse(r.blocklist) : [],
+  selfBorrowEnabled: !!r.selfBorrowEnabled,
+  selfBorrowCapMinutes: r.selfBorrowCapMinutes ?? 30,
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
@@ -216,8 +222,8 @@ export const store = {
       usedTodayMinutes: 0,
     };
     db.prepare(
-      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]')`,
+      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]', 0, 30)`,
     ).run(
       d.id,
       d.userId,
@@ -263,7 +269,7 @@ export const store = {
     const values = fields.map((f) => {
       const v = (patch as any)[f];
       if (f === 'blocklist') return JSON.stringify(v ?? []);
-      if (f === 'internetBlocked') return v ? 1 : 0;
+      if (f === 'internetBlocked' || f === 'selfBorrowEnabled') return v ? 1 : 0;
       return v;
     });
     db.prepare(`UPDATE devices SET ${sets} WHERE id = ?`).run(...values, deviceId);

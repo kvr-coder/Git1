@@ -55,6 +55,8 @@ const mockApi = {
       usedTodayMinutes: 0,
       internetBlocked: false,
       blocklist: [],
+      selfBorrowEnabled: false,
+      selfBorrowCapMinutes: 30,
     };
     mockDevices.push(next);
     return next;
@@ -68,6 +70,14 @@ const mockApi = {
     await delay(150);
     const d = mockDevices.find((x) => x.id === id);
     if (d) d.blocklist = apps;
+  },
+  async setBorrowSettings(id: string, enabled: boolean, capMinutes: number): Promise<void> {
+    await delay(150);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) {
+      d.selfBorrowEnabled = enabled;
+      d.selfBorrowCapMinutes = capMinutes;
+    }
   },
   async listSchedules(): Promise<Schedule[]> {
     await delay(150);

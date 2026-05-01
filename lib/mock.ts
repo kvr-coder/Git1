@@ -12,6 +12,8 @@ export const mockDevices: Device[] = [
     usedTodayMinutes: 47,
     internetBlocked: false,
     blocklist: [],
+    selfBorrowEnabled: false,
+    selfBorrowCapMinutes: 30,
   },
   {
     id: 'd2',
@@ -24,6 +26,8 @@ export const mockDevices: Device[] = [
     usedTodayMinutes: 90,
     internetBlocked: true,
     blocklist: ['steam.exe'],
+    selfBorrowEnabled: true,
+    selfBorrowCapMinutes: 30,
   },
   {
     id: 'd3',
@@ -36,6 +40,8 @@ export const mockDevices: Device[] = [
     usedTodayMinutes: 0,
     internetBlocked: false,
     blocklist: [],
+    selfBorrowEnabled: false,
+    selfBorrowCapMinutes: 30,
   },
 ];
 

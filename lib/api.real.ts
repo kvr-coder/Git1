@@ -29,6 +29,8 @@ interface ServerDevice {
   usedTodayMinutes: number;
   internetBlocked?: boolean;
   blocklist?: string[];
+  selfBorrowEnabled?: boolean;
+  selfBorrowCapMinutes?: number;
 }
 
 const adaptDevice = (d: ServerDevice): Device => ({
@@ -42,6 +44,8 @@ const adaptDevice = (d: ServerDevice): Device => ({
   usedTodayMinutes: d.usedTodayMinutes,
   internetBlocked: !!d.internetBlocked,
   blocklist: d.blocklist ?? [],
+  selfBorrowEnabled: !!d.selfBorrowEnabled,
+  selfBorrowCapMinutes: d.selfBorrowCapMinutes ?? 30,
 });
 
 interface ServerActivity {
@@ -98,6 +102,15 @@ export const realApi = {
       body: JSON.stringify({ kind: 'set_blocklist', payload: { apps } }),
     });
   },
+  async setBorrowSettings(id: string, enabled: boolean, capMinutes: number) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'set_borrow_settings',
+        payload: { enabled, capMinutes },
+      }),
+    });
+  },
   async pairDevice(code: string): Promise<Device> {
     const d = await request<ServerDevice>('/devices/pair', {
       method: 'POST',
@@ -132,6 +145,7 @@ export const realApi = {
         'vpn_detected',
         'clock_tamper',
         'request_minutes',
+        'borrow',
       ].includes(e.kind)
         ? e.kind
         : 'login') as ActivityEvent['kind'],

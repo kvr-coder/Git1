@@ -104,6 +104,25 @@ PAGE = """<!doctype html>
   </div>
 </div>
 
+<div class="card" id="borrow-card" style="display: none;">
+  <strong>Borrow from tomorrow</strong>
+  <p class="muted" style="margin: 8px 0;">
+    Add minutes to today, but tomorrow's allowance shrinks by the same amount.
+    Your parent gets a notification.
+  </p>
+  <div class="row" style="gap: 8px;">
+    <select id="borrow-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+    </select>
+    <button id="borrow-btn">Borrow</button>
+  </div>
+  <div id="borrow-warn" style="margin-top: 10px; padding: 10px;
+    background: #3a1e1e; color: var(--danger); border-radius: 10px;
+    font-size: 13px;"></div>
+</div>
+
 <div id="flash"></div>
 
 <script>
@@ -138,6 +157,19 @@ async function refresh() {
     bl.innerHTML = (s.blocklist && s.blocklist.length)
       ? s.blocklist.map(n => `<span class="chip">${n}</span>`).join('')
       : '<span class="muted">None.</span>';
+    const bc = document.getElementById('borrow-card');
+    bc.style.display = s.selfBorrowEnabled ? '' : 'none';
+    if (s.selfBorrowEnabled) {
+      const sel = document.getElementById('borrow-minutes');
+      const cap = Number(s.selfBorrowCapMinutes || 0);
+      [...sel.options].forEach(o => { o.disabled = Number(o.value) > cap; });
+      const minutes = Number(sel.value);
+      const proj = Math.max(0, (s.tomorrowProjectedLimit ?? s.baseLimitMinutes ?? s.limitMinutes) - minutes);
+      const tDate = s.tomorrowDate || 'tomorrow';
+      document.getElementById('borrow-warn').textContent =
+        `Heads up: tomorrow (${tDate}) will be ${fmt(proj)} instead of `
+        + `${fmt(s.tomorrowProjectedLimit ?? s.baseLimitMinutes ?? s.limitMinutes)}.`;
+    }
   } catch (e) { /* offline */ }
 }
 refresh(); setInterval(refresh, 5000);
@@ -147,6 +179,27 @@ const flash = (msg) => {
   el.textContent = msg; el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2500);
 };
+
+document.getElementById('borrow-minutes').addEventListener('change', refresh);
+
+document.getElementById('borrow-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const minutes = Number(document.getElementById('borrow-minutes').value);
+  if (!confirm(`Borrow ${minutes} minutes from tomorrow? Tomorrow's allowance will shrink by ${minutes} min.`)) {
+    btn.disabled = false; return;
+  }
+  try {
+    const r = await fetch('/borrow', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash(`Borrowed ${minutes} min. Refreshing…`); refresh(); }
+    else flash(body.error || 'Borrow rejected');
+  } catch { flash('Could not borrow.'); }
+  finally { btn.disabled = false; }
+});
 
 document.getElementById('request-btn').addEventListener('click', async (e) => {
   const btn = e.target; btn.disabled = true;
@@ -179,8 +232,14 @@ class Dashboard:
             "blocklist": [],
             "schedules": [],
             "scheduleAllowed": True,
+            "selfBorrowEnabled": False,
+            "selfBorrowCapMinutes": 30,
+            "baseLimitMinutes": 120,
+            "tomorrowProjectedLimit": 120,
+            "tomorrowDate": "",
         }
         self._on_request: Callable[[int, str], None] | None = None
+        self._on_borrow: Callable[[int], dict[str, Any] | None] | None = None
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -189,6 +248,13 @@ class Dashboard:
 
     def on_request(self, cb: Callable[[int, str], None]) -> None:
         self._on_request = cb
+
+    def on_borrow(self, cb: Callable[[int], dict[str, Any] | None]) -> None:
+        """Callback receives the requested minutes; returns a dict with
+        applied result (e.g. {newLimit, tomorrowProjected}) or None on
+        rejection (raises with reason).
+        """
+        self._on_borrow = cb
 
     def start(self) -> None:
         if self._server is not None:
@@ -221,24 +287,42 @@ class Dashboard:
                     self._send_json(404, {"error": "not found"})
 
             def do_POST(self) -> None:
-                if self.path != "/request":
-                    return self._send_json(404, {"error": "not found"})
                 length = int(self.headers.get("Content-Length") or 0)
                 try:
                     payload = json.loads(self.rfile.read(length) or b"{}")
                 except Exception:
                     payload = {}
-                minutes = int(payload.get("minutes") or 0)
-                reason = str(payload.get("reason") or "")
-                if minutes <= 0 or minutes > 240:
-                    return self._send_json(400, {"error": "invalid minutes"})
-                cb = dash._on_request
-                if cb:
+
+                if self.path == "/request":
+                    minutes = int(payload.get("minutes") or 0)
+                    reason = str(payload.get("reason") or "")
+                    if minutes <= 0 or minutes > 240:
+                        return self._send_json(400, {"error": "invalid minutes"})
+                    cb = dash._on_request
+                    if cb:
+                        try:
+                            cb(minutes, reason)
+                        except Exception as e:
+                            return self._send_json(500, {"error": str(e)})
+                    return self._send_json(200, {"ok": True})
+
+                if self.path == "/borrow":
+                    if not dash.status.get("selfBorrowEnabled"):
+                        return self._send_json(403, {"error": "borrow disabled"})
+                    minutes = int(payload.get("minutes") or 0)
+                    cap = int(dash.status.get("selfBorrowCapMinutes") or 30)
+                    if minutes <= 0 or minutes > cap:
+                        return self._send_json(400, {"error": f"max {cap} min per borrow"})
+                    cb = dash._on_borrow
+                    if cb is None:
+                        return self._send_json(500, {"error": "borrow handler missing"})
                     try:
-                        cb(minutes, reason)
+                        result = cb(minutes)
                     except Exception as e:
                         return self._send_json(500, {"error": str(e)})
-                self._send_json(200, {"ok": True})
+                    return self._send_json(200, {"ok": True, "result": result})
+
+                return self._send_json(404, {"error": "not found"})
 
         # If the requested port is taken (another dev server, etc.) try the
         # next 9 ports before giving up. The chosen port is printed loudly.

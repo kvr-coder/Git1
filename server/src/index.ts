@@ -93,6 +93,7 @@ const commandSchema = z.object({
     'unblock_internet',
     'set_blocklist',
     'set_schedules',
+    'set_borrow_settings',
   ]),
   payload: z.record(z.unknown()).optional(),
 });
@@ -109,6 +110,12 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   if (p.data.kind === 'set_blocklist') {
     const apps = (p.data.payload?.apps as string[]) ?? [];
     store.updateDevice(d.id, { blocklist: apps });
+  }
+  if (p.data.kind === 'set_borrow_settings') {
+    const enabled = !!p.data.payload?.enabled;
+    const capRaw = Number(p.data.payload?.capMinutes ?? 30);
+    const cap = Math.max(0, Math.min(240, isFinite(capRaw) ? capRaw : 30));
+    store.updateDevice(d.id, { selfBorrowEnabled: enabled, selfBorrowCapMinutes: cap });
   }
 
   const cmd: Command = {
@@ -208,6 +215,8 @@ function pushSchedulesToAllAgentsFor(userId: string) {
         schedules: store.schedulesForDevice(d.id),
         blocklist: d.blocklist,
         internetBlocked: d.internetBlocked,
+        selfBorrowEnabled: d.selfBorrowEnabled,
+        selfBorrowCapMinutes: d.selfBorrowCapMinutes,
       }),
     );
   }
@@ -231,6 +240,8 @@ wss.on('connection', (ws, req) => {
       schedules: store.schedulesForDevice(device.id),
       blocklist: device.blocklist,
       internetBlocked: device.internetBlocked,
+      selfBorrowEnabled: device.selfBorrowEnabled,
+      selfBorrowCapMinutes: device.selfBorrowCapMinutes,
     }),
   );
   // If internet should be blocked but we just (re)connected, re-issue.
@@ -278,6 +289,23 @@ wss.on('connection', (ws, req) => {
           kind: 'request_minutes',
           requestId: req.id,
         });
+      } else if (msg.name === 'borrow') {
+        const minutes = Number((msg.payload as any)?.minutes ?? 0);
+        const fromDate = String((msg.payload as any)?.fromDate ?? '');
+        message = `${device.name}: self-borrowed ${minutes} min from ${fromDate || 'tomorrow'}`;
+        store.appendActivity({
+          userId: device.userId,
+          deviceId: device.id,
+          kind: 'borrow',
+          message,
+        });
+        const tokens = store.pushTokensForUser(device.userId);
+        sendPush(tokens, 'Time borrowed', message, {
+          deviceId: device.id,
+          kind: 'borrow',
+          minutes,
+          fromDate,
+        });
       } else {
         store.appendActivity({
           userId: device.userId,
@@ -311,6 +339,8 @@ function toPublicDevice(d: DeviceRow) {
     usedTodayMinutes: d.usedTodayMinutes,
     internetBlocked: d.internetBlocked,
     blocklist: d.blocklist,
+    selfBorrowEnabled: d.selfBorrowEnabled,
+    selfBorrowCapMinutes: d.selfBorrowCapMinutes,
   };
 }
 

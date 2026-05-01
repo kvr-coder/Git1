@@ -112,6 +112,59 @@ export default function DeviceDetail() {
       </Card>
 
       <Card>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h2, { color: colors.text }]}>Self-borrow</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Let kid borrow time from tomorrow without your approval. Tomorrow's
+              limit is reduced by the same amount.
+            </Text>
+          </View>
+          <Switch
+            value={device.selfBorrowEnabled}
+            onValueChange={(v) =>
+              run(() => api.setBorrowSettings(device.id, v, device.selfBorrowCapMinutes))
+            }
+            trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
+            disabled={busy}
+          />
+        </View>
+        {device.selfBorrowEnabled && (
+          <View style={styles.stepperRow}>
+            <Text style={{ color: colors.textMuted, flex: 1 }}>
+              Max per request: {device.selfBorrowCapMinutes} min
+            </Text>
+            <Button
+              label="−15"
+              variant="secondary"
+              onPress={() =>
+                run(() =>
+                  api.setBorrowSettings(
+                    device.id,
+                    true,
+                    Math.max(0, device.selfBorrowCapMinutes - 15),
+                  ),
+                )
+              }
+            />
+            <Button
+              label="+15"
+              variant="secondary"
+              onPress={() =>
+                run(() =>
+                  api.setBorrowSettings(
+                    device.id,
+                    true,
+                    Math.min(240, device.selfBorrowCapMinutes + 15),
+                  ),
+                )
+              }
+            />
+          </View>
+        )}
+      </Card>
+
+      <Card>
         <Text style={[typography.h2, { color: colors.text }]}>Blocked apps</Text>
         <Text style={[typography.caption, { color: colors.textMuted }]}>
           Any process matching these names is killed on sight (case-insensitive). Use the .exe name
@@ -152,6 +205,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   inputRow: {
     flexDirection: 'row',

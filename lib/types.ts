@@ -13,6 +13,8 @@ export interface Device {
   usedTodayMinutes: number;
   internetBlocked: boolean;
   blocklist: string[];
+  selfBorrowEnabled: boolean;
+  selfBorrowCapMinutes: number;
 }
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
@@ -38,7 +40,8 @@ export type ActivityKind =
   | 'login'
   | 'vpn_detected'
   | 'clock_tamper'
-  | 'request_minutes';
+  | 'request_minutes'
+  | 'borrow';
 
 export interface TimeRequest {
   id: string;

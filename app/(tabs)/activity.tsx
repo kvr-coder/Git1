@@ -17,6 +17,7 @@ const iconFor: Record<ActivityKind, keyof typeof Ionicons.glyphMap> = {
   vpn_detected: 'shield',
   clock_tamper: 'time',
   request_minutes: 'hand-left',
+  borrow: 'swap-horizontal',
 };
 
 export default function Activity() {

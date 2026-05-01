@@ -41,6 +41,7 @@ const NOTIFY_KINDS = new Set([
   'vpn_detected',
   'clock_tamper',
   'request_minutes',
+  'borrow',
 ]);
 
 export function shouldNotify(kind: string): boolean {

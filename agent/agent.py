@@ -94,23 +94,56 @@ def today_key() -> str:
 class Usage:
     def __init__(self) -> None:
         data = load_json(USAGE_PATH)
+        # futureAdjustments: { "YYYY-MM-DD": minutes_delta } — applied at day-roll
+        self.future_adjustments: dict[str, int] = dict(data.get("futureAdjustments") or {})
         if data.get("date") != today_key():
-            data = {"date": today_key(), "minutes": 0, "limitMinutes": data.get("limitMinutes", 120)}
+            # Apply any adjustment scheduled for the new day before resetting.
+            new_date = today_key()
+            adjustment = int(self.future_adjustments.pop(new_date, 0))
+            base_limit = int(data.get("limitMinutes", 120))
+            data = {
+                "date": new_date,
+                "minutes": 0,
+                "limitMinutes": max(0, base_limit + adjustment),
+            }
         self.date: str = data["date"]
         self.minutes: float = float(data.get("minutes", 0))
         self.limit_minutes: int = int(data.get("limitMinutes", 120))
+        self.save()
 
     def save(self) -> None:
         save_json(
             USAGE_PATH,
-            {"date": self.date, "minutes": self.minutes, "limitMinutes": self.limit_minutes},
+            {
+                "date": self.date,
+                "minutes": self.minutes,
+                "limitMinutes": self.limit_minutes,
+                "futureAdjustments": self.future_adjustments,
+            },
         )
 
     def roll_if_new_day(self) -> None:
         if self.date != today_key():
-            self.date = today_key()
+            new_date = today_key()
+            adjustment = int(self.future_adjustments.pop(new_date, 0))
+            self.date = new_date
             self.minutes = 0
+            self.limit_minutes = max(0, self.limit_minutes + adjustment)
             self.save()
+
+    def borrow_from(self, date_iso: str, minutes: int) -> None:
+        """Add `minutes` to today's limit and record a negative adjustment
+        for `date_iso` so that day's limit is reduced by the same amount.
+        """
+        self.limit_minutes += minutes
+        self.future_adjustments[date_iso] = (
+            int(self.future_adjustments.get(date_iso, 0)) - minutes
+        )
+        self.save()
+
+    def projected_limit_for(self, date_iso: str, base_limit: int) -> int:
+        """What `date_iso`'s limit will be after pending adjustments."""
+        return max(0, base_limit + int(self.future_adjustments.get(date_iso, 0)))
 
     def add_seconds(self, sec: float) -> None:
         self.minutes += sec / 60.0
@@ -221,7 +254,16 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         enforcer_schedule.set_schedules(items)
         await emit_event(ws, "set_schedules", {"count": len(items)})
 
+    elif kind == "set_borrow_settings":
+        BORROW_STATE["enabled"] = bool(payload.get("enabled", False))
+        BORROW_STATE["cap"] = int(payload.get("capMinutes", 30))
+        await emit_event(ws, "set_borrow_settings", BORROW_STATE.copy())
+
     await ws.send(json.dumps({"kind": "ack", "id": cid}))
+
+
+# Module-level so dashboard handler thread can read it.
+BORROW_STATE: dict[str, Any] = {"enabled": False, "cap": 30}
 
 
 # ---------- Enforcement loop ----------
@@ -306,13 +348,23 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         # Future: we could maintain a separate per-schedule app list.
 
         # 7. Update kid dashboard state
+        tomorrow = (clock.now_trusted_dt() + dt.timedelta(days=1)).date().isoformat()
+        # base_limit = whatever today's limit *would* be without borrowing
+        # — best effort: we treat current limit_minutes as the base unless
+        # adjustments are scheduled. The displayed "tomorrow" includes pending.
+        projected_tomorrow = usage.projected_limit_for(tomorrow, int(usage.limit_minutes))
         dash.update(
             usedTodayMinutes=int(usage.minutes),
             limitMinutes=int(usage.limit_minutes),
+            baseLimitMinutes=int(usage.limit_minutes),
+            tomorrowProjectedLimit=projected_tomorrow,
+            tomorrowDate=tomorrow,
             internetBlocked=enforcer_net.is_blocked(),
             blocklist=enforcer_apps.get_blocklist(),
             schedules=enforcer_schedule.get_schedules(),
             scheduleAllowed=schedule_allowed,
+            selfBorrowEnabled=BORROW_STATE.get("enabled", False),
+            selfBorrowCapMinutes=BORROW_STATE.get("cap", 30),
         )
 
         # 8. Heartbeat
@@ -343,7 +395,12 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                 elif msg.get("kind") == "snapshot":
                     enforcer_schedule.set_schedules(msg.get("schedules") or [])
                     enforcer_apps.set_blocklist(msg.get("blocklist") or [])
-                    print("[snapshot] schedules + blocklist applied")
+                    BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
+                    BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
+                    print(
+                        f"[snapshot] schedules + blocklist applied; borrow="
+                        f"{BORROW_STATE}"
+                    )
         finally:
             loop.cancel()
 
@@ -371,6 +428,14 @@ def main() -> None:
     dash.on_request(lambda minutes, reason: bridge.emit(
         "request_minutes", {"minutes": minutes, "reason": reason}
     ))
+
+    def _do_borrow(minutes: int) -> dict:
+        tomorrow = (clock.now_trusted_dt() + dt.timedelta(days=1)).date().isoformat()
+        usage.borrow_from(tomorrow, minutes)
+        bridge.emit("borrow", {"minutes": minutes, "fromDate": tomorrow})
+        return {"newLimit": usage.limit_minutes, "fromDate": tomorrow}
+
+    dash.on_borrow(_do_borrow)
     dash.start()
 
     backoff = 2
