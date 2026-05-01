@@ -57,6 +57,24 @@ export interface ChoreRequest {
   approvedMinutes: number | null;
 }
 
+export interface BankLedgerEntry {
+  id: string;
+  deviceId: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string;
+  sourceId: string | null;
+  createdAt: number;
+}
+
+export interface ChoreTemplate {
+  id: string;
+  deviceId: string;
+  description: string;
+  minutes: number;
+  createdAt: number;
+}
+
 export interface TimeRequest {
   id: string;
   deviceId: string;

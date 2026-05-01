@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Button } from '../../components/Button';
@@ -12,6 +12,7 @@ import type { Device } from '../../lib/types';
 
 export default function DeviceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const [device, setDevice] = useState<Device | undefined>();
   const [busy, setBusy] = useState(false);
   const [appInput, setAppInput] = useState('');
@@ -140,6 +141,16 @@ export default function DeviceDetail() {
             onPress={() => run(() => api.addBankMinutes(device.id, 15))}
           />
         </View>
+        <Button
+          label="View history"
+          variant="secondary"
+          onPress={() => router.push(`/device-bank/${device.id}`)}
+        />
+        <Button
+          label="Manage chore templates"
+          variant="secondary"
+          onPress={() => router.push(`/device-templates/${device.id}`)}
+        />
       </Card>
 
       <Card>

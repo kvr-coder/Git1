@@ -1,6 +1,14 @@
 import { API_BASE } from './config';
 import { KEYS, storage } from './storage';
-import type { ActivityEvent, ChoreRequest, Device, Schedule, TimeRequest } from './types';
+import type {
+  ActivityEvent,
+  BankLedgerEntry,
+  ChoreRequest,
+  ChoreTemplate,
+  Device,
+  Schedule,
+  TimeRequest,
+} from './types';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await storage.get(KEYS.authToken);
@@ -191,5 +199,20 @@ export const realApi = {
       method: 'POST',
       body: JSON.stringify({ kind: 'set_bank_minutes', payload: { minutes } }),
     });
+  },
+  async listBankLedger(id: string): Promise<BankLedgerEntry[]> {
+    return request<BankLedgerEntry[]>(`/devices/${id}/bank-ledger`);
+  },
+  async listChoreTemplates(id: string): Promise<ChoreTemplate[]> {
+    return request<ChoreTemplate[]>(`/devices/${id}/chore-templates`);
+  },
+  async createChoreTemplate(id: string, description: string, minutes: number) {
+    return request<ChoreTemplate>(`/devices/${id}/chore-templates`, {
+      method: 'POST',
+      body: JSON.stringify({ description, minutes }),
+    });
+  },
+  async deleteChoreTemplate(id: string, templateId: string) {
+    await request(`/devices/${id}/chore-templates/${templateId}`, { method: 'DELETE' });
   },
 };

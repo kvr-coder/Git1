@@ -287,6 +287,7 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
 
 # Module-level so dashboard handler thread can read it.
 BORROW_STATE: dict[str, Any] = {"enabled": False, "cap": 30}
+CHORE_TEMPLATES: list[dict[str, Any]] = []
 
 
 # ---------- Enforcement loop ----------
@@ -389,6 +390,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             selfBorrowEnabled=BORROW_STATE.get("enabled", False),
             selfBorrowCapMinutes=BORROW_STATE.get("cap", 30),
             bankedMinutes=usage.banked_minutes,
+            choreTemplates=list(CHORE_TEMPLATES),
         )
 
         # 8. Heartbeat
@@ -423,9 +425,11 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
                     if "bankedMinutes" in msg:
                         usage.set_bank(int(msg.get("bankedMinutes") or 0))
+                    CHORE_TEMPLATES.clear()
+                    CHORE_TEMPLATES.extend(msg.get("choreTemplates") or [])
                     print(
-                        f"[snapshot] schedules + blocklist applied; borrow="
-                        f"{BORROW_STATE} bank={usage.banked_minutes}"
+                        f"[snapshot] applied; borrow={BORROW_STATE} "
+                        f"bank={usage.banked_minutes} templates={len(CHORE_TEMPLATES)}"
                     )
         finally:
             loop.cancel()

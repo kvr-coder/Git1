@@ -86,6 +86,14 @@ export default function RootLayout() {
           name="schedule/[id]"
           options={{ headerShown: true, title: 'Edit schedule', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
         />
+        <Stack.Screen
+          name="device-bank/[id]"
+          options={{ headerShown: true, title: 'Bank history', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
+        />
+        <Stack.Screen
+          name="device-templates/[id]"
+          options={{ headerShown: true, title: 'Chore templates', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
+        />
       </Stack>
     </AuthContext.Provider>
   );

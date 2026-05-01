@@ -3,11 +3,60 @@ import { USE_MOCK } from './config';
 import { mockActivity, mockDevices, mockSchedules } from './mock';
 import type {
   ActivityEvent,
+  BankLedgerEntry,
   ChoreRequest,
+  ChoreTemplate,
   Device,
   Schedule,
   TimeRequest,
 } from './types';
+
+const mockLedger: BankLedgerEntry[] = [
+  {
+    id: 'l1',
+    deviceId: 'd2',
+    delta: 30,
+    balanceAfter: 25,
+    reason: 'chore: Cleaned my room',
+    sourceId: 'c1',
+    createdAt: Date.now() - 1000 * 60 * 60 * 6,
+  },
+  {
+    id: 'l2',
+    deviceId: 'd2',
+    delta: -15,
+    balanceAfter: 10,
+    reason: 'kid_spent',
+    sourceId: null,
+    createdAt: Date.now() - 1000 * 60 * 60 * 2,
+  },
+  {
+    id: 'l3',
+    deviceId: 'd2',
+    delta: 15,
+    balanceAfter: 25,
+    reason: 'parent_adjust',
+    sourceId: null,
+    createdAt: Date.now() - 1000 * 60 * 30,
+  },
+];
+
+const mockTemplates: ChoreTemplate[] = [
+  {
+    id: 't1',
+    deviceId: 'd1',
+    description: 'Make bed',
+    minutes: 5,
+    createdAt: Date.now() - 1000 * 60 * 60 * 24,
+  },
+  {
+    id: 't2',
+    deviceId: 'd1',
+    description: 'Take out trash',
+    minutes: 10,
+    createdAt: Date.now() - 1000 * 60 * 60 * 12,
+  },
+];
 
 const mockRequests: TimeRequest[] = [
   {
@@ -167,6 +216,31 @@ const mockApi = {
     await delay(120);
     const d = mockDevices.find((x) => x.id === id);
     if (d) d.bankedMinutes = Math.max(0, minutes);
+  },
+  async listBankLedger(id: string): Promise<BankLedgerEntry[]> {
+    await delay(100);
+    return mockLedger.filter((l) => l.deviceId === id);
+  },
+  async listChoreTemplates(id: string): Promise<ChoreTemplate[]> {
+    await delay(100);
+    return mockTemplates.filter((t) => t.deviceId === id);
+  },
+  async createChoreTemplate(id: string, description: string, minutes: number): Promise<ChoreTemplate> {
+    await delay(120);
+    const t: ChoreTemplate = {
+      id: `t${Date.now()}`,
+      deviceId: id,
+      description,
+      minutes,
+      createdAt: Date.now(),
+    };
+    mockTemplates.push(t);
+    return t;
+  },
+  async deleteChoreTemplate(_id: string, templateId: string): Promise<void> {
+    await delay(80);
+    const i = mockTemplates.findIndex((t) => t.id === templateId);
+    if (i >= 0) mockTemplates.splice(i, 1);
   },
 };
 

@@ -129,6 +129,26 @@ CREATE TABLE IF NOT EXISTS chore_requests (
   approvedMinutes INTEGER
 );
 CREATE INDEX IF NOT EXISTS chore_requests_user_status ON chore_requests(userId, status);
+CREATE TABLE IF NOT EXISTS bank_ledger (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL,
+  delta INTEGER NOT NULL,
+  balanceAfter INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  sourceId TEXT,
+  createdAt INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS bank_ledger_device ON bank_ledger(deviceId, createdAt DESC);
+CREATE TABLE IF NOT EXISTS chore_templates (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  minutes INTEGER NOT NULL,
+  createdAt INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS chore_templates_device ON chore_templates(deviceId);
 `);
 
 for (const stmt of [
@@ -235,6 +255,11 @@ export const store = {
       status: 'offline',
       dailyLimitMinutes: 120,
       usedTodayMinutes: 0,
+      internetBlocked: false,
+      blocklist: [],
+      selfBorrowEnabled: false,
+      selfBorrowCapMinutes: 30,
+      bankedMinutes: 0,
     };
     db.prepare(
       `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes)
@@ -275,6 +300,10 @@ export const store = {
     const row = db
       .prepare('SELECT * FROM devices WHERE id = ? AND userId = ?')
       .get(deviceId, userId);
+    return row ? rowToDevice(row) : undefined;
+  },
+  getDeviceById(deviceId: string): DeviceRow | undefined {
+    const row = db.prepare('SELECT * FROM devices WHERE id = ?').get(deviceId);
     return row ? rowToDevice(row) : undefined;
   },
   updateDevice(deviceId: string, patch: Partial<DeviceRow>) {
@@ -447,5 +476,81 @@ export const store = {
       `UPDATE chore_requests SET status = ?, resolvedAt = ?, approvedMinutes = ?
        WHERE id = ? AND userId = ?`,
     ).run(status, Date.now(), approvedMinutes, requestId, userId);
+  },
+
+  appendBankLedger(
+    userId: string,
+    deviceId: string,
+    delta: number,
+    balanceAfter: number,
+    reason: string,
+    sourceId: string | null,
+  ) {
+    const row = {
+      id: id(),
+      userId,
+      deviceId,
+      delta,
+      balanceAfter,
+      reason,
+      sourceId,
+      createdAt: Date.now(),
+    };
+    db.prepare(
+      `INSERT INTO bank_ledger (id, userId, deviceId, delta, balanceAfter, reason, sourceId, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      row.id,
+      row.userId,
+      row.deviceId,
+      row.delta,
+      row.balanceAfter,
+      row.reason,
+      row.sourceId,
+      row.createdAt,
+    );
+    return row;
+  },
+  listBankLedger(userId: string, deviceId: string, limit = 100) {
+    return db
+      .prepare(
+        `SELECT * FROM bank_ledger WHERE userId = ? AND deviceId = ?
+         ORDER BY createdAt DESC LIMIT ?`,
+      )
+      .all(userId, deviceId, limit);
+  },
+
+  listChoreTemplates(userId: string, deviceId?: string) {
+    if (deviceId) {
+      return db
+        .prepare(
+          'SELECT * FROM chore_templates WHERE userId = ? AND deviceId = ? ORDER BY createdAt DESC',
+        )
+        .all(userId, deviceId);
+    }
+    return db
+      .prepare('SELECT * FROM chore_templates WHERE userId = ? ORDER BY createdAt DESC')
+      .all(userId);
+  },
+  createChoreTemplate(userId: string, deviceId: string, description: string, minutes: number) {
+    const row = {
+      id: id(),
+      userId,
+      deviceId,
+      description,
+      minutes,
+      createdAt: Date.now(),
+    };
+    db.prepare(
+      `INSERT INTO chore_templates (id, userId, deviceId, description, minutes, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(row.id, row.userId, row.deviceId, row.description, row.minutes, row.createdAt);
+    return row;
+  },
+  deleteChoreTemplate(userId: string, templateId: string) {
+    db.prepare('DELETE FROM chore_templates WHERE id = ? AND userId = ?').run(
+      templateId,
+      userId,
+    );
   },
 };

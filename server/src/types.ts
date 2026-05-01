@@ -1,4 +1,15 @@
-export type CommandKind = 'lock' | 'unlock' | 'grant_minutes' | 'set_limit';
+export type CommandKind =
+  | 'lock'
+  | 'unlock'
+  | 'grant_minutes'
+  | 'set_limit'
+  | 'block_internet'
+  | 'unblock_internet'
+  | 'set_blocklist'
+  | 'set_schedules'
+  | 'set_borrow_settings'
+  | 'add_bank_minutes'
+  | 'set_bank_minutes';
 
 export interface Command {
   id: string;

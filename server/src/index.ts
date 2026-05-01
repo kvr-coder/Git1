@@ -121,11 +121,16 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   }
   if (p.data.kind === 'add_bank_minutes') {
     const m = Math.max(0, Number(p.data.payload?.minutes ?? 0) | 0);
-    store.updateDevice(d.id, { bankedMinutes: d.bankedMinutes + m });
+    const after = d.bankedMinutes + m;
+    store.updateDevice(d.id, { bankedMinutes: after });
+    store.appendBankLedger(req.userId!, d.id, m, after, 'parent_adjust', null);
   }
   if (p.data.kind === 'set_bank_minutes') {
     const m = Math.max(0, Number(p.data.payload?.minutes ?? 0) | 0);
+    const delta = m - d.bankedMinutes;
     store.updateDevice(d.id, { bankedMinutes: m });
+    if (delta !== 0)
+      store.appendBankLedger(req.userId!, d.id, delta, m, 'parent_set', null);
   }
 
   const cmd: Command = {
@@ -158,7 +163,8 @@ app.get('/schedules', auth, (req: AuthedRequest, res) => {
 app.put('/schedules/:id', auth, (req: AuthedRequest, res) => {
   const p = scheduleSchema.safeParse({ ...req.body, id: req.params.id });
   if (!p.success) return res.status(400).json(p.error);
-  const row = store.upsertSchedule(req.userId!, p.data);
+  const actions = p.data.actions && p.data.actions.length ? p.data.actions : (['lock'] as const);
+  const row = store.upsertSchedule(req.userId!, { ...p.data, actions: [...actions] });
   pushSchedulesToAllAgentsFor(req.userId!);
   res.json(row);
 });
@@ -202,6 +208,43 @@ app.post('/requests/:id/resolve', auth, (req: AuthedRequest, res) => {
   res.json({ ok: true, status: p.data.status });
 });
 
+// ---------- Bank ledger ----------
+app.get('/devices/:id/bank-ledger', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  res.json(store.listBankLedger(req.userId!, d.id));
+});
+
+// ---------- Chore templates ----------
+app.get('/devices/:id/chore-templates', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  res.json(store.listChoreTemplates(req.userId!, d.id));
+});
+
+app.post('/devices/:id/chore-templates', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  const p = z
+    .object({
+      description: z.string().min(1).max(240),
+      minutes: z.number().int().min(1).max(480),
+    })
+    .safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const row = store.createChoreTemplate(req.userId!, d.id, p.data.description, p.data.minutes);
+  pushSnapshotToAgent(d.id);
+  res.json(row);
+});
+
+app.delete('/devices/:id/chore-templates/:templateId', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  store.deleteChoreTemplate(req.userId!, req.params.templateId);
+  pushSnapshotToAgent(d.id);
+  res.json({ ok: true });
+});
+
 // ---------- Chore requests (kid → parent → bank) ----------
 app.get('/chores', auth, (req: AuthedRequest, res) => {
   const status = (req.query.status as 'pending' | 'approved' | 'denied' | undefined) ?? undefined;
@@ -224,7 +267,16 @@ app.post('/chores/:id/resolve', auth, (req: AuthedRequest, res) => {
   if (approved && minutes && minutes > 0) {
     const d = store.getDevice(req.userId!, r.deviceId);
     if (d) {
-      store.updateDevice(d.id, { bankedMinutes: d.bankedMinutes + minutes });
+      const after = d.bankedMinutes + minutes;
+      store.updateDevice(d.id, { bankedMinutes: after });
+      store.appendBankLedger(
+        req.userId!,
+        d.id,
+        minutes,
+        after,
+        `chore: ${r.description.slice(0, 80)}`,
+        r.id,
+      );
       sendToAgent(r.deviceId, {
         kind: 'command',
         command: {
@@ -253,21 +305,32 @@ function sendToAgent(deviceId: string, msg: ServerMessage): boolean {
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: '/agent/ws' });
 
+function buildSnapshot(d: DeviceRow) {
+  return {
+    kind: 'snapshot' as const,
+    schedules: store.schedulesForDevice(d.id),
+    blocklist: d.blocklist,
+    internetBlocked: d.internetBlocked,
+    selfBorrowEnabled: d.selfBorrowEnabled,
+    selfBorrowCapMinutes: d.selfBorrowCapMinutes,
+    bankedMinutes: d.bankedMinutes,
+    choreTemplates: store.listChoreTemplates(d.userId, d.id),
+  };
+}
+
+function pushSnapshotToAgent(deviceId: string) {
+  const ws = agentSockets.get(deviceId);
+  if (!ws || ws.readyState !== ws.OPEN) return;
+  const d = store.getDeviceById(deviceId);
+  if (!d) return;
+  ws.send(JSON.stringify(buildSnapshot(d)));
+}
+
 function pushSchedulesToAllAgentsFor(userId: string) {
   for (const d of store.listDevices(userId)) {
     const ws = agentSockets.get(d.id);
     if (!ws || ws.readyState !== ws.OPEN) continue;
-    ws.send(
-      JSON.stringify({
-        kind: 'snapshot',
-        schedules: store.schedulesForDevice(d.id),
-        blocklist: d.blocklist,
-        internetBlocked: d.internetBlocked,
-        selfBorrowEnabled: d.selfBorrowEnabled,
-        selfBorrowCapMinutes: d.selfBorrowCapMinutes,
-        bankedMinutes: d.bankedMinutes,
-      }),
-    );
+    ws.send(JSON.stringify(buildSnapshot(d)));
   }
 }
 
@@ -282,18 +345,8 @@ wss.on('connection', (ws, req) => {
   agentSockets.set(device.id, ws);
   store.updateDevice(device.id, { status: 'online', lastSeen: Date.now() });
 
-  // Push current schedules + blocklist + internet state immediately.
-  ws.send(
-    JSON.stringify({
-      kind: 'snapshot',
-      schedules: store.schedulesForDevice(device.id),
-      blocklist: device.blocklist,
-      internetBlocked: device.internetBlocked,
-      selfBorrowEnabled: device.selfBorrowEnabled,
-      selfBorrowCapMinutes: device.selfBorrowCapMinutes,
-      bankedMinutes: device.bankedMinutes,
-    }),
-  );
+  // Push current state to agent immediately.
+  ws.send(JSON.stringify(buildSnapshot(device)));
   // If internet should be blocked but we just (re)connected, re-issue.
   if (device.internetBlocked) {
     sendToAgent(device.id, {
@@ -377,6 +430,15 @@ wss.on('connection', (ws, req) => {
         const minutes = Number((msg.payload as any)?.minutes ?? 0);
         const remaining = Number((msg.payload as any)?.remaining ?? 0);
         store.updateDevice(device.id, { bankedMinutes: remaining });
+        if (minutes > 0)
+          store.appendBankLedger(
+            device.userId,
+            device.id,
+            -minutes,
+            remaining,
+            'kid_spent',
+            null,
+          );
         message = `${device.name}: spent ${minutes} bank min (${remaining} left)`;
         store.appendActivity({
           userId: device.userId,

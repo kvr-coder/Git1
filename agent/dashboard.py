@@ -65,6 +65,23 @@ PAGE = """<!doctype html>
 <h1>Your dashboard</h1>
 <p class="muted">This page only shows on your computer.</p>
 
+<div class="card" id="autospend-banner" style="display: none; border-color: var(--danger);">
+  <strong style="color: var(--danger);">⏰ Out of time today</strong>
+  <p class="muted" style="margin: 8px 0;">
+    You have <span id="autospend-bank">0</span> in your bank.
+    Spend some to keep going?
+  </p>
+  <div class="row" style="gap: 8px;">
+    <select id="autospend-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select>
+    <button id="autospend-btn">Use from bank</button>
+  </div>
+</div>
+
 <div class="card">
   <div class="row" style="justify-content: space-between;">
     <strong>Today</strong>
@@ -109,6 +126,7 @@ PAGE = """<!doctype html>
 <div class="card">
   <strong>Submit a chore for reward</strong>
   <p class="muted" style="margin: 8px 0;">Tell your parent what you did. They'll review it.</p>
+  <div id="chore-templates" class="chips" style="margin-bottom: 10px;"></div>
   <input id="chore-desc" placeholder="e.g. Cleaned my room"
     style="width: 100%; margin-bottom: 8px;" />
   <div class="row" style="gap: 8px;">
@@ -196,6 +214,31 @@ async function refresh() {
     document.getElementById('spend-btn').disabled = bank <= 0;
     const sp = document.getElementById('spend-minutes');
     [...sp.options].forEach(o => { o.disabled = Number(o.value) > bank; });
+
+    const out = (s.usedTodayMinutes >= s.limitMinutes) || !s.scheduleAllowed;
+    const banner = document.getElementById('autospend-banner');
+    if (out && bank > 0) {
+      banner.style.display = '';
+      document.getElementById('autospend-bank').textContent = fmt(bank);
+      const asm = document.getElementById('autospend-minutes');
+      [...asm.options].forEach(o => { o.disabled = Number(o.value) > bank; });
+    } else {
+      banner.style.display = 'none';
+    }
+
+    const tpls = s.choreTemplates || [];
+    const tWrap = document.getElementById('chore-templates');
+    tWrap.innerHTML = tpls.map((t, i) =>
+      `<span class="chip" data-i="${i}" style="cursor: pointer;">${t.description} · ${t.minutes}m</span>`
+    ).join('');
+    [...tWrap.querySelectorAll('.chip')].forEach(el => {
+      el.addEventListener('click', () => {
+        const t = tpls[Number(el.getAttribute('data-i'))];
+        if (!t) return;
+        document.getElementById('chore-desc').value = t.description;
+        document.getElementById('chore-minutes').value = String(t.minutes);
+      });
+    });
     const bc = document.getElementById('borrow-card');
     bc.style.display = s.selfBorrowEnabled ? '' : 'none';
     if (s.selfBorrowEnabled) {
@@ -258,6 +301,22 @@ document.getElementById('chore-btn').addEventListener('click', async (e) => {
   finally { btn.disabled = false; }
 });
 
+document.getElementById('autospend-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const minutes = Number(document.getElementById('autospend-minutes').value);
+  try {
+    const r = await fetch('/spend', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash(`Used ${minutes} min from bank.`); refresh(); }
+    else flash(body.error || 'Could not spend.');
+  } catch { flash('Could not spend.'); }
+  finally { btn.disabled = false; }
+});
+
 document.getElementById('spend-btn').addEventListener('click', async (e) => {
   const btn = e.target; btn.disabled = true;
   const minutes = Number(document.getElementById('spend-minutes').value);
@@ -311,6 +370,7 @@ class Dashboard:
             "tomorrowProjectedLimit": 120,
             "tomorrowDate": "",
             "bankedMinutes": 0,
+            "choreTemplates": [],
         }
         self._on_request: Callable[[int, str], None] | None = None
         self._on_borrow: Callable[[int], dict[str, Any] | None] | None = None
