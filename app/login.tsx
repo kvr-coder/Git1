@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiBanner } from '../components/ApiBanner';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../lib/auth';
+import { getApiBase, isMockMode, setServerUrl } from '../lib/config';
 import { colors, radius, spacing, typography } from '../lib/theme';
 
 export default function Login() {
@@ -11,6 +12,17 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [server, setServer] = useState('');
+  const [, force] = useState(0);
+
+  useEffect(() => {
+    setServer(getApiBase());
+  }, []);
+
+  const saveServer = async () => {
+    await setServerUrl(server.trim());
+    force((n) => n + 1); // re-render banner
+  };
 
   const onSubmit = async () => {
     setLoading(true);
@@ -30,6 +42,24 @@ export default function Login() {
           Sign in to manage your family's devices.
         </Text>
       </View>
+      {isMockMode() && (
+        <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+          <Text style={[typography.caption, { color: colors.textMuted }]}>
+            Server URL (your PC's LAN IP, e.g. http://192.168.1.42:8080)
+          </Text>
+          <TextInput
+            value={server}
+            onChangeText={setServer}
+            placeholder="http://192.168.1.42:8080"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            style={styles.input}
+          />
+          <Button label="Save server URL" variant="secondary" onPress={saveServer} />
+        </View>
+      )}
       <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
         <TextInput
           placeholder="Email"

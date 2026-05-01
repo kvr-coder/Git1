@@ -1,4 +1,4 @@
-import { API_BASE } from './config';
+import { getApiBase } from './config';
 import { KEYS, storage } from './storage';
 import type {
   ActivityEvent,
@@ -12,7 +12,9 @@ import type {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await storage.get(KEYS.authToken);
-  const res = await fetch(`${API_BASE}${path}`, {
+  const base = getApiBase();
+  if (!base) throw new Error('Server URL not set');
+  const res = await fetch(`${base}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

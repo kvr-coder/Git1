@@ -1,16 +1,14 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { API_BASE, USE_MOCK } from '../lib/config';
+import { getApiBase, isMockMode } from '../lib/config';
 import { colors, radius, spacing } from '../lib/theme';
 
 export function ApiBanner() {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     return (
       <View style={[styles.bar, { backgroundColor: colors.danger }]}>
         <Text style={styles.text}>
-          ⚠️ MOCK MODE — pairing won't reach your real server.{'\n'}
-          Create C:\Users\…\Git1\.env with EXPO_PUBLIC_API_BASE=http://&lt;your-IP&gt;:8080
-          {'\n'}
-          then restart Expo with `npx expo start --lan --clear`.
+          ⚠️ MOCK MODE — pairing won't reach your server.{'\n'}
+          Settings → Server URL → enter http://&lt;your-PC-IP&gt;:8080
         </Text>
       </View>
     );
@@ -18,7 +16,7 @@ export function ApiBanner() {
   return (
     <View style={[styles.bar, { backgroundColor: '#1E3A2A' }]}>
       <Text style={[styles.text, { color: colors.success }]}>
-        ✓ Real server: {API_BASE}
+        ✓ Server: {getApiBase()}
       </Text>
     </View>
   );

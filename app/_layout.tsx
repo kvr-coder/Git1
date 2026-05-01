@@ -4,16 +4,10 @@ import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { realApi } from '../lib/api.real';
 import { AuthContext } from '../lib/auth';
-import { API_BASE, USE_MOCK } from '../lib/config';
+import { getApiBase, isMockMode, loadStoredServerUrl } from '../lib/config';
 import { registerForPush } from '../lib/push';
 import { KEYS, storage } from '../lib/storage';
 import { colors } from '../lib/theme';
-
-console.log(
-  USE_MOCK
-    ? '[git1] MOCK MODE — set EXPO_PUBLIC_API_BASE in .env and restart Expo with --clear'
-    : `[git1] talking to real server: ${API_BASE}`,
-);
 
 export default function RootLayout() {
   const [signedIn, setSignedIn] = useState(false);
@@ -24,6 +18,12 @@ export default function RootLayout() {
 
   useEffect(() => {
     (async () => {
+      await loadStoredServerUrl();
+      console.log(
+        isMockMode()
+          ? '[git1] MOCK MODE — set the Server URL in Settings'
+          : `[git1] using server: ${getApiBase()}`,
+      );
       const [token, savedEmail] = await Promise.all([
         storage.get(KEYS.authToken),
         storage.get(KEYS.authEmail),
@@ -42,7 +42,7 @@ export default function RootLayout() {
       email,
       ready,
       signIn: async (e: string, p: string) => {
-        const token = USE_MOCK ? `demo-${Date.now()}` : await realApi.login(e, p);
+        const token = isMockMode() ? `demo-${Date.now()}` : await realApi.login(e, p);
         await storage.set(KEYS.authToken, token);
         await storage.set(KEYS.authEmail, e);
         setEmail(e);

@@ -1,5 +1,5 @@
 import { realApi } from './api.real';
-import { USE_MOCK } from './config';
+import { isMockMode } from './config';
 import { mockActivity, mockDevices, mockSchedules } from './mock';
 import type {
   ActivityEvent,
@@ -244,4 +244,12 @@ const mockApi = {
   },
 };
 
-export const api = USE_MOCK ? mockApi : realApi;
+// Dispatches per call so toggling the server URL at runtime takes effect
+// without restarting the app.
+type ApiShape = typeof realApi;
+export const api: ApiShape = new Proxy({} as ApiShape, {
+  get(_t, prop) {
+    const target = isMockMode() ? mockApi : realApi;
+    return (target as unknown as Record<string, unknown>)[prop as string];
+  },
+}) as ApiShape;
