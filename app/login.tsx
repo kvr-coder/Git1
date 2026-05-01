@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { ApiBanner } from '../components/ApiBanner';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../lib/auth';
@@ -22,6 +23,7 @@ export default function Login() {
 
   return (
     <Screen>
+      <ApiBanner />
       <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
         <Text style={[typography.h1, { color: colors.text }]}>Welcome back</Text>
         <Text style={[typography.body, { color: colors.textMuted }]}>

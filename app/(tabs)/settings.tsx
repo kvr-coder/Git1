@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
+import { ApiBanner } from '../../components/ApiBanner';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
@@ -11,6 +12,7 @@ export default function Settings() {
   const router = useRouter();
   return (
     <Screen>
+      <ApiBanner />
       <Text style={[typography.h1, { color: colors.text }]}>Settings</Text>
       <Card>
         <Text style={[typography.caption, { color: colors.textMuted }]}>Signed in as</Text>

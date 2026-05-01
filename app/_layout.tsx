@@ -4,10 +4,16 @@ import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { realApi } from '../lib/api.real';
 import { AuthContext } from '../lib/auth';
-import { USE_MOCK } from '../lib/config';
+import { API_BASE, USE_MOCK } from '../lib/config';
 import { registerForPush } from '../lib/push';
 import { KEYS, storage } from '../lib/storage';
 import { colors } from '../lib/theme';
+
+console.log(
+  USE_MOCK
+    ? '[git1] MOCK MODE — set EXPO_PUBLIC_API_BASE in .env and restart Expo with --clear'
+    : `[git1] talking to real server: ${API_BASE}`,
+);
 
 export default function RootLayout() {
   const [signedIn, setSignedIn] = useState(false);
