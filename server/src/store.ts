@@ -21,6 +21,7 @@ export interface DeviceRow {
   blocklist: string[];
   selfBorrowEnabled: boolean;
   selfBorrowCapMinutes: number;
+  bankedMinutes: number;
 }
 
 export interface ScheduleRow {
@@ -116,6 +117,18 @@ CREATE TABLE IF NOT EXISTS time_requests (
   resolvedAt INTEGER
 );
 CREATE INDEX IF NOT EXISTS time_requests_user_status ON time_requests(userId, status);
+CREATE TABLE IF NOT EXISTS chore_requests (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL,
+  description TEXT NOT NULL,
+  minutes INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  createdAt INTEGER NOT NULL,
+  resolvedAt INTEGER,
+  approvedMinutes INTEGER
+);
+CREATE INDEX IF NOT EXISTS chore_requests_user_status ON chore_requests(userId, status);
 `);
 
 for (const stmt of [
@@ -124,6 +137,7 @@ for (const stmt of [
   "ALTER TABLE schedules ADD COLUMN actions TEXT NOT NULL DEFAULT '[\"lock\"]'",
   "ALTER TABLE devices ADD COLUMN selfBorrowEnabled INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN selfBorrowCapMinutes INTEGER NOT NULL DEFAULT 30",
+  "ALTER TABLE devices ADD COLUMN bankedMinutes INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -145,6 +159,7 @@ const rowToDevice = (r: any): DeviceRow => ({
   blocklist: r.blocklist ? JSON.parse(r.blocklist) : [],
   selfBorrowEnabled: !!r.selfBorrowEnabled,
   selfBorrowCapMinutes: r.selfBorrowCapMinutes ?? 30,
+  bankedMinutes: r.bankedMinutes ?? 0,
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
@@ -222,8 +237,8 @@ export const store = {
       usedTodayMinutes: 0,
     };
     db.prepare(
-      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]', 0, 30)`,
+      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]', 0, 30, 0)`,
     ).run(
       d.id,
       d.userId,
@@ -373,5 +388,64 @@ export const store = {
     db.prepare(
       `UPDATE time_requests SET status = ?, resolvedAt = ? WHERE id = ? AND userId = ?`,
     ).run(status, Date.now(), requestId, userId);
+  },
+
+  createChoreRequest(userId: string, deviceId: string, description: string, minutes: number) {
+    const r = {
+      id: id(),
+      userId,
+      deviceId,
+      description,
+      minutes,
+      status: 'pending' as const,
+      createdAt: Date.now(),
+      resolvedAt: null as number | null,
+      approvedMinutes: null as number | null,
+    };
+    db.prepare(
+      `INSERT INTO chore_requests (id, userId, deviceId, description, minutes, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+    ).run(r.id, r.userId, r.deviceId, r.description, r.minutes, r.createdAt);
+    return r;
+  },
+  listChoreRequests(userId: string, status?: 'pending' | 'approved' | 'denied') {
+    if (status) {
+      return db
+        .prepare(
+          'SELECT * FROM chore_requests WHERE userId = ? AND status = ? ORDER BY createdAt DESC',
+        )
+        .all(userId, status);
+    }
+    return db
+      .prepare('SELECT * FROM chore_requests WHERE userId = ? ORDER BY createdAt DESC LIMIT 100')
+      .all(userId);
+  },
+  getChoreRequest(userId: string, requestId: string) {
+    return db
+      .prepare('SELECT * FROM chore_requests WHERE id = ? AND userId = ?')
+      .get(requestId, userId) as
+      | {
+          id: string;
+          userId: string;
+          deviceId: string;
+          description: string;
+          minutes: number;
+          status: string;
+          createdAt: number;
+          resolvedAt: number | null;
+          approvedMinutes: number | null;
+        }
+      | undefined;
+  },
+  resolveChoreRequest(
+    userId: string,
+    requestId: string,
+    status: 'approved' | 'denied',
+    approvedMinutes: number | null,
+  ) {
+    db.prepare(
+      `UPDATE chore_requests SET status = ?, resolvedAt = ?, approvedMinutes = ?
+       WHERE id = ? AND userId = ?`,
+    ).run(status, Date.now(), approvedMinutes, requestId, userId);
   },
 };

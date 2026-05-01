@@ -18,6 +18,8 @@ const iconFor: Record<ActivityKind, keyof typeof Ionicons.glyphMap> = {
   clock_tamper: 'time',
   request_minutes: 'hand-left',
   borrow: 'swap-horizontal',
+  chore_request: 'sparkles',
+  bank_spent: 'wallet',
 };
 
 export default function Activity() {

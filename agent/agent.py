@@ -94,10 +94,9 @@ def today_key() -> str:
 class Usage:
     def __init__(self) -> None:
         data = load_json(USAGE_PATH)
-        # futureAdjustments: { "YYYY-MM-DD": minutes_delta } — applied at day-roll
         self.future_adjustments: dict[str, int] = dict(data.get("futureAdjustments") or {})
+        self.banked_minutes: int = int(data.get("bankedMinutes", 0))
         if data.get("date") != today_key():
-            # Apply any adjustment scheduled for the new day before resetting.
             new_date = today_key()
             adjustment = int(self.future_adjustments.pop(new_date, 0))
             base_limit = int(data.get("limitMinutes", 120))
@@ -119,6 +118,7 @@ class Usage:
                 "minutes": self.minutes,
                 "limitMinutes": self.limit_minutes,
                 "futureAdjustments": self.future_adjustments,
+                "bankedMinutes": self.banked_minutes,
             },
         )
 
@@ -132,9 +132,6 @@ class Usage:
             self.save()
 
     def borrow_from(self, date_iso: str, minutes: int) -> None:
-        """Add `minutes` to today's limit and record a negative adjustment
-        for `date_iso` so that day's limit is reduced by the same amount.
-        """
         self.limit_minutes += minutes
         self.future_adjustments[date_iso] = (
             int(self.future_adjustments.get(date_iso, 0)) - minutes
@@ -142,8 +139,26 @@ class Usage:
         self.save()
 
     def projected_limit_for(self, date_iso: str, base_limit: int) -> int:
-        """What `date_iso`'s limit will be after pending adjustments."""
         return max(0, base_limit + int(self.future_adjustments.get(date_iso, 0)))
+
+    def add_bank(self, minutes: int) -> None:
+        self.banked_minutes = max(0, self.banked_minutes + int(minutes))
+        self.save()
+
+    def set_bank(self, minutes: int) -> None:
+        self.banked_minutes = max(0, int(minutes))
+        self.save()
+
+    def spend_bank(self, minutes: int) -> int:
+        """Move up to `minutes` from bank into today's limit. Returns
+        actual minutes spent (capped by current bank balance).
+        """
+        spend = max(0, min(int(minutes), self.banked_minutes))
+        if spend > 0:
+            self.banked_minutes -= spend
+            self.limit_minutes += spend
+            self.save()
+        return spend
 
     def add_seconds(self, sec: float) -> None:
         self.minutes += sec / 60.0
@@ -259,6 +274,14 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         BORROW_STATE["cap"] = int(payload.get("capMinutes", 30))
         await emit_event(ws, "set_borrow_settings", BORROW_STATE.copy())
 
+    elif kind == "add_bank_minutes":
+        usage.add_bank(int(payload.get("minutes", 0)))
+        await emit_event(ws, "set_bank_minutes", {"minutes": usage.banked_minutes})
+
+    elif kind == "set_bank_minutes":
+        usage.set_bank(int(payload.get("minutes", 0)))
+        await emit_event(ws, "set_bank_minutes", {"minutes": usage.banked_minutes})
+
     await ws.send(json.dumps({"kind": "ack", "id": cid}))
 
 
@@ -365,6 +388,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             scheduleAllowed=schedule_allowed,
             selfBorrowEnabled=BORROW_STATE.get("enabled", False),
             selfBorrowCapMinutes=BORROW_STATE.get("cap", 30),
+            bankedMinutes=usage.banked_minutes,
         )
 
         # 8. Heartbeat
@@ -397,9 +421,11 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                     enforcer_apps.set_blocklist(msg.get("blocklist") or [])
                     BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
                     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
+                    if "bankedMinutes" in msg:
+                        usage.set_bank(int(msg.get("bankedMinutes") or 0))
                     print(
                         f"[snapshot] schedules + blocklist applied; borrow="
-                        f"{BORROW_STATE}"
+                        f"{BORROW_STATE} bank={usage.banked_minutes}"
                     )
         finally:
             loop.cancel()
@@ -435,7 +461,21 @@ def main() -> None:
         bridge.emit("borrow", {"minutes": minutes, "fromDate": tomorrow})
         return {"newLimit": usage.limit_minutes, "fromDate": tomorrow}
 
+    def _submit_chore(description: str, minutes: int) -> dict:
+        bridge.emit("chore_request", {"description": description, "minutes": minutes})
+        return {"submitted": True}
+
+    def _spend_bank(minutes: int) -> dict:
+        spent = usage.spend_bank(minutes)
+        if spent > 0:
+            bridge.emit(
+                "bank_spent", {"minutes": spent, "remaining": usage.banked_minutes}
+            )
+        return {"spent": spent, "remaining": usage.banked_minutes}
+
     dash.on_borrow(_do_borrow)
+    dash.on_chore(_submit_chore)
+    dash.on_spend(_spend_bank)
     dash.start()
 
     backoff = 2

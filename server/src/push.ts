@@ -42,6 +42,8 @@ const NOTIFY_KINDS = new Set([
   'clock_tamper',
   'request_minutes',
   'borrow',
+  'chore_request',
+  'bank_spent',
 ]);
 
 export function shouldNotify(kind: string): boolean {

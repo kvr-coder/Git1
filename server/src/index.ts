@@ -94,6 +94,8 @@ const commandSchema = z.object({
     'set_blocklist',
     'set_schedules',
     'set_borrow_settings',
+    'add_bank_minutes',
+    'set_bank_minutes',
   ]),
   payload: z.record(z.unknown()).optional(),
 });
@@ -116,6 +118,14 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     const capRaw = Number(p.data.payload?.capMinutes ?? 30);
     const cap = Math.max(0, Math.min(240, isFinite(capRaw) ? capRaw : 30));
     store.updateDevice(d.id, { selfBorrowEnabled: enabled, selfBorrowCapMinutes: cap });
+  }
+  if (p.data.kind === 'add_bank_minutes') {
+    const m = Math.max(0, Number(p.data.payload?.minutes ?? 0) | 0);
+    store.updateDevice(d.id, { bankedMinutes: d.bankedMinutes + m });
+  }
+  if (p.data.kind === 'set_bank_minutes') {
+    const m = Math.max(0, Number(p.data.payload?.minutes ?? 0) | 0);
+    store.updateDevice(d.id, { bankedMinutes: m });
   }
 
   const cmd: Command = {
@@ -192,6 +202,44 @@ app.post('/requests/:id/resolve', auth, (req: AuthedRequest, res) => {
   res.json({ ok: true, status: p.data.status });
 });
 
+// ---------- Chore requests (kid → parent → bank) ----------
+app.get('/chores', auth, (req: AuthedRequest, res) => {
+  const status = (req.query.status as 'pending' | 'approved' | 'denied' | undefined) ?? undefined;
+  res.json(store.listChoreRequests(req.userId!, status));
+});
+
+app.post('/chores/:id/resolve', auth, (req: AuthedRequest, res) => {
+  const p = z
+    .object({ status: z.enum(['approved', 'denied']), minutes: z.number().int().min(0).max(480).optional() })
+    .safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const r = store.getChoreRequest(req.userId!, req.params.id);
+  if (!r) return res.status(404).json({ error: 'not found' });
+  if (r.status !== 'pending') return res.status(409).json({ error: 'already resolved' });
+
+  const approved = p.data.status === 'approved';
+  const minutes = approved ? (p.data.minutes ?? r.minutes) : null;
+  store.resolveChoreRequest(req.userId!, r.id, p.data.status, minutes);
+
+  if (approved && minutes && minutes > 0) {
+    const d = store.getDevice(req.userId!, r.deviceId);
+    if (d) {
+      store.updateDevice(d.id, { bankedMinutes: d.bankedMinutes + minutes });
+      sendToAgent(r.deviceId, {
+        kind: 'command',
+        command: {
+          id: randomBytes(6).toString('hex'),
+          deviceId: r.deviceId,
+          kind: 'add_bank_minutes',
+          payload: { minutes },
+          createdAt: Date.now(),
+        },
+      });
+    }
+  }
+  res.json({ ok: true, status: p.data.status, minutes });
+});
+
 // ---------- Agent WebSocket ----------
 const agentSockets = new Map<string, WebSocket>();
 
@@ -217,6 +265,7 @@ function pushSchedulesToAllAgentsFor(userId: string) {
         internetBlocked: d.internetBlocked,
         selfBorrowEnabled: d.selfBorrowEnabled,
         selfBorrowCapMinutes: d.selfBorrowCapMinutes,
+        bankedMinutes: d.bankedMinutes,
       }),
     );
   }
@@ -242,6 +291,7 @@ wss.on('connection', (ws, req) => {
       internetBlocked: device.internetBlocked,
       selfBorrowEnabled: device.selfBorrowEnabled,
       selfBorrowCapMinutes: device.selfBorrowCapMinutes,
+      bankedMinutes: device.bankedMinutes,
     }),
   );
   // If internet should be blocked but we just (re)connected, re-issue.
@@ -306,6 +356,36 @@ wss.on('connection', (ws, req) => {
           minutes,
           fromDate,
         });
+      } else if (msg.name === 'chore_request') {
+        const minutes = Number((msg.payload as any)?.minutes ?? 0);
+        const description = String((msg.payload as any)?.description ?? '').slice(0, 240);
+        const cr = store.createChoreRequest(device.userId, device.id, description, minutes);
+        message = `${device.name}: chore "${description}" — ${minutes} min reward`;
+        store.appendActivity({
+          userId: device.userId,
+          deviceId: device.id,
+          kind: 'chore_request',
+          message,
+        });
+        const tokens = store.pushTokensForUser(device.userId);
+        sendPush(tokens, 'Chore submitted', message, {
+          deviceId: device.id,
+          kind: 'chore_request',
+          requestId: cr.id,
+        });
+      } else if (msg.name === 'bank_spent') {
+        const minutes = Number((msg.payload as any)?.minutes ?? 0);
+        const remaining = Number((msg.payload as any)?.remaining ?? 0);
+        store.updateDevice(device.id, { bankedMinutes: remaining });
+        message = `${device.name}: spent ${minutes} bank min (${remaining} left)`;
+        store.appendActivity({
+          userId: device.userId,
+          deviceId: device.id,
+          kind: 'bank_spent',
+          message,
+        });
+        const tokens = store.pushTokensForUser(device.userId);
+        sendPush(tokens, 'Bank spent', message, { deviceId: device.id, kind: 'bank_spent' });
       } else {
         store.appendActivity({
           userId: device.userId,
@@ -341,6 +421,7 @@ function toPublicDevice(d: DeviceRow) {
     blocklist: d.blocklist,
     selfBorrowEnabled: d.selfBorrowEnabled,
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
+    bankedMinutes: d.bankedMinutes,
   };
 }
 

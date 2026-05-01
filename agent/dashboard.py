@@ -90,6 +90,40 @@ PAGE = """<!doctype html>
 </div>
 
 <div class="card">
+  <div class="row" style="justify-content: space-between;">
+    <strong>Bank</strong>
+    <span class="badge ok" id="bank-amount">0m</span>
+  </div>
+  <p class="muted" style="margin: 8px 0;">Reward minutes you've earned. Spend whenever.</p>
+  <div class="row" style="gap: 8px;">
+    <select id="spend-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select>
+    <button id="spend-btn">Use from bank</button>
+  </div>
+</div>
+
+<div class="card">
+  <strong>Submit a chore for reward</strong>
+  <p class="muted" style="margin: 8px 0;">Tell your parent what you did. They'll review it.</p>
+  <input id="chore-desc" placeholder="e.g. Cleaned my room"
+    style="width: 100%; margin-bottom: 8px;" />
+  <div class="row" style="gap: 8px;">
+    <select id="chore-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+      <option value="120">2 h</option>
+    </select>
+    <button id="chore-btn">Send</button>
+  </div>
+</div>
+
+<div class="card">
   <strong>Ask for more time</strong>
   <p class="muted" style="margin: 8px 0;">Send a request to your parent.</p>
   <div class="row" style="gap: 8px;">
@@ -157,6 +191,11 @@ async function refresh() {
     bl.innerHTML = (s.blocklist && s.blocklist.length)
       ? s.blocklist.map(n => `<span class="chip">${n}</span>`).join('')
       : '<span class="muted">None.</span>';
+    const bank = Number(s.bankedMinutes || 0);
+    document.getElementById('bank-amount').textContent = fmt(bank);
+    document.getElementById('spend-btn').disabled = bank <= 0;
+    const sp = document.getElementById('spend-minutes');
+    [...sp.options].forEach(o => { o.disabled = Number(o.value) > bank; });
     const bc = document.getElementById('borrow-card');
     bc.style.display = s.selfBorrowEnabled ? '' : 'none';
     if (s.selfBorrowEnabled) {
@@ -201,6 +240,40 @@ document.getElementById('borrow-btn').addEventListener('click', async (e) => {
   finally { btn.disabled = false; }
 });
 
+document.getElementById('chore-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const description = document.getElementById('chore-desc').value.trim();
+  const minutes = Number(document.getElementById('chore-minutes').value);
+  if (!description) { flash('Tell what you did.'); btn.disabled = false; return; }
+  try {
+    const r = await fetch('/chore', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ description, minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash('Sent! Wait for parent approval.'); document.getElementById('chore-desc').value = ''; }
+    else flash(body.error || 'Could not send.');
+  } catch { flash('Could not send.'); }
+  finally { btn.disabled = false; }
+});
+
+document.getElementById('spend-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const minutes = Number(document.getElementById('spend-minutes').value);
+  try {
+    const r = await fetch('/spend', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash(`Used ${minutes} min from bank.`); refresh(); }
+    else flash(body.error || 'Could not spend.');
+  } catch { flash('Could not spend.'); }
+  finally { btn.disabled = false; }
+});
+
 document.getElementById('request-btn').addEventListener('click', async (e) => {
   const btn = e.target; btn.disabled = true;
   const minutes = Number(document.getElementById('minutes').value);
@@ -237,9 +310,12 @@ class Dashboard:
             "baseLimitMinutes": 120,
             "tomorrowProjectedLimit": 120,
             "tomorrowDate": "",
+            "bankedMinutes": 0,
         }
         self._on_request: Callable[[int, str], None] | None = None
         self._on_borrow: Callable[[int], dict[str, Any] | None] | None = None
+        self._on_chore: Callable[[str, int], dict[str, Any] | None] | None = None
+        self._on_spend: Callable[[int], dict[str, Any] | None] | None = None
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -250,11 +326,13 @@ class Dashboard:
         self._on_request = cb
 
     def on_borrow(self, cb: Callable[[int], dict[str, Any] | None]) -> None:
-        """Callback receives the requested minutes; returns a dict with
-        applied result (e.g. {newLimit, tomorrowProjected}) or None on
-        rejection (raises with reason).
-        """
         self._on_borrow = cb
+
+    def on_chore(self, cb: Callable[[str, int], dict[str, Any] | None]) -> None:
+        self._on_chore = cb
+
+    def on_spend(self, cb: Callable[[int], dict[str, Any] | None]) -> None:
+        self._on_spend = cb
 
     def start(self) -> None:
         if self._server is not None:
@@ -316,6 +394,38 @@ class Dashboard:
                     cb = dash._on_borrow
                     if cb is None:
                         return self._send_json(500, {"error": "borrow handler missing"})
+                    try:
+                        result = cb(minutes)
+                    except Exception as e:
+                        return self._send_json(500, {"error": str(e)})
+                    return self._send_json(200, {"ok": True, "result": result})
+
+                if self.path == "/chore":
+                    description = str(payload.get("description") or "").strip()[:240]
+                    minutes = int(payload.get("minutes") or 0)
+                    if not description:
+                        return self._send_json(400, {"error": "description required"})
+                    if minutes <= 0 or minutes > 240:
+                        return self._send_json(400, {"error": "invalid minutes"})
+                    cb = dash._on_chore
+                    if cb is None:
+                        return self._send_json(500, {"error": "chore handler missing"})
+                    try:
+                        result = cb(description, minutes)
+                    except Exception as e:
+                        return self._send_json(500, {"error": str(e)})
+                    return self._send_json(200, {"ok": True, "result": result})
+
+                if self.path == "/spend":
+                    minutes = int(payload.get("minutes") or 0)
+                    bank = int(dash.status.get("bankedMinutes") or 0)
+                    if minutes <= 0:
+                        return self._send_json(400, {"error": "invalid minutes"})
+                    if bank <= 0:
+                        return self._send_json(400, {"error": "bank empty"})
+                    cb = dash._on_spend
+                    if cb is None:
+                        return self._send_json(500, {"error": "spend handler missing"})
                     try:
                         result = cb(minutes)
                     except Exception as e:

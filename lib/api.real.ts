@@ -1,6 +1,6 @@
 import { API_BASE } from './config';
 import { KEYS, storage } from './storage';
-import type { ActivityEvent, Device, Schedule, TimeRequest } from './types';
+import type { ActivityEvent, ChoreRequest, Device, Schedule, TimeRequest } from './types';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await storage.get(KEYS.authToken);
@@ -31,6 +31,7 @@ interface ServerDevice {
   blocklist?: string[];
   selfBorrowEnabled?: boolean;
   selfBorrowCapMinutes?: number;
+  bankedMinutes?: number;
 }
 
 const adaptDevice = (d: ServerDevice): Device => ({
@@ -46,6 +47,7 @@ const adaptDevice = (d: ServerDevice): Device => ({
   blocklist: d.blocklist ?? [],
   selfBorrowEnabled: !!d.selfBorrowEnabled,
   selfBorrowCapMinutes: d.selfBorrowCapMinutes ?? 30,
+  bankedMinutes: d.bankedMinutes ?? 0,
 });
 
 interface ServerActivity {
@@ -146,6 +148,8 @@ export const realApi = {
         'clock_tamper',
         'request_minutes',
         'borrow',
+        'chore_request',
+        'bank_spent',
       ].includes(e.kind)
         ? e.kind
         : 'login') as ActivityEvent['kind'],
@@ -164,6 +168,28 @@ export const realApi = {
     await request(`/requests/${id}/resolve`, {
       method: 'POST',
       body: JSON.stringify({ status }),
+    });
+  },
+  async listChores(status?: 'pending' | 'approved' | 'denied'): Promise<ChoreRequest[]> {
+    const qs = status ? `?status=${status}` : '';
+    return request<ChoreRequest[]>(`/chores${qs}`);
+  },
+  async resolveChore(id: string, status: 'approved' | 'denied', minutes?: number) {
+    await request(`/chores/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ status, ...(minutes !== undefined ? { minutes } : {}) }),
+    });
+  },
+  async addBankMinutes(id: string, minutes: number) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'add_bank_minutes', payload: { minutes } }),
+    });
+  },
+  async setBankMinutes(id: string, minutes: number) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'set_bank_minutes', payload: { minutes } }),
     });
   },
 };

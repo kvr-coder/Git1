@@ -114,6 +114,37 @@ export default function DeviceDetail() {
       <Card>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
+            <Text style={[typography.h2, { color: colors.text }]}>Bank</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Reward minutes the kid can spend whenever.
+            </Text>
+          </View>
+          <Text style={[typography.h1, { color: colors.success }]}>
+            {device.bankedMinutes}m
+          </Text>
+        </View>
+        <View style={styles.stepperRow}>
+          <Text style={{ color: colors.textMuted, flex: 1 }}>Adjust</Text>
+          <Button
+            label="−15"
+            variant="secondary"
+            onPress={() =>
+              run(() =>
+                api.setBankMinutes(device.id, Math.max(0, device.bankedMinutes - 15)),
+              )
+            }
+          />
+          <Button
+            label="+15"
+            variant="secondary"
+            onPress={() => run(() => api.addBankMinutes(device.id, 15))}
+          />
+        </View>
+      </Card>
+
+      <Card>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
             <Text style={[typography.h2, { color: colors.text }]}>Self-borrow</Text>
             <Text style={[typography.caption, { color: colors.textMuted }]}>
               Let kid borrow time from tomorrow without your approval. Tomorrow's

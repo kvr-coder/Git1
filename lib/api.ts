@@ -1,7 +1,13 @@
 import { realApi } from './api.real';
 import { USE_MOCK } from './config';
 import { mockActivity, mockDevices, mockSchedules } from './mock';
-import type { ActivityEvent, Device, Schedule, TimeRequest } from './types';
+import type {
+  ActivityEvent,
+  ChoreRequest,
+  Device,
+  Schedule,
+  TimeRequest,
+} from './types';
 
 const mockRequests: TimeRequest[] = [
   {
@@ -12,6 +18,19 @@ const mockRequests: TimeRequest[] = [
     status: 'pending',
     createdAt: Date.now() - 1000 * 60 * 3,
     resolvedAt: null,
+  },
+];
+
+const mockChores: ChoreRequest[] = [
+  {
+    id: 'c1',
+    deviceId: 'd1',
+    description: 'Cleaned my room and vacuumed',
+    minutes: 30,
+    status: 'pending',
+    createdAt: Date.now() - 1000 * 60 * 8,
+    resolvedAt: null,
+    approvedMinutes: null,
   },
 ];
 
@@ -57,6 +76,7 @@ const mockApi = {
       blocklist: [],
       selfBorrowEnabled: false,
       selfBorrowCapMinutes: 30,
+      bankedMinutes: 0,
     };
     mockDevices.push(next);
     return next;
@@ -120,6 +140,33 @@ const mockApi = {
       const d = mockDevices.find((x) => x.id === r.deviceId);
       if (d) d.dailyLimitMinutes += r.minutes;
     }
+  },
+  async listChores(status?: 'pending' | 'approved' | 'denied'): Promise<ChoreRequest[]> {
+    await delay(120);
+    return status ? mockChores.filter((c) => c.status === status) : mockChores;
+  },
+  async resolveChore(id: string, status: 'approved' | 'denied', minutes?: number): Promise<void> {
+    await delay(150);
+    const c = mockChores.find((x) => x.id === id);
+    if (!c) return;
+    c.status = status;
+    c.resolvedAt = Date.now();
+    if (status === 'approved') {
+      const m = minutes ?? c.minutes;
+      c.approvedMinutes = m;
+      const d = mockDevices.find((x) => x.id === c.deviceId);
+      if (d) d.bankedMinutes += m;
+    }
+  },
+  async addBankMinutes(id: string, minutes: number): Promise<void> {
+    await delay(120);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) d.bankedMinutes += minutes;
+  },
+  async setBankMinutes(id: string, minutes: number): Promise<void> {
+    await delay(120);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) d.bankedMinutes = Math.max(0, minutes);
   },
 };
 
