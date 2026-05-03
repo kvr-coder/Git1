@@ -225,11 +225,26 @@ class WSBridge:
         self.loop = loop
         self.ws = ws
 
+    def unbind(self) -> None:
+        self.loop = None
+        self.ws = None
+
     def emit(self, name: str, payload: dict | None = None) -> None:
-        if self.loop is None or self.ws is None:
+        loop = self.loop
+        ws = self.ws
+        if loop is None or ws is None:
+            print(f"[bridge] no active WS; dropping {name}")
+            return
+        if loop.is_closed():
+            print(f"[bridge] loop is closed; dropping {name}")
+            self.unbind()
             return
         msg = json.dumps({"kind": "event", "name": name, "payload": payload or {}})
-        asyncio.run_coroutine_threadsafe(self.ws.send(msg), self.loop)
+        try:
+            asyncio.run_coroutine_threadsafe(ws.send(msg), loop)
+        except RuntimeError as e:
+            print(f"[bridge] emit failed: {e}; dropping {name}")
+            self.unbind()
 
 
 bridge = WSBridge()
@@ -481,6 +496,7 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                     )
         finally:
             loop.cancel()
+            bridge.unbind()
 
 
 def main() -> None:
