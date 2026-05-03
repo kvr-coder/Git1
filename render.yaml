@@ -10,7 +10,7 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /devices
+    healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: 20.18.0

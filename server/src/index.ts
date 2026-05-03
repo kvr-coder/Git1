@@ -13,6 +13,11 @@ const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const app = express();
 app.use(express.json());
 
+// Public health endpoint for Render / uptime monitors.
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
 interface AuthedRequest extends Request {
   userId?: string;
 }
