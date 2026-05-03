@@ -1,0 +1,19 @@
+# Render.com blueprint — auto-deploy the Git1 server when you push to GitHub.
+# Paste your repo URL into Render's "New Blueprint Instance" page and it will
+# pick this file up and provision the service.
+
+services:
+  - type: web
+    name: git1-server
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /devices
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      # GIT1_DB defaults to ./git1.db. On Render free, the disk is
+      # ephemeral — data resets on every restart. Upgrade to a $7/mo
+      # persistent disk via Render dashboard for production.
