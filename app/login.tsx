@@ -9,8 +9,10 @@ import { colors, radius, spacing, typography } from '../lib/theme';
 
 export default function Login() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // Pre-filled with the same defaults the desktop launcher (.bat) registers.
+  // Override either field if you used a different account.
+  const [email, setEmail] = useState('kvara@test.com');
+  const [password, setPassword] = useState('hunter22');
   const [loading, setLoading] = useState(false);
   const [server, setServer] = useState('');
   const [, force] = useState(0);
@@ -27,7 +29,7 @@ export default function Login() {
   const onSubmit = async () => {
     setLoading(true);
     try {
-      await signIn(email || 'parent@example.com', password);
+      await signIn(email, password);
     } finally {
       setLoading(false);
     }
