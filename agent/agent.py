@@ -296,6 +296,13 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
 # Module-level so dashboard handler thread can read it.
 BORROW_STATE: dict[str, Any] = {"enabled": False, "cap": 30}
 CHORE_TEMPLATES: list[dict[str, Any]] = []
+NOTIFICATIONS: list[dict[str, Any]] = []  # recent parent->kid toasts
+
+
+def push_notification(text: str, kind: str = "info") -> None:
+    NOTIFICATIONS.append({"id": int(time.time() * 1000), "text": text, "kind": kind, "ts": time.time()})
+    if len(NOTIFICATIONS) > 10:
+        del NOTIFICATIONS[:-10]
 
 
 # ---------- Enforcement loop ----------
@@ -399,6 +406,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             selfBorrowCapMinutes=BORROW_STATE.get("cap", 30),
             bankedMinutes=usage.banked_minutes,
             choreTemplates=list(CHORE_TEMPLATES),
+            notifications=list(NOTIFICATIONS),
         )
 
         # 8. Heartbeat
@@ -426,6 +434,32 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                 msg = json.loads(raw)
                 if msg.get("kind") == "command":
                     await handle_command(ws, msg["command"], usage)
+                elif msg.get("kind") == "notification":
+                    name = msg.get("name", "")
+                    payload = msg.get("payload") or {}
+                    if name == "request_approved":
+                        push_notification(
+                            f"✅ Parent approved your request for {payload.get('minutes', 0)} more minutes!",
+                            "success",
+                        )
+                    elif name == "request_denied":
+                        push_notification(
+                            f"❌ Parent denied your time request",
+                            "danger",
+                        )
+                    elif name == "chore_approved":
+                        push_notification(
+                            f"✅ Chore approved! +{payload.get('minutes', 0)} min added to your bank.",
+                            "success",
+                        )
+                    elif name == "chore_denied":
+                        d = payload.get("description") or "your chore"
+                        push_notification(
+                            f"❌ Parent denied chore: {d}",
+                            "danger",
+                        )
+                    else:
+                        push_notification(str(payload.get("message") or name), "info")
                 elif msg.get("kind") == "snapshot":
                     enforcer_schedule.set_schedules(msg.get("schedules") or [])
                     enforcer_apps.set_blocklist(msg.get("blocklist") or [])

@@ -24,4 +24,6 @@ export type AgentMessage =
   | { kind: 'event'; name: string; payload?: Record<string, unknown> }
   | { kind: 'heartbeat'; usedTodayMinutes: number };
 
-export type ServerMessage = { kind: 'command'; command: Command };
+export type ServerMessage =
+  | { kind: 'command'; command: Command }
+  | { kind: 'notification'; name: string; payload?: Record<string, unknown> };

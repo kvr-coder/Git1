@@ -210,6 +210,11 @@ app.post('/requests/:id/resolve', auth, (req: AuthedRequest, res) => {
       },
     });
   }
+  sendToAgent(r.deviceId, {
+    kind: 'notification',
+    name: p.data.status === 'approved' ? 'request_approved' : 'request_denied',
+    payload: { minutes: r.minutes, reason: r.reason },
+  });
   res.json({ ok: true, status: p.data.status });
 });
 
@@ -294,6 +299,11 @@ app.post('/chores/:id/resolve', auth, (req: AuthedRequest, res) => {
       });
     }
   }
+  sendToAgent(r.deviceId, {
+    kind: 'notification',
+    name: approved ? 'chore_approved' : 'chore_denied',
+    payload: { description: r.description, minutes: minutes ?? r.minutes },
+  });
   res.json({ ok: true, status: p.data.status, minutes });
 });
 

@@ -252,6 +252,7 @@ async function refresh() {
         `Heads up: tomorrow (${tDate}) will be ${fmt(proj)} instead of `
         + `${fmt(s.tomorrowProjectedLimit ?? s.baseLimitMinutes ?? s.limitMinutes)}.`;
     }
+    pollNotifs(s);
   } catch (e) { /* offline */ }
 }
 refresh(); setInterval(refresh, 5000);
@@ -282,6 +283,30 @@ document.getElementById('borrow-btn').addEventListener('click', async (e) => {
   } catch { flash('Could not borrow.'); }
   finally { btn.disabled = false; }
 });
+
+// Track which notification IDs have already been shown so we don't repeat them.
+const shownNotifs = new Set();
+function pollNotifs(s) {
+  const list = s.notifications || [];
+  for (const n of list) {
+    if (shownNotifs.has(n.id)) continue;
+    shownNotifs.add(n.id);
+    showNotif(n);
+  }
+}
+function showNotif(n) {
+  const el = document.createElement('div');
+  const bg = n.kind === 'success' ? '#1E3A2A' : n.kind === 'danger' ? '#3A1E1E' : 'var(--surface)';
+  const fg = n.kind === 'success' ? 'var(--success)' : n.kind === 'danger' ? 'var(--danger)' : 'var(--text)';
+  el.style.cssText = `position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+    background: ${bg}; color: ${fg}; border: 1px solid var(--border); padding: 14px 20px;
+    border-radius: 12px; font-weight: 600; z-index: 9999; max-width: 90%; text-align: center;
+    box-shadow: 0 6px 24px rgba(0,0,0,.4); animation: slideIn .25s ease-out;`;
+  el.textContent = n.text;
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; }, 6000);
+  setTimeout(() => el.remove(), 6500);
+}
 
 document.getElementById('chore-btn').addEventListener('click', async (e) => {
   const btn = e.target; btn.disabled = true;
@@ -371,6 +396,7 @@ class Dashboard:
             "tomorrowDate": "",
             "bankedMinutes": 0,
             "choreTemplates": [],
+            "notifications": [],
         }
         self._on_request: Callable[[int, str], None] | None = None
         self._on_borrow: Callable[[int], dict[str, Any] | None] | None = None
