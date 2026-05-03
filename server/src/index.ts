@@ -492,6 +492,6 @@ function toPublicDevice(d: DeviceRow) {
   };
 }
 
-httpServer.listen(PORT, () => {
-  console.log(`git1-server listening on http://localhost:${PORT}`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`git1-server listening on http://0.0.0.0:${PORT}`);
 });
