@@ -29,6 +29,8 @@ export default function Devices() {
   useFocusEffect(
     useCallback(() => {
       refresh();
+      const id = setInterval(refresh, 5000);
+      return () => clearInterval(id);
     }, [refresh]),
   );
 
