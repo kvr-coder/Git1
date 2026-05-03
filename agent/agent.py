@@ -46,6 +46,10 @@ HEARTBEAT_INTERVAL_SEC = 60
 RELOCK_INTERVAL_SEC = 5
 VPN_CHECK_INTERVAL_SEC = 30
 CLOCK_CHECK_INTERVAL_SEC = 600
+# Deadman switch: if the agent can't reach the server for this long while
+# internet is firewall-blocked, auto-unblock so the parent isn't locked
+# out remotely.
+NET_DEADMAN_SEC = 5 * 60
 
 
 # ---------- Config ----------
@@ -557,13 +561,21 @@ def main() -> None:
     dash.on_spend(_spend_bank)
     dash.start()
 
+    last_connected = time.time()
     backoff = 2
     while True:
         try:
             asyncio.run(run(token, usage, dash))
+            last_connected = time.time()
             backoff = 2
         except Exception as e:
-            print(f"[ws] disconnected: {e}; retrying in {backoff}s")
+            offline_for = time.time() - last_connected
+            print(f"[ws] disconnected: {e}; offline {int(offline_for)}s; retrying in {backoff}s")
+            # Deadman: if internet is firewall-blocked AND we've been offline
+            # too long, auto-unblock so parent can recover.
+            if enforcer_net.is_blocked() and offline_for > NET_DEADMAN_SEC:
+                print(f"[deadman] offline {int(offline_for)}s with internet blocked — auto-unblocking")
+                enforcer_net.unblock_internet()
             time.sleep(backoff)
             backoff = min(backoff * 2, 60)
 
