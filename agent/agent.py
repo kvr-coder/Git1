@@ -178,9 +178,17 @@ class Usage:
 
 # ---------- Pairing ----------
 def pair() -> str:
-    r = requests.post(f"{SERVER_HTTP}/agent/pair/start", timeout=10)
-    r.raise_for_status()
-    code = r.json()["code"]
+    # Retry the initial pair/start until the server responds. The Cloudflare
+    # quick tunnel can take 10-30s after launch before DNS resolves.
+    code: str | None = None
+    while code is None:
+        try:
+            r = requests.post(f"{SERVER_HTTP}/agent/pair/start", timeout=10)
+            r.raise_for_status()
+            code = r.json()["code"]
+        except requests.RequestException as e:
+            print(f"[pair] server unreachable at {SERVER_HTTP} ({e.__class__.__name__}); retrying in 5s...")
+            time.sleep(5)
     print(f"\n*** Pairing code: {code} ***\nEnter this in the Git1 mobile app.\n")
     while True:
         time.sleep(3)
