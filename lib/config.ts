@@ -1,10 +1,12 @@
 // Server URL precedence (first non-empty wins):
 //   1. runtime override set via Settings → "Server URL" (stored in SecureStore)
 //   2. EXPO_PUBLIC_API_BASE env var (.env)
-//   3. empty → mock mode
+//   3. DEFAULT_BASE below — change this to your deployed server
+//   4. empty → mock mode
 import { KEYS, storage } from './storage';
 
-const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE ?? '').replace(/\/+$/, '');
+const DEFAULT_BASE = 'https://git1-server.onrender.com';
+const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE ?? DEFAULT_BASE).replace(/\/+$/, '');
 let runtimeOverride: string = ''; // hydrated on app boot
 
 export async function loadStoredServerUrl(): Promise<void> {
