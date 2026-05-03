@@ -65,14 +65,21 @@ if ($url) {
 }
 
 # 4. Expo (Metro bundler)
-Write-Host "[4/4] Starting Expo (LAN)"
+Write-Host "[4/4] Starting Expo (tunnel mode — phone can be on any network)"
 if (-not (Test-Path "$repo\node_modules")) {
     Write-Host "    First run: npm install (mobile)"
     Push-Location $repo
     npm install --legacy-peer-deps
     Pop-Location
 }
-Start-Process cmd -ArgumentList "/k", "title Git1 Expo && cd /d ""$repo"" && powershell -ExecutionPolicy Bypass -File scripts\dev-watch.ps1"
+# Ensure @expo/ngrok is installed globally (required by `expo start --tunnel`).
+$ngrokCheck = npm list -g --depth=0 2>$null | Select-String "@expo/ngrok"
+if (-not $ngrokCheck) {
+    Write-Host "    Installing @expo/ngrok globally (one-time)..."
+    npm install -g "@expo/ngrok@^4.1.0"
+}
+# GIT1_TUNNEL=1 -> dev-watch.ps1 uses `expo start --tunnel` (ngrok) instead of --lan
+Start-Process cmd -ArgumentList "/k", "title Git1 Expo && cd /d ""$repo"" && set GIT1_TUNNEL=1 && powershell -ExecutionPolicy Bypass -File scripts\dev-watch.ps1"
 
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Cyan
