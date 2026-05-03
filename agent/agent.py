@@ -189,6 +189,12 @@ def pair() -> str:
         except requests.RequestException as e:
             print(f"[pair] server unreachable at {SERVER_HTTP} ({e.__class__.__name__}); retrying in 5s...")
             time.sleep(5)
+    # Write the code to a side-file so launchers (.bat) can auto-claim it.
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        (CONFIG_DIR / "last-pair.txt").write_text(code)
+    except Exception:
+        pass
     print(f"\n*** Pairing code: {code} ***\nEnter this in the Git1 mobile app.\n")
     while True:
         time.sleep(3)

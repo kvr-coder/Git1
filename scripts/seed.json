@@ -1,0 +1,29 @@
+{
+  "_comment": "Default data the launcher .bat seeds after a fresh pair. Edit to taste.",
+  "templates": [
+    { "description": "Make bed", "minutes": 5 },
+    { "description": "Take out trash", "minutes": 10 },
+    { "description": "Wash dishes", "minutes": 15 },
+    { "description": "Vacuum room", "minutes": 20 },
+    { "description": "Help cook dinner", "minutes": 30 }
+  ],
+  "schedules": [
+    {
+      "name": "School nights",
+      "days": ["mon","tue","wed","thu"],
+      "startMinute": 960,
+      "endMinute": 1200,
+      "enabled": true,
+      "actions": ["lock"]
+    },
+    {
+      "name": "Bedtime",
+      "days": ["mon","tue","wed","thu","fri","sat","sun"],
+      "startMinute": 1260,
+      "endMinute": 420,
+      "enabled": true,
+      "actions": ["lock","block_internet"]
+    }
+  ],
+  "borrowSettings": { "enabled": true, "capMinutes": 30 }
+}
