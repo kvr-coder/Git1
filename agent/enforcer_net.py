@@ -66,10 +66,11 @@ def block_internet() -> bool:
     # in case the agent path changed.
     _ensure_agent_allow()
     if is_blocked():
+        print("[net] already blocked.")
         return True
     ok = True
     for direction in ("in", "out"):
-        code, _ = _run(
+        code, out = _run(
             [
                 "netsh",
                 "advfirewall",
@@ -83,11 +84,21 @@ def block_internet() -> bool:
                 "remoteip=any",
             ],
         )
-        ok = ok and code == 0
+        if code != 0:
+            ok = False
+            print(f"[net] BLOCK ({direction}) FAILED: {out}")
+            if "elevation" in out.lower() or "administrator" in out.lower():
+                print("[net] *** Agent must be run as Administrator to add firewall rules. ***")
+        else:
+            print(f"[net] block rule ({direction}) added.")
     return ok
 
 
 def unblock_internet() -> bool:
-    code, _ = _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK}"])
+    code, out = _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK}"])
     _remove_agent_allow()
+    if code != 0:
+        print(f"[net] UNBLOCK FAILED: {out}")
+    else:
+        print("[net] block rules removed.")
     return code == 0
