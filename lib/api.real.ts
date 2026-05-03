@@ -22,6 +22,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...(init.headers ?? {}),
     },
   });
+  if (res.status === 401 && token) {
+    // Stale token (server DB likely reset). Clear it so the next render
+    // bounces the user to the login screen.
+    await storage.del(KEYS.authToken);
+    await storage.del(KEYS.authEmail);
+    throw new Error('Session expired — please sign in again');
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`${res.status} ${res.statusText}: ${text}`);
