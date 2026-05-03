@@ -114,6 +114,8 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   // Apply server-side state for commands the parent expects to persist.
   if (p.data.kind === 'block_internet') store.updateDevice(d.id, { internetBlocked: true });
   if (p.data.kind === 'unblock_internet') store.updateDevice(d.id, { internetBlocked: false });
+  if (p.data.kind === 'lock') store.updateDevice(d.id, { lockedByParent: true });
+  if (p.data.kind === 'unlock') store.updateDevice(d.id, { lockedByParent: false });
   if (p.data.kind === 'set_blocklist') {
     const apps = (p.data.payload?.apps as string[]) ?? [];
     store.updateDevice(d.id, { blocklist: apps });
@@ -330,6 +332,7 @@ function buildSnapshot(d: DeviceRow) {
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
     bankedMinutes: d.bankedMinutes,
     choreTemplates: store.listChoreTemplates(d.userId, d.id),
+    lockedByParent: d.lockedByParent,
   };
 }
 
@@ -370,6 +373,17 @@ wss.on('connection', (ws, req) => {
         id: randomBytes(6).toString('hex'),
         deviceId: device.id,
         kind: 'block_internet',
+        createdAt: Date.now(),
+      },
+    });
+  }
+  if (device.lockedByParent) {
+    sendToAgent(device.id, {
+      kind: 'command',
+      command: {
+        id: randomBytes(6).toString('hex'),
+        deviceId: device.id,
+        kind: 'lock',
         createdAt: Date.now(),
       },
     });

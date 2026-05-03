@@ -265,10 +265,12 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
     print(f"[cmd] {kind} ({cid}) payload={payload}")
 
     if kind == "lock":
+        LOCKED_BY_PARENT["value"] = True
         ok = lock_workstation()
         await emit_event(ws, "lock", {"ok": ok})
 
     elif kind == "unlock":
+        LOCKED_BY_PARENT["value"] = False
         enforcer_net.unblock_internet()
         await emit_event(ws, "unlock")
 
@@ -318,6 +320,7 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
 BORROW_STATE: dict[str, Any] = {"enabled": False, "cap": 30}
 CHORE_TEMPLATES: list[dict[str, Any]] = []
 NOTIFICATIONS: list[dict[str, Any]] = []  # recent parent->kid toasts
+LOCKED_BY_PARENT: dict[str, bool] = {"value": False}
 
 
 def push_notification(text: str, kind: str = "info") -> None:
@@ -369,6 +372,12 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             if clock.is_tampered():
                 print(f"[clock] drift {drift:.1f}s — tamper")
                 await emit_event(ws, "clock_tamper", {"driftSec": drift})
+
+        # 5a. Parent manually locked the device — keep re-locking
+        if LOCKED_BY_PARENT.get("value"):
+            if now - last_relock >= RELOCK_INTERVAL_SEC:
+                last_relock = now
+                lock_workstation()
 
         # 5. Daily-limit gate (always locks)
         schedule_actions = enforcer_schedule.active_actions(clock.now_trusted_dt())
@@ -490,9 +499,11 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                         usage.set_bank(int(msg.get("bankedMinutes") or 0))
                     CHORE_TEMPLATES.clear()
                     CHORE_TEMPLATES.extend(msg.get("choreTemplates") or [])
+                    LOCKED_BY_PARENT["value"] = bool(msg.get("lockedByParent", False))
                     print(
                         f"[snapshot] applied; borrow={BORROW_STATE} "
-                        f"bank={usage.banked_minutes} templates={len(CHORE_TEMPLATES)}"
+                        f"bank={usage.banked_minutes} templates={len(CHORE_TEMPLATES)} "
+                        f"lockedByParent={LOCKED_BY_PARENT['value']}"
                     )
         finally:
             loop.cancel()

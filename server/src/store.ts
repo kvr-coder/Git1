@@ -22,6 +22,7 @@ export interface DeviceRow {
   selfBorrowEnabled: boolean;
   selfBorrowCapMinutes: number;
   bankedMinutes: number;
+  lockedByParent: boolean;
 }
 
 export interface ScheduleRow {
@@ -158,6 +159,7 @@ for (const stmt of [
   "ALTER TABLE devices ADD COLUMN selfBorrowEnabled INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN selfBorrowCapMinutes INTEGER NOT NULL DEFAULT 30",
   "ALTER TABLE devices ADD COLUMN bankedMinutes INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE devices ADD COLUMN lockedByParent INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -180,6 +182,7 @@ const rowToDevice = (r: any): DeviceRow => ({
   selfBorrowEnabled: !!r.selfBorrowEnabled,
   selfBorrowCapMinutes: r.selfBorrowCapMinutes ?? 30,
   bankedMinutes: r.bankedMinutes ?? 0,
+  lockedByParent: !!r.lockedByParent,
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
@@ -260,10 +263,11 @@ export const store = {
       selfBorrowEnabled: false,
       selfBorrowCapMinutes: 30,
       bankedMinutes: 0,
+      lockedByParent: false,
     };
     db.prepare(
-      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]', 0, 30, 0)`,
+      `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes, lockedByParent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]', 0, 30, 0, 0)`,
     ).run(
       d.id,
       d.userId,
@@ -313,7 +317,8 @@ export const store = {
     const values = fields.map((f) => {
       const v = (patch as any)[f];
       if (f === 'blocklist') return JSON.stringify(v ?? []);
-      if (f === 'internetBlocked' || f === 'selfBorrowEnabled') return v ? 1 : 0;
+      if (f === 'internetBlocked' || f === 'selfBorrowEnabled' || f === 'lockedByParent')
+        return v ? 1 : 0;
       return v;
     });
     db.prepare(`UPDATE devices SET ${sets} WHERE id = ?`).run(...values, deviceId);
