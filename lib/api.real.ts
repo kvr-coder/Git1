@@ -83,6 +83,13 @@ export const realApi = {
     });
     return r.token;
   },
+  async register(email: string, password: string): Promise<string> {
+    const r = await request<{ token: string }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    return r.token;
+  },
   async listDevices(): Promise<Device[]> {
     const ds = await request<ServerDevice[]>('/devices');
     return ds.map(adaptDevice);

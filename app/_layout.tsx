@@ -42,7 +42,23 @@ export default function RootLayout() {
       email,
       ready,
       signIn: async (e: string, p: string) => {
-        const token = isMockMode() ? `demo-${Date.now()}` : await realApi.login(e, p);
+        let token: string;
+        if (isMockMode()) {
+          token = `demo-${Date.now()}`;
+        } else {
+          try {
+            token = await realApi.login(e, p);
+          } catch (err) {
+            // If login fails (bad creds OR fresh server DB), try to
+            // auto-create the account. Convenient for dev / Render free
+            // tier where the DB resets on every redeploy.
+            try {
+              token = await realApi.register(e, p);
+            } catch {
+              throw err;
+            }
+          }
+        }
         await storage.set(KEYS.authToken, token);
         await storage.set(KEYS.authEmail, e);
         setEmail(e);
