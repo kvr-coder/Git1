@@ -1,0 +1,20 @@
+# Litestream config — continuously replicates the SQLite DB to object storage
+# so it SURVIVES Render redeploys / restarts / spin-downs (the free tier wipes
+# the local disk otherwise). All values come from env so no secrets live here.
+#
+# Required env to activate (set in Render dashboard or .env):
+#   GIT1_DB                e.g. /data/git1.db (the DB file Litestream guards)
+#   LITESTREAM_REPLICA_URL e.g. s3://my-bucket/git1   (R2/S3/Backblaze)
+#   LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY
+#   (for Cloudflare R2 also set the endpoint, see DEPLOY_RENDER.md)
+dbs:
+  - path: ${GIT1_DB}
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        # For Cloudflare R2 / Backblaze B2 / MinIO set a custom S3 endpoint.
+        # Harmless to leave blank for real AWS S3.
+        endpoint: ${LITESTREAM_ENDPOINT}
+        # R2 ignores region but the S3 client wants one set.
+        region: auto

@@ -84,13 +84,17 @@ current process owner. If no SID can be resolved it **refuses to block**
 the PC for ~5s before re-lock. For a true logon block, use
 `net user <kid> /times:` based on schedule (not yet built).
 
-### 3. Render free tier
-- Sleeps after ~15 min idle → ~30s cold start on next request (launchers
-  ping `/health` and wait).
-- **Wipes SQLite on every redeploy** → accounts + devices vanish. Auto-
-  register + `Git1-Pair.bat` paper over it. For real persistence: attach a
-  $7/mo Render disk and set `GIT1_DB=/var/data/git1.db` (documented in
-  `server/DEPLOY_RENDER.md`).
+### 3. Render free tier (DB wipe — FIXED via Litestream; sleep — keep-alive)
+- **DB wipe FIXED (free):** `start.sh` now runs the server under **Litestream**,
+  which replicates the SQLite DB to Cloudflare R2 (free 10GB) and restores it
+  on boot, so data survives every redeploy/restart. Opt-in via env vars
+  (`LITESTREAM_REPLICA_URL` + R2 creds); blank = old ephemeral behaviour, so
+  nothing breaks unconfigured. Binary installed in build via
+  `scripts/install-litestream.sh`. Full setup: `server/DEPLOY_RENDER.md`.
+- **Sleep (~30s cold start):** set a free uptime pinger (cron-job.org /
+  UptimeRobot) on `/health` every ~10 min to keep it warm. Launchers also
+  ping `/health` and wait.
+- Alternative to Litestream: $7/mo Render disk + `GIT1_DB=/var/data/git1.db`.
 
 ### 4. Expo Go push notifications
 Apple/Expo removed remote push from Expo Go. No lock-screen banners without

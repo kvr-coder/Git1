@@ -41,11 +41,43 @@ Should return `{"error":"unauthorized"}`.
   up on the next request. The phone app handles this gracefully (the first
   request just looks slow).
 - **Free tier disk is ephemeral**: every redeploy or restart wipes the
-  SQLite DB. For real use, attach a persistent disk in Render's dashboard
-  (Settings → Disks → Add Disk, mount at `/var/data`, and set
-  `GIT1_DB=/var/data/git1.db` in env vars). Costs $7/mo.
+  SQLite DB. Two ways to fix without paying for a disk:
+  1. **Litestream → Cloudflare R2 (free, recommended)** — see below.
+  2. Attach a $7/mo Render disk (Settings → Disks, mount `/var/data`, set
+     `GIT1_DB=/var/data/git1.db`).
 - **Auto-redeploys on every push to the configured branch** — convenient
   but be aware your test pushes will replace the running version.
+
+## Free durable storage: Litestream + Cloudflare R2 (5 min)
+
+This streams the SQLite DB to object storage and restores it on boot, so the
+data **survives every redeploy/restart** — no paid disk needed. Already wired
+into `start.sh` + `render.yaml`; you only supply credentials.
+
+1. **Create an R2 bucket** (Cloudflare dashboard → R2 → Create bucket), e.g.
+   `git1`. R2's free tier is 10 GB — far more than enough.
+2. **Make an R2 API token** (R2 → Manage API Tokens → Create, "Object Read &
+   Write"). Note the **Access Key ID**, **Secret Access Key**, and your
+   account's S3 endpoint `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
+3. **Set these env vars** in the Render service (Environment tab), marking the
+   secrets as secret:
+   - `LITESTREAM_REPLICA_URL` = `s3://git1/db` (bucket + path)
+   - `LITESTREAM_ACCESS_KEY_ID` = R2 access key id
+   - `LITESTREAM_SECRET_ACCESS_KEY` = R2 secret
+   - `LITESTREAM_ENDPOINT` = `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+4. **Redeploy.** Build log should show `[litestream] installed`; start log
+   `Litestream enabled`. On the *next* deploy it will `restore` the DB and your
+   accounts/devices persist. Leaving the vars blank = old ephemeral behaviour.
+
+> Backblaze B2 or any S3-compatible store works too — same vars, just point
+> `LITESTREAM_ENDPOINT`/`LITESTREAM_REPLICA_URL` at that provider.
+
+## Keep it warm (avoid 30 s cold starts)
+
+The free tier sleeps after ~15 min idle. For a summer demo, set up a free
+uptime pinger to hit `/health` every ~10 min so it's always warm:
+- [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com)
+  → new monitor → URL `https://git1-server.onrender.com/health`, interval 10 min.
 
 ## Updating the deployment
 

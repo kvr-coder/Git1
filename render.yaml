@@ -8,12 +8,29 @@ services:
     runtime: node
     rootDir: server
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
+    # Install deps + the Litestream binary (used by start.sh to persist the
+    # SQLite DB to object storage so it survives redeploys on the free tier).
+    buildCommand: npm install && sh ../scripts/install-litestream.sh
+    startCommand: sh ./start.sh
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: 20.18.0
-      # GIT1_DB defaults to ./git1.db. On Render free, the disk is
-      # ephemeral — data resets on every restart. Upgrade to a $7/mo
-      # persistent disk via Render dashboard for production.
+      # Path to the SQLite file. Keep it stable so Litestream can guard it.
+      - key: GIT1_DB
+        value: ./git1.db
+      # ---- Persistence (Litestream). Leave blank to run ephemeral. ----
+      # Set these in the Render dashboard (mark the secrets as "secret"):
+      #   LITESTREAM_REPLICA_URL      e.g. s3://my-bucket/git1
+      #   LITESTREAM_ACCESS_KEY_ID    (R2/S3 access key)
+      #   LITESTREAM_SECRET_ACCESS_KEY
+      #   LITESTREAM_ENDPOINT         (R2 only, e.g. https://<acct>.r2.cloudflarestorage.com)
+      # See server/DEPLOY_RENDER.md for the 5-minute Cloudflare R2 setup.
+      - key: LITESTREAM_REPLICA_URL
+        sync: false
+      - key: LITESTREAM_ACCESS_KEY_ID
+        sync: false
+      - key: LITESTREAM_SECRET_ACCESS_KEY
+        sync: false
+      - key: LITESTREAM_ENDPOINT
+        sync: false
