@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -31,6 +32,17 @@ app.use(express.json());
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+// Browser parent dashboard — open the server URL in any phone browser, log in
+// with the app account, control devices. No Expo / app install needed.
+const ADMIN_HTML = (() => {
+  try {
+    return readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8');
+  } catch {
+    return '<h1>Git1</h1><p>dashboard not found</p>';
+  }
+})();
+app.get('/', (_req, res) => res.type('html').send(ADMIN_HTML));
 
 interface AuthedRequest extends Request {
   userId?: string;

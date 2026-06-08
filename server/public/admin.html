@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1220" />
+<title>Git1 — Parent</title>
+<style>
+  :root { --bg:#0b1220; --card:#131c2e; --line:#22304a; --fg:#e8eef7; --mut:#8aa0c0;
+          --accent:#3b82f6; --danger:#ef4444; --ok:#22c55e; --warn:#f59e0b; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  header { position:sticky; top:0; background:var(--bg); padding:14px 16px;
+           border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  main { padding:14px 16px 40px; max-width:680px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:14px; margin:12px 0; }
+  .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .grow { flex:1; min-width:0; }
+  .mut { color:var(--mut); font-size:13px; }
+  .name { font-weight:600; font-size:17px; }
+  input { width:100%; padding:12px; border-radius:10px; border:1px solid var(--line);
+          background:#0e1626; color:var(--fg); font-size:16px; }
+  button { padding:11px 14px; border-radius:10px; border:0; font-size:15px; font-weight:600;
+           color:#fff; background:var(--accent); cursor:pointer; }
+  button.sec { background:#24324c; }
+  button.dng { background:var(--danger); }
+  button.ok  { background:var(--ok); }
+  button.warn{ background:var(--warn); color:#1a1306; }
+  button:disabled { opacity:.5; }
+  .pill { font-size:12px; padding:3px 9px; border-radius:999px; background:#24324c; color:var(--mut); }
+  .pill.on { background:rgba(34,197,94,.18); color:#86efac; }
+  .pill.off{ background:rgba(239,68,68,.18); color:#fca5a5; }
+  .bar { height:8px; background:#0e1626; border-radius:99px; overflow:hidden; margin:8px 0; }
+  .bar > i { display:block; height:100%; background:var(--accent); }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .btns button { flex:1; min-width:90px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut);
+       margin:22px 4px 4px; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+           background:#1f2a40; border:1px solid var(--line); padding:10px 16px; border-radius:10px;
+           opacity:0; transition:.2s; pointer-events:none; max-width:90%; }
+  .toast.show { opacity:1; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Git1 — Parent</h1>
+  <span id="serverPill" class="pill">…</span>
+  <button id="logoutBtn" class="sec hidden" onclick="logout()">Sign out</button>
+</header>
+<main>
+  <!-- Login -->
+  <div id="loginView" class="card">
+    <div class="name" style="margin-bottom:10px">Sign in</div>
+    <div style="display:grid; gap:10px">
+      <input id="email" type="email" autocomplete="username" placeholder="email" />
+      <input id="password" type="password" autocomplete="current-password" placeholder="password" />
+      <button onclick="login()">Sign in</button>
+      <div class="mut">Uses your Git1 parent account (same as the app).</div>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="appView" class="hidden">
+    <div id="requests"></div>
+    <div id="chores"></div>
+    <h2>Devices</h2>
+    <div id="devices"></div>
+    <div class="card">
+      <div class="row">
+        <input id="pairCode" class="grow" inputmode="numeric" maxlength="6" placeholder="6-digit pair code" />
+        <button class="sec" onclick="pair()">Pair</button>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="toast" class="toast"></div>
+
+<script>
+const API = location.origin;
+let TOKEN = localStorage.getItem('git1_token') || '';
+let timer = null;
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
+
+async function api(path, opts={}){
+  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if (TOKEN) headers.Authorization = 'Bearer '+TOKEN;
+  const res = await fetch(API+path, Object.assign({}, opts, {headers}));
+  if (res.status === 401){ logout(); throw new Error('Session expired'); }
+  if (!res.ok){ let e; try{e=(await res.json()).error}catch{}; throw new Error(e||('HTTP '+res.status)); }
+  return res.status===204 ? null : res.json();
+}
+
+async function login(){
+  const email=document.getElementById('email').value.trim();
+  const password=document.getElementById('password').value;
+  try{
+    let r;
+    try { r = await api('/auth/login',{method:'POST',body:JSON.stringify({email,password})}); }
+    catch(e){ // auto-register fallback (matches the app)
+      r = await api('/auth/register',{method:'POST',body:JSON.stringify({email,password})});
+    }
+    TOKEN=r.token; localStorage.setItem('git1_token',TOKEN);
+    showApp();
+  }catch(e){ toast(e.message); }
+}
+function logout(){ TOKEN=''; localStorage.removeItem('git1_token'); clearInterval(timer);
+  document.getElementById('appView').classList.add('hidden');
+  document.getElementById('loginView').classList.remove('hidden');
+  document.getElementById('logoutBtn').classList.add('hidden'); }
+
+function showApp(){
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');
+  document.getElementById('logoutBtn').classList.remove('hidden');
+  refresh(); clearInterval(timer); timer=setInterval(refresh,5000);
+}
+
+function fmt(m){ m=Math.round(m||0); return (m>=60?Math.floor(m/60)+'h ':'')+(m%60)+'m'; }
+
+async function cmd(id, kind, payload){
+  try{ await api('/devices/'+id+'/command',{method:'POST',body:JSON.stringify({kind,payload})});
+       toast(kind.replace(/_/g,' ')); setTimeout(refresh,400); }
+  catch(e){ toast(e.message); }
+}
+async function resolve(kind, id, status, minutes){
+  const body = minutes!=null ? {status,minutes} : {status};
+  try{ await api('/'+kind+'/'+id+'/resolve',{method:'POST',body:JSON.stringify(body)});
+       toast(status); refresh(); }catch(e){ toast(e.message); }
+}
+async function pair(){
+  const code=document.getElementById('pairCode').value.trim();
+  if(code.length!==6) return toast('Enter the 6-digit code');
+  try{ await api('/devices/pair',{method:'POST',body:JSON.stringify({code})});
+       document.getElementById('pairCode').value=''; toast('Paired!'); refresh(); }
+  catch(e){ toast(e.message); }
+}
+
+async function refresh(){
+  try{
+    const [devices, reqs, chores] = await Promise.all([
+      api('/devices'), api('/requests?status=pending'), api('/chores?status=pending'),
+    ]);
+    renderRequests(reqs); renderChores(chores); renderDevices(devices);
+  }catch(e){ /* 401 already handled */ }
+}
+
+function renderDevices(list){
+  const el=document.getElementById('devices');
+  if(!list.length){ el.innerHTML='<div class="card mut">No devices yet. Pair one below.</div>'; return; }
+  el.innerHTML = list.map(d=>{
+    const pct = d.dailyLimitMinutes? Math.min(100, 100*d.usedTodayMinutes/d.dailyLimitMinutes):0;
+    const online = d.status!=='offline';
+    const net = d.internetBlocked;
+    return `<div class="card">
+      <div class="row">
+        <div class="grow"><span class="name">${esc(d.name)}</span>
+          <div class="mut">${d.status}${d.lastSeen?(' · seen '+ago(d.lastSeen)):''}</div></div>
+        <span class="pill ${online?'on':'off'}">${online?'online':'offline'}</span>
+      </div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="mut">${fmt(d.usedTodayMinutes)} / ${fmt(d.dailyLimitMinutes)} today · bank ${fmt(d.bankedMinutes)}</div>
+      <div class="btns">
+        <button class="dng" onclick="cmd('${d.id}','lock')">Lock</button>
+        <button class="ok"  onclick="cmd('${d.id}','unlock')">Unlock</button>
+        <button class="sec" onclick="cmd('${d.id}','grant_minutes',{minutes:15})">+15 min</button>
+        <button class="${net?'ok':'warn'}" onclick="cmd('${d.id}','${net?'unblock_internet':'block_internet'}')">
+          ${net?'Internet ON':'Internet OFF'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderRequests(list){
+  const el=document.getElementById('requests');
+  if(!list.length){ el.innerHTML=''; return; }
+  el.innerHTML='<h2>Time requests</h2>'+list.map(r=>`<div class="card">
+    <div class="name">${r.minutes} min</div>
+    <div class="mut">${esc(r.reason||'no reason given')}</div>
+    <div class="btns">
+      <button class="ok"  onclick="resolve('requests','${r.id}','approved')">Approve</button>
+      <button class="dng" onclick="resolve('requests','${r.id}','denied')">Deny</button>
+    </div></div>`).join('');
+}
+function renderChores(list){
+  const el=document.getElementById('chores');
+  if(!list.length){ el.innerHTML=''; return; }
+  el.innerHTML='<h2>Chores</h2>'+list.map(c=>`<div class="card">
+    <div class="name">${esc(c.description||'chore')}</div>
+    <div class="row" style="margin-top:8px">
+      <input id="cm_${c.id}" class="grow" type="number" value="${c.minutes||0}" style="max-width:110px" />
+      <span class="mut">min reward</span>
+    </div>
+    <div class="btns">
+      <button class="ok" onclick="resolve('chores','${c.id}','approved', +document.getElementById('cm_${c.id}').value)">Approve</button>
+      <button class="dng" onclick="resolve('chores','${c.id}','denied')">Deny</button>
+    </div></div>`).join('');
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function ago(ts){ const s=Math.max(0,(Date.now()-ts)/1000);
+  if(s<60)return Math.floor(s)+'s ago'; if(s<3600)return Math.floor(s/60)+'m ago';
+  if(s<86400)return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; }
+
+// boot
+fetch(API+'/health').then(()=>{document.getElementById('serverPill').textContent='✓ live';
+  document.getElementById('serverPill').className='pill on';})
+  .catch(()=>{document.getElementById('serverPill').textContent='offline';
+  document.getElementById('serverPill').className='pill off';});
+if (TOKEN) showApp();
+</script>
+</body>
+</html>

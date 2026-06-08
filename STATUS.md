@@ -132,6 +132,8 @@ a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
 - `lib/` — api (proxy dispatch mock/real), api.real, config, auth, storage,
   push, theme, types, format, mock
 - `server/src/` — index.ts (routes + ws), store.ts (SQLite), push.ts, types.ts
+- `server/public/admin.html` — browser parent dashboard served at `/` (open the
+  Render URL in any phone browser, log in, control devices; no Expo needed)
 - `agent/` — agent.py, dashboard.py, clock.py, enforcer_{net,apps,schedule,vpn}.py,
   INSTALL_SERVICE.md, DEPLOY note
 - `scripts/` — launch-cloudflare.bat, Git1-Pair.bat, dev-watch.ps1/.sh, seed.json,
