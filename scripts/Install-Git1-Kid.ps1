@@ -137,3 +137,7 @@ Write-Host "  * Run 'Recover-Git1.bat' (desktop) to fully disarm, even with no s
 Write-Host "  * Worst case, boot into SAFE MODE then run Recover-Git1.bat."
 Write-Host "  >> Make sure your admin account has a PASSWORD YOU REMEMBER before you"
 Write-Host "     leave this PC with the child. That's your guaranteed way back in."
+Write-Host ""
+Write-Host "RECOMMENDED FIRST: run a safe trial before trusting it -" -ForegroundColor Cyan
+Write-Host "  Test-Git1.bat    (arms a guaranteed auto-disarm after 10 min, so you"
+Write-Host "                    can test lock/internet/recover with zero risk)."

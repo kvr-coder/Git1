@@ -138,7 +138,8 @@ a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
   install-litestream.sh (server persistence), install-service.ps1 +
   service-watchdog.ps1 + uninstall-service.ps1 (hardened agent service, 0.1),
   Install-Git1-Kid.bat + .ps1 (from-zero kid PC setup: prereqs+clone+standard
-  account+service+pair), Recover-Git1.bat + .ps1 (emergency offline off-switch)
+  account+service+pair), Recover-Git1.bat + .ps1 (emergency offline off-switch),
+  Test-Git1.bat + .ps1 (safe trial: guaranteed auto-disarm timer)
 - `render.yaml`, `IDEAS.md`, `server/DEPLOY_RENDER.md`
 
 ## Tier 0 (foundation/robustness) — COMPLETE
@@ -180,6 +181,11 @@ Three independent guarantees mean you can always recover:
 Prereq for all of the above: **keep an admin account with a password you
 remember.** The installer creates the kid as a separate Standard user and
 prints this reminder.
+
+**Verify it before trusting it:** `scripts/Test-Git1.bat` arms a SYSTEM
+dead-man timer that auto-runs Recover after N minutes (default 10), so you can
+exercise lock/internet/recover with a guaranteed self-disarm — you cannot get
+stuck. `Test-Git1.bat cancel` clears the timer; Recover clears it too.
 
 ## Remote updates — how a `git push` reaches all three parts
 One push to the tracked branch updates everything:

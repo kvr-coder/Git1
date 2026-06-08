@@ -31,8 +31,9 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 Write-Host "=== Git1 emergency recovery ===" -ForegroundColor Cyan
 
-Write-Host "[1/5] Removing watchdog task..."
+Write-Host "[1/5] Removing watchdog + safety-timer tasks..."
 Unregister-ScheduledTask -TaskName "Git1AgentWatchdog" -Confirm:$false
+Unregister-ScheduledTask -TaskName "Git1SafetyTimer"   -Confirm:$false
 
 Write-Host "[2/5] Stopping + removing service..."
 $nssm = (Get-Command nssm.exe -ErrorAction SilentlyContinue).Source
