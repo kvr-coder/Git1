@@ -33,6 +33,7 @@ import enforcer_logon
 import enforcer_net
 import enforcer_schedule
 import enforcer_vpn
+import updater
 
 SERVER_HTTP = os.environ.get("GIT1_SERVER", "http://localhost:8080")
 SERVER_WS = SERVER_HTTP.replace("http://", "ws://").replace("https://", "wss://")
@@ -545,6 +546,8 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                         push_notification(str(payload.get("message") or name), "info")
                 elif msg.get("kind") == "snapshot":
                     apply_policy(msg, usage, persist=True)
+                    # Self-update if the server is deployed at a newer commit.
+                    updater.on_server_commit(msg.get("repoCommit"))
         finally:
             loop.cancel()
             bridge.unbind()
@@ -570,6 +573,10 @@ def main() -> None:
     # out; removing it on startup recovers a machine that's currently stuck.
     # New blocks are scoped to the child's user SID (see enforcer_net).
     enforcer_net.heal_legacy_block()
+
+    # Self-update: pull new features on a timer (server-signaled path runs from
+    # the snapshot handler). Disable with GIT1_AUTOUPDATE=0.
+    updater.start_timer()
 
     usage = Usage()
 

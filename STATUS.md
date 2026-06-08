@@ -162,6 +162,23 @@ From the post-research roadmap. All shipped on
   `net user <kid> /times:all` restores.
 - 0.4 stop the server, reboot kid PC → cached schedule/lock still enforced.
 
+## Remote updates — how a `git push` reaches all three parts
+One push to the tracked branch updates everything:
+- **Server (Render):** auto-redeploys on push. *Check Render is watching this
+  branch* (`claude/setup-git1-dev-environment-QeNdU`), not the old one.
+- **Phone app:** Expo — PC dev-server hot reload (Option A) or EAS Update OTA
+  (Option B). See CLAUDE.md.
+- **Agent (kid PC):** NEW self-update (`agent/updater.py`):
+  - *Server-signaled:* server advertises its deployed commit (`repoCommit`,
+    from `RENDER_GIT_COMMIT`) in the snapshot; on redeploy the agent reconnects,
+    sees the new commit, `git pull --ff-only`, and re-execs into new code.
+  - *Timer backstop:* pulls every `GIT1_UPDATE_INTERVAL_MIN` (default 20).
+  - Tracks `GIT1_UPDATE_BRANCH` (installer sets it to the checkout's branch).
+  - **Requirements:** git installed on the kid PC; the agent folder is a git
+    checkout; the tracked branch is one ONLY the parent can push to (its code
+    runs as SYSTEM). Disable with `GIT1_AUTOUPDATE=0`.
+  - So: keep Render + the agent on the SAME branch, push there, done.
+
 ## Next (Tier 1 — table-stakes safety, when ready)
 DNS content filtering by category + forced SafeSearch/YouTube restricted
 (highest ROI), per-app limits + usage reporting, weekly digest, real-time

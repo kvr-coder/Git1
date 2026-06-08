@@ -13,7 +13,10 @@
 param(
   [string]$Server   = $env:GIT1_SERVER,
   [string]$ChildUser = $env:GIT1_CHILD_USER,
-  [string]$ServiceName = "Git1Agent"
+  [string]$ServiceName = "Git1Agent",
+  # Branch the agent self-updates from. MUST be one only you push to (its code
+  # runs as SYSTEM). Defaults to this checkout's current branch.
+  [string]$UpdateBranch = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -84,9 +87,13 @@ Write-Host "[svc] nssm: $nssm"
 
 # Environment for the agent (server URL + child identity for SID-scoped block).
 $envPairs = @()
-if ($Server)    { $envPairs += "GIT1_SERVER=$Server" }
-if ($ChildUser) { $envPairs += "GIT1_CHILD_USER=$ChildUser" }
-if ($ChildSid)  { $envPairs += "GIT1_CHILD_SID=$ChildSid" }
+if (-not $UpdateBranch) {
+  try { $UpdateBranch = (git -C $AgentDir rev-parse --abbrev-ref HEAD).Trim() } catch {}
+}
+if ($Server)       { $envPairs += "GIT1_SERVER=$Server" }
+if ($ChildUser)    { $envPairs += "GIT1_CHILD_USER=$ChildUser" }
+if ($ChildSid)     { $envPairs += "GIT1_CHILD_SID=$ChildSid" }
+if ($UpdateBranch) { $envPairs += "GIT1_UPDATE_BRANCH=$UpdateBranch" }
 if ($envPairs.Count -gt 0) {
   & $nssm set $ServiceName AppEnvironmentExtra ($envPairs -join "`n")
 }

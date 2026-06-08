@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -9,6 +10,19 @@ import type { AgentMessage, Command, ServerMessage } from './types.js';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+
+// The commit this server is deployed at. Advertised to agents in the snapshot
+// so they can self-update to match (one `git push` updates server + agents).
+// Render injects RENDER_GIT_COMMIT; fall back to a local git lookup.
+const REPO_COMMIT: string =
+  process.env.RENDER_GIT_COMMIT ??
+  (() => {
+    try {
+      return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+    } catch {
+      return '';
+    }
+  })();
 
 const app = express();
 app.use(express.json());
@@ -339,6 +353,7 @@ function buildSnapshot(d: DeviceRow) {
     bankedMinutes: d.bankedMinutes,
     choreTemplates: store.listChoreTemplates(d.userId, d.id),
     lockedByParent: d.lockedByParent,
+    repoCommit: REPO_COMMIT,
   };
 }
 
