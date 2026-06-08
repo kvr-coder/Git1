@@ -29,6 +29,7 @@ import websockets
 import clock
 import dashboard
 import enforcer_apps
+import enforcer_logon
 import enforcer_net
 import enforcer_schedule
 import enforcer_vpn
@@ -302,6 +303,9 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
     elif kind == "set_schedules":
         items = list(payload.get("schedules") or [])
         enforcer_schedule.set_schedules(items)
+        # Translate lock-schedules into OS-level logon hours (opt-in, safe:
+        # no-op unless GIT1_CHILD_USER names a non-agent account).
+        enforcer_logon.sync(items)
         await emit_event(ws, "set_schedules", {"count": len(items)})
 
     elif kind == "set_borrow_settings":
@@ -495,7 +499,9 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                     else:
                         push_notification(str(payload.get("message") or name), "info")
                 elif msg.get("kind") == "snapshot":
-                    enforcer_schedule.set_schedules(msg.get("schedules") or [])
+                    _scheds = msg.get("schedules") or []
+                    enforcer_schedule.set_schedules(_scheds)
+                    enforcer_logon.sync(_scheds)
                     enforcer_apps.set_blocklist(msg.get("blocklist") or [])
                     BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
                     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))

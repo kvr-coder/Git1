@@ -79,10 +79,18 @@ current process owner. If no SID can be resolved it **refuses to block**
 - Requires `pywin32` on the agent for SID lookup (win32api/win32security/win32ts).
 - Firewall rules PERSIST across reboot — restarting the PC does NOT clear them.
 
-### 2. Lock is a re-lock loop, not a logon block
-`LOCKED_BY_PARENT` re-locks every 5s. Kid can type their password and use
-the PC for ~5s before re-lock. For a true logon block, use
-`net user <kid> /times:` based on schedule (not yet built).
+### 2. Lock — scheduled logon block ADDED; ad-hoc lock still a loop
+- **Scheduled windows now enforce a true OS logon block** via
+  `enforcer_logon.py`: lock-schedules are translated into Windows logon hours
+  (`net user <child> /times:`), so outside allowed windows the child cannot log
+  on at all. **Opt-in + safe:** does nothing unless `GIT1_CHILD_USER` names a
+  local account, and REFUSES to govern the agent's own account (no self-lockout).
+  Recovery: `net user <child> /times:all` (or `enforcer_logon.clear()`).
+  Granularity is whole hours (Windows limitation).
+- **Ad-hoc parent "Lock now" is still the 5s `LockWorkStation` re-lock loop**
+  (kid can use the PC ~5s/cycle). A robust event-based re-lock needs the agent
+  to run as a service with WTS session notifications — comes with Tier 0 #0.1
+  (agent-as-service). Until then, scheduled blocks are the strong path.
 
 ### 3. Render free tier (DB wipe — FIXED via Litestream; sleep — keep-alive)
 - **DB wipe FIXED (free):** `start.sh` now runs the server under **Litestream**,
