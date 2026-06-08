@@ -44,6 +44,52 @@ const ADMIN_HTML = (() => {
 })();
 app.get('/', (_req, res) => res.type('html').send(ADMIN_HTML));
 
+// ----- Kid dashboard PREVIEW (no agent, no locking) -----
+// Lets you see the kid UI from anywhere by hitting /kid in a browser. All
+// endpoints are mock and never affect any real device.
+const KID_HTML = (() => {
+  try {
+    return readFileSync(new URL('../public/kid.html', import.meta.url), 'utf8');
+  } catch {
+    return '<h1>kid preview not found</h1>';
+  }
+})();
+app.get('/kid', (_req, res) => res.type('html').send(KID_HTML));
+app.get('/kid/status', (_req, res) =>
+  res.json({
+    usedTodayMinutes: 72,
+    limitMinutes: 120,
+    baseLimitMinutes: 120,
+    tomorrowProjectedLimit: 120,
+    tomorrowDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+    internetBlocked: false,
+    blocklist: ['discord.exe', 'steam.exe', 'minecraft.exe'],
+    schedules: [
+      { name: 'School nights', days: ['Mon','Tue','Wed','Thu'],
+        startMinute: 16*60, endMinute: 19*60, enabled: true,
+        actions: ['lock','block_internet'] },
+      { name: 'Bedtime', days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+        startMinute: 21*60, endMinute: 22*60, enabled: true, actions: ['lock'] },
+    ],
+    scheduleAllowed: true,
+    selfBorrowEnabled: true,
+    selfBorrowCapMinutes: 30,
+    bankedMinutes: 45,
+    choreTemplates: [
+      { description: 'Make bed', minutes: 5 },
+      { description: 'Take out trash', minutes: 10 },
+      { description: 'Read 20 min', minutes: 15 },
+    ],
+    notifications: [
+      { id: 1, text: 'Chore approved: +10 min to bank', kind: 'success', ts: 0 },
+    ],
+  }),
+);
+app.post('/kid/request', (_req, res) => res.json({ ok: true, demo: true }));
+app.post('/kid/borrow',  (_req, res) => res.json({ newLimit: 135, fromDate: 'tomorrow', demo: true }));
+app.post('/kid/chore',   (_req, res) => res.json({ submitted: true, demo: true }));
+app.post('/kid/spend',   (req: any, res) => res.json({ spent: Number(req.body?.minutes ?? 0), remaining: 30, demo: true }));
+
 interface AuthedRequest extends Request {
   userId?: string;
 }

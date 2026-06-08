@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Git1 — your dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115; --surface: #171a21; --alt: #1f2330;
+    --border: #2a2f3d; --text: #f5f7fa; --muted: #9aa3b2;
+    --primary: #4f8cff; --success: #3dd68c; --danger: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+    margin: 0; padding: 24px; max-width: 640px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 16px; margin: 16px 0; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .row > * + * { margin-left: 0; }
+  .bar { background: var(--alt); height: 8px; border-radius: 999px;
+    overflow: hidden; margin: 8px 0; }
+  .fill { background: var(--primary); height: 100%; transition: width .3s; }
+  .fill.over { background: var(--danger); }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; background: var(--alt); color: var(--muted); }
+  .badge.ok { background: #1e3a2a; color: var(--success); }
+  .badge.bad { background: #3a1e1e; color: var(--danger); }
+  button { background: var(--primary); color: white; border: 0;
+    padding: 12px 18px; border-radius: 12px; font-size: 15px;
+    font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  input, select { background: var(--alt); color: var(--text); border: 0;
+    padding: 10px 12px; border-radius: 10px; font: inherit; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { background: var(--alt); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+  #flash { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); padding: 10px 16px;
+    border-radius: 12px; opacity: 0; transition: opacity .3s; }
+  #flash.show { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Your dashboard</h1>
+<p class="muted">This page only shows on your computer.</p>
+
+<div class="card" id="autospend-banner" style="display: none; border-color: var(--danger);">
+  <strong style="color: var(--danger);">⏰ Out of time today</strong>
+  <p class="muted" style="margin: 8px 0;">
+    You have <span id="autospend-bank">0</span> in your bank.
+    Spend some to keep going?
+  </p>
+  <div class="row" style="gap: 8px;">
+    <select id="autospend-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select>
+    <button id="autospend-btn">Use from bank</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content: space-between;">
+    <strong>Today</strong>
+    <span class="badge" id="status-badge">…</span>
+  </div>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="muted" id="usage-text">…</div>
+</div>
+
+<div class="card">
+  <strong>Internet</strong>
+  <div class="muted" id="net-text">…</div>
+</div>
+
+<div class="card">
+  <strong>Schedules</strong>
+  <div id="schedules" class="muted">…</div>
+</div>
+
+<div class="card">
+  <strong>Blocked apps</strong>
+  <div id="blocklist" class="chips" style="margin-top: 8px;"></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content: space-between;">
+    <strong>Bank</strong>
+    <span class="badge ok" id="bank-amount">0m</span>
+  </div>
+  <p class="muted" style="margin: 8px 0;">Reward minutes you've earned. Spend whenever.</p>
+  <div class="row" style="gap: 8px;">
+    <select id="spend-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select>
+    <button id="spend-btn">Use from bank</button>
+  </div>
+</div>
+
+<div class="card">
+  <strong>Submit a chore for reward</strong>
+  <p class="muted" style="margin: 8px 0;">Tell your parent what you did. They'll review it.</p>
+  <div id="chore-templates" class="chips" style="margin-bottom: 10px;"></div>
+  <input id="chore-desc" placeholder="e.g. Cleaned my room"
+    style="width: 100%; margin-bottom: 8px;" />
+  <div class="row" style="gap: 8px;">
+    <select id="chore-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+      <option value="120">2 h</option>
+    </select>
+    <button id="chore-btn">Send</button>
+  </div>
+</div>
+
+<div class="card">
+  <strong>Ask for more time</strong>
+  <p class="muted" style="margin: 8px 0;">Send a request to your parent.</p>
+  <div class="row" style="gap: 8px;">
+    <select id="minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select>
+    <input id="reason" placeholder="Why? (optional)" style="flex: 1;" />
+    <button id="request-btn">Request</button>
+  </div>
+</div>
+
+<div class="card" id="borrow-card" style="display: none;">
+  <strong>Borrow from tomorrow</strong>
+  <p class="muted" style="margin: 8px 0;">
+    Add minutes to today, but tomorrow's allowance shrinks by the same amount.
+    Your parent gets a notification.
+  </p>
+  <div class="row" style="gap: 8px;">
+    <select id="borrow-minutes">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+    </select>
+    <button id="borrow-btn">Borrow</button>
+  </div>
+  <div id="borrow-warn" style="margin-top: 10px; padding: 10px;
+    background: #3a1e1e; color: var(--danger); border-radius: 10px;
+    font-size: 13px;"></div>
+</div>
+
+<div id="flash"></div>
+
+<script>
+const fmt = (m) => m < 60 ? `${Math.round(m)}m` :
+  `${Math.floor(m/60)}h ${Math.round(m%60)}m`;
+
+async function refresh() {
+  try {
+    const r = await fetch('/kid/status');
+    const s = await r.json();
+    const pct = Math.min(1, s.usedTodayMinutes / Math.max(1, s.limitMinutes));
+    const fill = document.getElementById('fill');
+    fill.style.width = `${pct * 100}%`;
+    fill.classList.toggle('over', pct >= 1);
+    document.getElementById('usage-text').textContent =
+      `${fmt(s.usedTodayMinutes)} of ${fmt(s.limitMinutes)} used`;
+    const b = document.getElementById('status-badge');
+    if (!s.scheduleAllowed) { b.textContent = 'Outside schedule'; b.className = 'badge bad'; }
+    else if (s.usedTodayMinutes >= s.limitMinutes) { b.textContent = 'Over limit'; b.className = 'badge bad'; }
+    else { b.textContent = 'OK'; b.className = 'badge ok'; }
+    document.getElementById('net-text').textContent =
+      s.internetBlocked ? 'Blocked by parent' : 'Allowed';
+    const sched = document.getElementById('schedules');
+    if (!s.schedules || !s.schedules.length) sched.textContent = 'None.';
+    else sched.innerHTML = s.schedules.map(x => {
+      const days = (x.days || []).map(d => d.toUpperCase()).join(' ');
+      const time = `${String(Math.floor(x.startMinute/60)).padStart(2,'0')}:${String(x.startMinute%60).padStart(2,'0')}`
+        + `–${String(Math.floor(x.endMinute/60)).padStart(2,'0')}:${String(x.endMinute%60).padStart(2,'0')}`;
+      return `<div>· ${x.name || 'Schedule'} — ${days} — ${time} ${x.enabled ? '' : '(off)'}</div>`;
+    }).join('');
+    const bl = document.getElementById('blocklist');
+    bl.innerHTML = (s.blocklist && s.blocklist.length)
+      ? s.blocklist.map(n => `<span class="chip">${n}</span>`).join('')
+      : '<span class="muted">None.</span>';
+    const bank = Number(s.bankedMinutes || 0);
+    document.getElementById('bank-amount').textContent = fmt(bank);
+    document.getElementById('spend-btn').disabled = bank <= 0;
+    const sp = document.getElementById('spend-minutes');
+    [...sp.options].forEach(o => { o.disabled = Number(o.value) > bank; });
+
+    const out = (s.usedTodayMinutes >= s.limitMinutes) || !s.scheduleAllowed;
+    const banner = document.getElementById('autospend-banner');
+    if (out && bank > 0) {
+      banner.style.display = '';
+      document.getElementById('autospend-bank').textContent = fmt(bank);
+      const asm = document.getElementById('autospend-minutes');
+      [...asm.options].forEach(o => { o.disabled = Number(o.value) > bank; });
+    } else {
+      banner.style.display = 'none';
+    }
+
+    const tpls = s.choreTemplates || [];
+    const tWrap = document.getElementById('chore-templates');
+    tWrap.innerHTML = tpls.map((t, i) =>
+      `<span class="chip" data-i="${i}" style="cursor: pointer;">${t.description} · ${t.minutes}m</span>`
+    ).join('');
+    [...tWrap.querySelectorAll('.chip')].forEach(el => {
+      el.addEventListener('click', () => {
+        const t = tpls[Number(el.getAttribute('data-i'))];
+        if (!t) return;
+        document.getElementById('chore-desc').value = t.description;
+        document.getElementById('chore-minutes').value = String(t.minutes);
+      });
+    });
+    const bc = document.getElementById('borrow-card');
+    bc.style.display = s.selfBorrowEnabled ? '' : 'none';
+    if (s.selfBorrowEnabled) {
+      const sel = document.getElementById('borrow-minutes');
+      const cap = Number(s.selfBorrowCapMinutes || 0);
+      [...sel.options].forEach(o => { o.disabled = Number(o.value) > cap; });
+      const minutes = Number(sel.value);
+      const proj = Math.max(0, (s.tomorrowProjectedLimit ?? s.baseLimitMinutes ?? s.limitMinutes) - minutes);
+      const tDate = s.tomorrowDate || 'tomorrow';
+      document.getElementById('borrow-warn').textContent =
+        `Heads up: tomorrow (${tDate}) will be ${fmt(proj)} instead of `
+        + `${fmt(s.tomorrowProjectedLimit ?? s.baseLimitMinutes ?? s.limitMinutes)}.`;
+    }
+    pollNotifs(s);
+  } catch (e) { /* offline */ }
+}
+refresh(); setInterval(refresh, 5000);
+
+const flash = (msg) => {
+  const el = document.getElementById('flash');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+};
+
+document.getElementById('borrow-minutes').addEventListener('change', refresh);
+
+document.getElementById('borrow-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const minutes = Number(document.getElementById('borrow-minutes').value);
+  if (!confirm(`Borrow ${minutes} minutes from tomorrow? Tomorrow's allowance will shrink by ${minutes} min.`)) {
+    btn.disabled = false; return;
+  }
+  try {
+    const r = await fetch('/kid/borrow', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash(`Borrowed ${minutes} min. Refreshing…`); refresh(); }
+    else flash(body.error || 'Borrow rejected');
+  } catch { flash('Could not borrow.'); }
+  finally { btn.disabled = false; }
+});
+
+// Track which notification IDs have already been shown so we don't repeat them.
+const shownNotifs = new Set();
+function pollNotifs(s) {
+  const list = s.notifications || [];
+  for (const n of list) {
+    if (shownNotifs.has(n.id)) continue;
+    shownNotifs.add(n.id);
+    showNotif(n);
+  }
+}
+function showNotif(n) {
+  const el = document.createElement('div');
+  const bg = n.kind === 'success' ? '#1E3A2A' : n.kind === 'danger' ? '#3A1E1E' : 'var(--surface)';
+  const fg = n.kind === 'success' ? 'var(--success)' : n.kind === 'danger' ? 'var(--danger)' : 'var(--text)';
+  el.style.cssText = `position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+    background: ${bg}; color: ${fg}; border: 1px solid var(--border); padding: 14px 20px;
+    border-radius: 12px; font-weight: 600; z-index: 9999; max-width: 90%; text-align: center;
+    box-shadow: 0 6px 24px rgba(0,0,0,.4); animation: slideIn .25s ease-out;`;
+  el.textContent = n.text;
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; }, 6000);
+  setTimeout(() => el.remove(), 6500);
+}
+
+document.getElementById('chore-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const description = document.getElementById('chore-desc').value.trim();
+  const minutes = Number(document.getElementById('chore-minutes').value);
+  if (!description) { flash('Tell what you did.'); btn.disabled = false; return; }
+  try {
+    const r = await fetch('/kid/chore', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ description, minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash('Sent! Wait for parent approval.'); document.getElementById('chore-desc').value = ''; }
+    else flash(body.error || 'Could not send.');
+  } catch { flash('Could not send.'); }
+  finally { btn.disabled = false; }
+});
+
+document.getElementById('autospend-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const minutes = Number(document.getElementById('autospend-minutes').value);
+  try {
+    const r = await fetch('/kid/spend', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash(`Used ${minutes} min from bank.`); refresh(); }
+    else flash(body.error || 'Could not spend.');
+  } catch { flash('Could not spend.'); }
+  finally { btn.disabled = false; }
+});
+
+document.getElementById('spend-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const minutes = Number(document.getElementById('spend-minutes').value);
+  try {
+    const r = await fetch('/kid/spend', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ minutes }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { flash(`Used ${minutes} min from bank.`); refresh(); }
+    else flash(body.error || 'Could not spend.');
+  } catch { flash('Could not spend.'); }
+  finally { btn.disabled = false; }
+});
+
+document.getElementById('request-btn').addEventListener('click', async (e) => {
+  const btn = e.target; btn.disabled = true;
+  const minutes = Number(document.getElementById('minutes').value);
+  const reason = document.getElementById('reason').value;
+  try {
+    const r = await fetch('/kid/request', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ minutes, reason }),
+    });
+    flash(r.ok ? 'Sent to your parent.' : 'Could not send.');
+    if (r.ok) document.getElementById('reason').value = '';
+  } catch { flash('Could not send.'); }
+  finally { btn.disabled = false; }
+});
+</script>
+</body>
+</html>
