@@ -134,7 +134,9 @@ a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
 - `server/src/` — index.ts (routes + ws), store.ts (SQLite), push.ts, types.ts
 - `agent/` — agent.py, dashboard.py, clock.py, enforcer_{net,apps,schedule,vpn}.py,
   INSTALL_SERVICE.md, DEPLOY note
-- `scripts/` — launch-cloudflare.bat, Git1-Pair.bat, dev-watch.ps1/.sh, seed.json
+- `scripts/` — launch-cloudflare.bat, Git1-Pair.bat, dev-watch.ps1/.sh, seed.json,
+  install-litestream.sh (server persistence), install-service.ps1 +
+  service-watchdog.ps1 + uninstall-service.ps1 (hardened agent service, 0.1)
 - `render.yaml`, `IDEAS.md`, `server/DEPLOY_RENDER.md`
 
 ## Suggested next step

@@ -7,7 +7,37 @@ Running the agent as a service (rather than a console script) means:
 
 We use [NSSM](https://nssm.cc/) — the Non-Sucking Service Manager.
 
-## One-time setup (do as Administrator)
+## ⭐ Recommended: one-click hardened install
+
+From PowerShell (it self-elevates to Admin), pass your server URL and the
+child's Windows account name:
+
+```powershell
+cd <repo>\scripts
+.\install-service.ps1 -Server https://git1-server.onrender.com -ChildUser Kiddo
+```
+
+This script:
+- downloads NSSM automatically if needed;
+- installs `Git1Agent` as a **LocalSystem** service (auto-start at boot);
+- sets SCM recovery so the service **restarts on crash *or* kill**
+  (`sc failureflag 1`);
+- installs a **SYSTEM watchdog** scheduled task that revives the service if it
+  is deleted;
+- resolves the child's **user SID** and passes it as `GIT1_CHILD_SID` so the
+  per-SID internet block works, plus `GIT1_CHILD_USER` for the logon-hours
+  block.
+
+> **Make the child a Standard user** (not Administrator). A Standard user
+> cannot stop a LocalSystem service or change `net user /times`, which is what
+> makes the enforcement real. Admin children can bypass everything.
+
+Remove it later with `.\uninstall-service.ps1` (also clears the watchdog;
+restore 24/7 logon with `net user <child> /times:all`).
+
+---
+
+## Manual setup (do as Administrator)
 
 1. Download NSSM: https://nssm.cc/download → unzip → copy `nssm.exe` to `C:\Windows\System32`.
 2. Open **PowerShell as Administrator**.
