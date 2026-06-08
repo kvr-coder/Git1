@@ -21,7 +21,7 @@ param(
   [string]$ChildUser   = "Kiddo",
   [string]$ChildPassword = "",                 # blank = passwordless kid login
   [string]$Branch      = "claude/setup-git1-dev-environment-QeNdU",
-  [string]$RepoUrl     = "https://github.com/kvr-coder/Git1.git",
+  [string]$RepoUrl     = "https://github.com/kvr-coder/git1.git",
   [string]$InstallDir  = "C:\ProgramData\Git1" # outside the kid's profile
 )
 
