@@ -40,6 +40,12 @@ SERVER_WS = SERVER_HTTP.replace("http://", "ws://").replace("https://", "wss://"
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home() / ".config"))) / "Git1"
 CONFIG_PATH = CONFIG_DIR / "agent.json"
 USAGE_PATH = CONFIG_DIR / "usage.json"
+# Last policy snapshot, persisted so the agent keeps enforcing the last known
+# rules even when the server is asleep/unreachable (fail-closed). When the
+# agent runs as a LocalSystem service, CONFIG_DIR is under SYSTEM's profile,
+# which a Standard-user child cannot write — so they can't forge a permissive
+# policy. (Signed policies are a planned further hardening.)
+POLICY_PATH = CONFIG_DIR / "policy.json"
 
 IDLE_THRESHOLD_SEC = 60
 SAMPLE_INTERVAL_SEC = 15
@@ -331,6 +337,45 @@ NOTIFICATIONS: list[dict[str, Any]] = []  # recent parent->kid toasts
 LOCKED_BY_PARENT: dict[str, bool] = {"value": False}
 
 
+def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
+    """Apply a policy snapshot to all enforcers (and optionally cache it).
+
+    Used both for live snapshots from the server and for the cached policy
+    loaded at startup, so the agent enforces the last known rules even when
+    the server is unreachable (fail-closed).
+    """
+    scheds = msg.get("schedules") or []
+    enforcer_schedule.set_schedules(scheds)
+    enforcer_logon.sync(scheds)
+    enforcer_apps.set_blocklist(msg.get("blocklist") or [])
+    BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
+    BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
+    if "bankedMinutes" in msg:
+        usage.set_bank(int(msg.get("bankedMinutes") or 0))
+    CHORE_TEMPLATES.clear()
+    CHORE_TEMPLATES.extend(msg.get("choreTemplates") or [])
+    LOCKED_BY_PARENT["value"] = bool(msg.get("lockedByParent", False))
+    if persist:
+        try:
+            save_json(POLICY_PATH, {
+                "schedules": scheds,
+                "blocklist": msg.get("blocklist") or [],
+                "selfBorrowEnabled": BORROW_STATE["enabled"],
+                "selfBorrowCapMinutes": BORROW_STATE["cap"],
+                "bankedMinutes": usage.banked_minutes,
+                "choreTemplates": list(CHORE_TEMPLATES),
+                "lockedByParent": LOCKED_BY_PARENT["value"],
+                "cachedAt": time.time(),
+            })
+        except Exception as e:  # noqa: BLE001
+            print(f"[policy] cache write failed: {e}")
+    print(
+        f"[policy] applied ({'live' if persist else 'cached'}); borrow={BORROW_STATE} "
+        f"bank={usage.banked_minutes} templates={len(CHORE_TEMPLATES)} "
+        f"lockedByParent={LOCKED_BY_PARENT['value']}"
+    )
+
+
 def push_notification(text: str, kind: str = "info") -> None:
     NOTIFICATIONS.append({"id": int(time.time() * 1000), "text": text, "kind": kind, "ts": time.time()})
     if len(NOTIFICATIONS) > 10:
@@ -499,22 +544,7 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
                     else:
                         push_notification(str(payload.get("message") or name), "info")
                 elif msg.get("kind") == "snapshot":
-                    _scheds = msg.get("schedules") or []
-                    enforcer_schedule.set_schedules(_scheds)
-                    enforcer_logon.sync(_scheds)
-                    enforcer_apps.set_blocklist(msg.get("blocklist") or [])
-                    BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
-                    BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
-                    if "bankedMinutes" in msg:
-                        usage.set_bank(int(msg.get("bankedMinutes") or 0))
-                    CHORE_TEMPLATES.clear()
-                    CHORE_TEMPLATES.extend(msg.get("choreTemplates") or [])
-                    LOCKED_BY_PARENT["value"] = bool(msg.get("lockedByParent", False))
-                    print(
-                        f"[snapshot] applied; borrow={BORROW_STATE} "
-                        f"bank={usage.banked_minutes} templates={len(CHORE_TEMPLATES)} "
-                        f"lockedByParent={LOCKED_BY_PARENT['value']}"
-                    )
+                    apply_policy(msg, usage, persist=True)
         finally:
             loop.cancel()
             bridge.unbind()
@@ -542,6 +572,14 @@ def main() -> None:
     enforcer_net.heal_legacy_block()
 
     usage = Usage()
+
+    # Fail-closed: load and enforce the last cached policy BEFORE we connect,
+    # so a sleeping/unreachable server doesn't leave the PC unrestricted. The
+    # live snapshot will overwrite this once the WS connects.
+    cached = load_json(POLICY_PATH)
+    if cached:
+        print("[policy] loading cached policy (offline-safe startup)")
+        apply_policy(cached, usage, persist=False)
 
     # Kid dashboard on http://127.0.0.1:<port>. Override with GIT1_DASHBOARD_PORT.
     dash_port = int(os.environ.get("GIT1_DASHBOARD_PORT", dashboard.DEFAULT_PORT))

@@ -139,6 +139,32 @@ a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
   service-watchdog.ps1 + uninstall-service.ps1 (hardened agent service, 0.1)
 - `render.yaml`, `IDEAS.md`, `server/DEPLOY_RENDER.md`
 
-## Suggested next step
-Fix issue #1 properly (per-user or per-app internet block) so internet
-control is safe to use remotely. That's the biggest real-world blocker.
+## Tier 0 (foundation/robustness) — COMPLETE
+From the post-research roadmap. All shipped on
+`claude/setup-git1-dev-environment-QeNdU`:
+- **0.2** Per-child-SID internet block + self-heal (issue #1 FIXED).
+- **0.5** Litestream → object storage persistence + keep-alive (issue #3 FIXED).
+- **0.3** OS logon-hours block from schedules, safe-by-default (issue #2 scheduled
+  case FIXED; ad-hoc lock still loop until service event-relock).
+- **0.1** Hardened LocalSystem service + watchdog + Standard-user guidance.
+- **0.4** Fail-closed offline policy cache (`policy.json`): agent enforces last
+  known rules when the server is asleep/unreachable; loaded before WS connects.
+- **0.6** Server-side tamper alerts: paired device silent > 3 min → push
+  "agent offline — possible tamper" (once), and "back online" on reconnect.
+
+### Verify-on-Windows checklist (can't be tested from the Linux dev env)
+- 0.1 `scripts/install-service.ps1 -Server <url> -ChildUser <kid>` installs +
+  starts service; kill the python proc → SCM restarts it; delete service →
+  watchdog revives within 5 min.
+- 0.2 set `GIT1_CHILD_USER`; toggle Internet off → only the kid's session loses
+  net, agent + parent stay connected; toggle on → restored.
+- 0.3 with a lock-schedule, outside the window the kid account can't log on;
+  `net user <kid> /times:all` restores.
+- 0.4 stop the server, reboot kid PC → cached schedule/lock still enforced.
+
+## Next (Tier 1 — table-stakes safety, when ready)
+DNS content filtering by category + forced SafeSearch/YouTube restricted
+(highest ROI), per-app limits + usage reporting, weekly digest, real-time
+alerts, multi-child. See the proposal/`IDEAS.md`. Privacy stance chosen:
+**filtering-only** (no message/screen reading). Brand: lead with the
+reward/earn-time economy.
