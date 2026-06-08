@@ -7,6 +7,27 @@ Running the agent as a service (rather than a console script) means:
 
 We use [NSSM](https://nssm.cc/) — the Non-Sucking Service Manager.
 
+## ⭐⭐ From-zero kid PC setup (one file)
+
+If you're setting up a child's PC from scratch, use the all-in-one installer
+instead of the steps below — it handles prerequisites, the code, the account,
+and the service together:
+
+```
+scripts\Install-Git1-Kid.bat      (double-click; it self-elevates)
+```
+
+It will, on a fresh Windows PC: install Python + Git (via winget) if missing →
+clone the repo to `C:\ProgramData\Git1` (locked so the kid can't edit it) →
+install Python deps → create a dedicated **Standard** account (default `Kiddo`)
+→ install the hardened service below → print a pairing code for the app.
+Edit the `GIT1_SERVER` / `CHILD_USER` / `BRANCH` values at the top of the .bat
+first if needed. (Plain script, not a packed .exe, so antivirus won't
+quarantine it.)
+
+The sections below are the underlying service install (called automatically by
+the installer) and a manual fallback.
+
 ## ⭐ Recommended: one-click hardened install
 
 From PowerShell (it self-elevates to Admin), pass your server URL and the

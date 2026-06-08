@@ -136,7 +136,9 @@ a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
   INSTALL_SERVICE.md, DEPLOY note
 - `scripts/` — launch-cloudflare.bat, Git1-Pair.bat, dev-watch.ps1/.sh, seed.json,
   install-litestream.sh (server persistence), install-service.ps1 +
-  service-watchdog.ps1 + uninstall-service.ps1 (hardened agent service, 0.1)
+  service-watchdog.ps1 + uninstall-service.ps1 (hardened agent service, 0.1),
+  Install-Git1-Kid.bat + .ps1 (from-zero kid PC setup: prereqs+clone+standard
+  account+service+pair)
 - `render.yaml`, `IDEAS.md`, `server/DEPLOY_RENDER.md`
 
 ## Tier 0 (foundation/robustness) — COMPLETE
