@@ -96,6 +96,56 @@ Step "Installing hardened agent service"
 & (Join-Path $InstallDir "scripts\install-service.ps1") `
     -Server $Server -ChildUser $ChildUser -UpdateBranch $Branch
 
+# --- 5b. kid-facing app: tray icon + shortcuts + autorun at kid login ---
+Step "Setting up the kid's 'Git1 — My time' app"
+$python    = (Get-Command python -ErrorAction SilentlyContinue).Source
+$pythonw   = if ($python) { Join-Path (Split-Path $python) "pythonw.exe" } else { "" }
+if (-not (Test-Path $pythonw)) { $pythonw = $python }   # fallback
+$trayPy    = Join-Path $InstallDir "agent\tray.py"
+$wsh       = New-Object -ComObject WScript.Shell
+
+# Resolve the child's profile path (handles non-default Users locations).
+$childProfile = $null
+try {
+  $childSidObj = (New-Object System.Security.Principal.NTAccount($ChildUser)
+                ).Translate([System.Security.Principal.SecurityIdentifier]).Value
+  $profKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$childSidObj"
+  if (Test-Path $profKey) { $childProfile = (Get-ItemProperty $profKey).ProfileImagePath }
+} catch {}
+if (-not $childProfile) { $childProfile = "C:\Users\$ChildUser" }
+
+# Make the profile shell folders if Windows hasn't initialised them yet.
+$childDesktop = Join-Path $childProfile "Desktop"
+$childStartup = Join-Path $childProfile "AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"
+$childStart   = Join-Path $childProfile "AppData\Roaming\Microsoft\Windows\Start Menu\Programs"
+foreach ($d in @($childDesktop, $childStartup, $childStart)) {
+  New-Item -ItemType Directory -Force -Path $d | Out-Null
+}
+
+function New-Shortcut($path, $target, $args, $description) {
+  $sc = $wsh.CreateShortcut($path)
+  $sc.TargetPath = $target
+  $sc.Arguments  = $args
+  $sc.Description = $description
+  $sc.WorkingDirectory = (Split-Path $target -Parent)
+  $sc.IconLocation = "$target,0"
+  $sc.Save()
+}
+
+# Desktop + Start Menu shortcut: opens dashboard in default browser.
+$dashUrl = "http://127.0.0.1:17654"
+$ieExplore = "$env:SystemRoot\explorer.exe"
+New-Shortcut (Join-Path $childDesktop "Git1 - My time.lnk") $ieExplore $dashUrl "Your Git1 time dashboard"
+New-Shortcut (Join-Path $childStart   "Git1 - My time.lnk") $ieExplore $dashUrl "Your Git1 time dashboard"
+
+# Startup items: tray icon + subtle desktop overlay, both at the kid's logon.
+$overlayPy = Join-Path $InstallDir "agent\overlay.py"
+New-Shortcut (Join-Path $childStartup "Git1 Tray.lnk")    $pythonw "`"$trayPy`""    "Git1 tray icon"
+New-Shortcut (Join-Path $childStartup "Git1 Overlay.lnk") $pythonw "`"$overlayPy`"" "Git1 time-left overlay"
+
+Write-Host "  Desktop + Start Menu shortcut: 'Git1 - My time' (opens dashboard)."
+Write-Host "  Tray icon + corner overlay start automatically when '$ChildUser' logs in."
+
 # --- 6. show the pairing code ---
 Step "Pairing"
 $log = Join-Path $InstallDir "agent\agent.log"

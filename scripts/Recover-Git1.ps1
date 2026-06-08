@@ -49,9 +49,12 @@ Write-Host "[4/5] Deleting firewall block rules (internet restored)..."
 & netsh advfirewall firewall delete rule name="Git1Block"      | Out-Null
 & netsh advfirewall firewall delete rule name="Git1AllowAgent" | Out-Null
 
-Write-Host "[5/5] Wiping cached policy (no sticky lock next start)..."
+Write-Host "[5/5] Wiping cached policy + clearing lock-screen message..."
 Remove-Item (Join-Path $env:APPDATA "Git1\policy.json") -Force
 Remove-Item "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\policy.json" -Force
+# Clear the lock/logon-screen "next available" dialog so it doesn't linger.
+reg delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v legalnoticecaption /f | Out-Null
+reg delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v legalnoticetext    /f | Out-Null
 
 Write-Host "`nDone. Git1 is fully disarmed on this PC." -ForegroundColor Green
 Write-Host "Internet + logon are unrestricted, and nothing will restart."

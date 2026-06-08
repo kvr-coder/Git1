@@ -33,6 +33,7 @@ import enforcer_logon
 import enforcer_net
 import enforcer_schedule
 import enforcer_vpn
+import lockmsg
 import session_win
 import updater
 
@@ -121,7 +122,24 @@ def enforce_lock() -> bool:
         if active and active != child:
             print(f"[lock] '{active}' is not the child ('{child}') — NOT locking.")
             return False
+    # Friendly heads-up before locking (debounced — see _last_banner_at).
+    _maybe_show_prelock_banner()
     return lock_workstation()
+
+
+_PRELOCK_STATE = {"last": 0.0}
+
+def _maybe_show_prelock_banner() -> None:
+    """Show 'Time's up, next available …' once per ~30 min so the re-lock
+    loop doesn't spam banners. Best-effort; never blocks enforcement."""
+    now = time.time()
+    if now - _PRELOCK_STATE["last"] < 30 * 60:
+        return
+    _PRELOCK_STATE["last"] = now
+    try:
+        lockmsg.show_prelock_banner(enforcer_schedule.get_schedules(), seconds=20)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---------- Usage ----------
@@ -339,6 +357,7 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         # Translate lock-schedules into OS-level logon hours (opt-in, safe:
         # no-op unless GIT1_CHILD_USER names a non-agent account).
         enforcer_logon.sync(items)
+        lockmsg.sync_logon_message(items)
         await emit_event(ws, "set_schedules", {"count": len(items)})
 
     elif kind == "set_borrow_settings":
@@ -374,6 +393,7 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     scheds = msg.get("schedules") or []
     enforcer_schedule.set_schedules(scheds)
     enforcer_logon.sync(scheds)
+    lockmsg.sync_logon_message(scheds)
     enforcer_apps.set_blocklist(msg.get("blocklist") or [])
     BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))

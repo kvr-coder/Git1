@@ -135,7 +135,9 @@ a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
 - `server/public/admin.html` — browser parent dashboard served at `/` (open the
   Render URL in any phone browser, log in, control devices; no Expo needed)
 - `agent/` — agent.py, dashboard.py, clock.py, enforcer_{net,apps,schedule,vpn}.py,
-  INSTALL_SERVICE.md, DEPLOY note
+  enforcer_logon.py, updater.py, session_win.py, tray.py (kid system-tray app),
+  overlay.py (corner "Xm left" widget), lockmsg.py (pre-lock banner + lock-screen
+  "next available" via legal-notice text), INSTALL_SERVICE.md, DEPLOY note
 - `scripts/` — launch-cloudflare.bat, Git1-Pair.bat, dev-watch.ps1/.sh, seed.json,
   install-litestream.sh (server persistence), install-service.ps1 +
   service-watchdog.ps1 + uninstall-service.ps1 (hardened agent service, 0.1),

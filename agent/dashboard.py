@@ -62,8 +62,8 @@ PAGE = """<!doctype html>
 </style>
 </head>
 <body>
-<h1>Your dashboard</h1>
-<p class="muted">This page only shows on your computer.</p>
+<h1>Git1 — My time</h1>
+<p class="muted">Your screen time, schedules, and chores — all in one place.</p>
 
 <div class="card" id="autospend-banner" style="display: none; border-color: var(--danger);">
   <strong style="color: var(--danger);">⏰ Out of time today</strong>
