@@ -120,3 +120,20 @@ if ($code) {
 
 Write-Host "`nAll set. The agent will auto-start at boot and self-update on each push." -ForegroundColor Green
 Write-Host "Have the child log in to the '$ChildUser' account to use the PC."
+
+# --- safety net: put the emergency off-switch on the desktop ---
+Step "Lockout safety"
+$recoverSrc = Join-Path $InstallDir "scripts\Recover-Git1.bat"
+try {
+  Copy-Item $recoverSrc "C:\Users\Public\Desktop\Recover-Git1.bat" -Force
+  Write-Host "  Placed 'Recover-Git1.bat' on the desktop (emergency off switch)."
+} catch { Write-Host "  Recovery script lives at: $recoverSrc" }
+
+Write-Host ""
+Write-Host "IMPORTANT — you can ALWAYS undo this:" -ForegroundColor Yellow
+Write-Host "  * Enforcement only affects the '$ChildUser' account. Your OWN admin"
+Write-Host "    account is never locked and keeps internet — log into it to fix things."
+Write-Host "  * Run 'Recover-Git1.bat' (desktop) to fully disarm, even with no server."
+Write-Host "  * Worst case, boot into SAFE MODE then run Recover-Git1.bat."
+Write-Host "  >> Make sure your admin account has a PASSWORD YOU REMEMBER before you"
+Write-Host "     leave this PC with the child. That's your guaranteed way back in."

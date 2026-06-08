@@ -138,7 +138,7 @@ a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
   install-litestream.sh (server persistence), install-service.ps1 +
   service-watchdog.ps1 + uninstall-service.ps1 (hardened agent service, 0.1),
   Install-Git1-Kid.bat + .ps1 (from-zero kid PC setup: prereqs+clone+standard
-  account+service+pair)
+  account+service+pair), Recover-Git1.bat + .ps1 (emergency offline off-switch)
 - `render.yaml`, `IDEAS.md`, `server/DEPLOY_RENDER.md`
 
 ## Tier 0 (foundation/robustness) — COMPLETE
@@ -163,6 +163,23 @@ From the post-research roadmap. All shipped on
 - 0.3 with a lock-schedule, outside the window the kid account can't log on;
   `net user <kid> /times:all` restores.
 - 0.4 stop the server, reboot kid PC → cached schedule/lock still enforced.
+
+## "Can I get locked out forever?" — NO. Safety model
+Three independent guarantees mean you can always recover:
+1. **Enforcement only touches the child's session.** The lock loop calls
+   `enforce_lock()` (agent.py), which refuses to lock any session that isn't
+   `GIT1_CHILD_USER` — and fails safe (won't lock) if it can't tell. So your
+   own admin account is never locked and keeps internet (internet block is
+   per-child-SID too). Log into YOUR account to fix anything.
+2. **Emergency off-switch (offline):** `scripts/Recover-Git1.bat` (the
+   installer drops it on the Public Desktop) stops the service + watchdog,
+   runs `net user <kid> /times:all`, deletes the firewall rules, and wipes the
+   cached policy. No server required.
+3. **Safe Mode** is the ultimate fallback — the service + watchdog don't run
+   there, so you can run Recover-Git1.bat cleanly even if something is wedged.
+Prereq for all of the above: **keep an admin account with a password you
+remember.** The installer creates the kid as a separate Standard user and
+prints this reminder.
 
 ## Remote updates — how a `git push` reaches all three parts
 One push to the tracked branch updates everything:

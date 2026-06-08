@@ -33,6 +33,7 @@ import enforcer_logon
 import enforcer_net
 import enforcer_schedule
 import enforcer_vpn
+import session_win
 import updater
 
 SERVER_HTTP = os.environ.get("GIT1_SERVER", "http://localhost:8080")
@@ -96,6 +97,31 @@ def lock_workstation() -> bool:
         print("[lock] non-Windows host, skipping LockWorkStation")
         return False
     return bool(ctypes.windll.user32.LockWorkStation())
+
+
+def enforce_lock() -> bool:
+    """Lock the workstation ONLY when it's safe — i.e. never lock a
+    parent/admin session that is recovering the machine.
+
+    Guard (when GIT1_CHILD_USER is configured, which the installer always does):
+      * active user == child         -> lock (intended)
+      * nobody at the console ("")   -> lock is a no-op login screen, fine
+      * active user != child         -> DON'T lock (an admin/parent is on)
+      * can't determine (None)       -> DON'T lock (fail safe)
+    With no GIT1_CHILD_USER set we fall back to the legacy behaviour (lock).
+    This is what guarantees you can always log into your own account to undo a
+    runaway lock, even offline.
+    """
+    child = (os.environ.get("GIT1_CHILD_USER") or "").strip().lower()
+    if child:
+        active = session_win.active_console_user()
+        if active is None:
+            print("[lock] active session unknown — NOT locking (fail-safe).")
+            return False
+        if active and active != child:
+            print(f"[lock] '{active}' is not the child ('{child}') — NOT locking.")
+            return False
+    return lock_workstation()
 
 
 # ---------- Usage ----------
@@ -278,7 +304,7 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
 
     if kind == "lock":
         LOCKED_BY_PARENT["value"] = True
-        ok = lock_workstation()
+        ok = enforce_lock()
         await emit_event(ws, "lock", {"ok": ok})
 
     elif kind == "unlock":
@@ -431,7 +457,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         if LOCKED_BY_PARENT.get("value"):
             if now - last_relock >= RELOCK_INTERVAL_SEC:
                 last_relock = now
-                lock_workstation()
+                enforce_lock()
 
         # 5. Daily-limit gate (always locks)
         schedule_actions = enforcer_schedule.active_actions(clock.now_trusted_dt())
@@ -442,7 +468,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
                 await emit_event(ws, "limit_reached", {"minutes": int(usage.minutes)})
             if now - last_relock >= RELOCK_INTERVAL_SEC:
                 last_relock = now
-                lock_workstation()
+                enforce_lock()
         else:
             limit_notified = False
 
@@ -450,7 +476,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         if "lock" in schedule_actions:
             if now - last_relock >= RELOCK_INTERVAL_SEC:
                 last_relock = now
-                lock_workstation()
+                enforce_lock()
                 await emit_event(ws, "schedule_lock")
         # Internet block (idempotent; only flip when state changes)
         want_net_block = "block_internet" in schedule_actions
