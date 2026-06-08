@@ -300,6 +300,9 @@ export const store = {
       rowToDevice,
     );
   },
+  allDevices(): DeviceRow[] {
+    return (db.prepare('SELECT * FROM devices').all() as any[]).map(rowToDevice);
+  },
   getDevice(userId: string, deviceId: string): DeviceRow | undefined {
     const row = db
       .prepare('SELECT * FROM devices WHERE id = ? AND userId = ?')

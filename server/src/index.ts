@@ -312,6 +312,12 @@ app.post('/chores/:id/resolve', auth, (req: AuthedRequest, res) => {
 // ---------- Agent WebSocket ----------
 const agentSockets = new Map<string, WebSocket>();
 
+// Tamper detection: a paired device that stops heartbeating (killed agent,
+// uninstall, network cut) is a tamper signal. We alert the parent ONCE per
+// offline transition. Tracks deviceIds we've already alerted so we don't spam.
+const offlineAlerted = new Set<string>();
+const OFFLINE_THRESHOLD_MS = 3 * 60 * 1000; // ~3 missed 60s heartbeats
+
 function sendToAgent(deviceId: string, msg: ServerMessage): boolean {
   const ws = agentSockets.get(deviceId);
   if (!ws || ws.readyState !== ws.OPEN) return false;
@@ -361,6 +367,20 @@ wss.on('connection', (ws, req) => {
     return;
   }
   agentSockets.set(device.id, ws);
+  // If this device was previously flagged offline (tamper), notify recovery.
+  if (offlineAlerted.delete(device.id)) {
+    const tokens = store.pushTokensForUser(device.userId);
+    sendPush(tokens, 'Device back online', `${device.name} reconnected`, {
+      deviceId: device.id,
+      kind: 'device_online',
+    });
+    store.appendActivity({
+      userId: device.userId,
+      deviceId: device.id,
+      kind: 'device_online',
+      message: `${device.name}: agent reconnected`,
+    });
+  }
   store.updateDevice(device.id, { status: 'online', lastSeen: Date.now() });
 
   // Push current state to agent immediately.
@@ -515,6 +535,29 @@ function toPublicDevice(d: DeviceRow) {
     bankedMinutes: d.bankedMinutes,
   };
 }
+
+// Tamper sweep: every minute, alert the parent about devices that have gone
+// silent (agent killed/uninstalled/offline) and weren't already flagged.
+const TAMPER_SWEEP_MS = 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const d of store.allDevices()) {
+    const silentFor = d.lastSeen ? now - d.lastSeen : Infinity;
+    const live = agentSockets.has(d.id);
+    if (!live && d.lastSeen && silentFor > OFFLINE_THRESHOLD_MS && !offlineAlerted.has(d.id)) {
+      offlineAlerted.add(d.id);
+      if (d.status !== 'offline') store.updateDevice(d.id, { status: 'offline' });
+      const mins = Math.round(silentFor / 60000);
+      const message = `${d.name}: agent offline for ${mins} min — possible tamper`;
+      console.warn(`[tamper] ${message}`);
+      store.appendActivity({ userId: d.userId, deviceId: d.id, kind: 'tamper_offline', message });
+      sendPush(store.pushTokensForUser(d.userId), 'Agent offline', message, {
+        deviceId: d.id,
+        kind: 'tamper_offline',
+      });
+    }
+  }
+}, TAMPER_SWEEP_MS).unref();
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`git1-server listening on http://0.0.0.0:${PORT}`);

@@ -44,6 +44,8 @@ const NOTIFY_KINDS = new Set([
   'borrow',
   'chore_request',
   'bank_spent',
+  'tamper_offline',
+  'device_online',
 ]);
 
 export function shouldNotify(kind: string): boolean {
