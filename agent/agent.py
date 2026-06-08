@@ -529,6 +529,12 @@ def main() -> None:
     enforcer_vpn.init_baseline()
     enforcer_vpn.block_tor_ports()
 
+    # Heal any old GLOBAL firewall block left by a previous agent version.
+    # The old block-all rule could sever the agent itself and lock the parent
+    # out; removing it on startup recovers a machine that's currently stuck.
+    # New blocks are scoped to the child's user SID (see enforcer_net).
+    enforcer_net.heal_legacy_block()
+
     usage = Usage()
 
     # Kid dashboard on http://127.0.0.1:<port>. Override with GIT1_DASHBOARD_PORT.

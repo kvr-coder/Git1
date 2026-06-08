@@ -1,18 +1,45 @@
-"""Internet kill-switch via Windows Firewall.
+"""Internet kill-switch via Windows Firewall — scoped to the CHILD's user SID.
 
-Adds two `netsh advfirewall` rules (in + out) named "Git1Block" that drop
-all traffic, plus a high-priority allow rule "Git1AllowAgent" for the
-agent's Python process so it can still reach the server (without this,
-once internet is killed there's no way for the parent to unblock it
-remotely — chicken-and-egg lockout).
+Why this is scoped, not global
+------------------------------
+The old implementation added a global block-all-outbound rule
+("Git1Block"). In Windows Firewall a block rule outranks the program-allow
+rule we added for the agent, so blocking internet ALSO killed the agent's
+own connection to the server — the parent was then locked out remotely with
+no way to send `unblock`.
+
+The correct fix (per Windows Firewall docs) is to scope the block to the
+child's logon token using the `localuser` SDDL condition:
+
+    netsh advfirewall firewall add rule name="Git1BlockChild" dir=out \
+        action=block localuser="D:(A;;CC;;;<CHILD_SID>)"
+
+Because the rule matches only the child's SID, the agent — which runs as
+LocalSystem (S-1-5-18) once installed as a service, or at worst as a
+*different* user — keeps full connectivity. The parent can always send
+`unblock`. No deadman hack required.
+
+Target SID resolution order:
+  1. GIT1_CHILD_SID env var (set by the installer/service)
+  2. The SID of the user owning the active console session
+  3. The SID of the current process owner (legacy single-user mode)
+
+On startup, `heal_legacy_block()` removes any old global Git1Block rules so a
+machine that is *currently* locked out by a prior agent version recovers as
+soon as the new agent runs.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
-RULE_BLOCK = "Git1Block"
-RULE_ALLOW = "Git1AllowAgent"
+# New per-SID rule (in + out share the name; we only need outbound).
+RULE_BLOCK_CHILD = "Git1BlockChild"
+
+# Legacy global rules from the old implementation — we only ever DELETE these.
+LEGACY_RULE_BLOCK = "Git1Block"
+LEGACY_RULE_ALLOW = "Git1AllowAgent"
 
 
 def _run(args: list[str]) -> tuple[int, str]:
@@ -21,84 +48,121 @@ def _run(args: list[str]) -> tuple[int, str]:
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=10)
         return r.returncode, (r.stdout + r.stderr).strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return 1, str(e)
 
 
+# ---------- child SID resolution ----------
+def _current_user_sid() -> str | None:
+    """SID of the account this process runs under."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import win32api  # type: ignore
+        import win32security  # type: ignore
+
+        user = win32api.GetUserNameEx(win32api.NameSamCompatible)  # DOMAIN\\user
+        sid, _, _ = win32security.LookupAccountName(None, user)
+        return win32security.ConvertSidToStringSid(sid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _console_user_sid() -> str | None:
+    """SID of the user owning the active (physical) console session.
+
+    When the agent runs as LocalSystem this is how we find the *child* who is
+    actually logged in, rather than blocking SYSTEM itself.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import win32security  # type: ignore
+        import win32ts  # type: ignore
+
+        sess = win32ts.WTSGetActiveConsoleSessionId()
+        if sess == 0xFFFFFFFF:
+            return None
+        user = win32ts.WTSQuerySessionInformation(
+            win32ts.WTS_CURRENT_SERVER_HANDLE, sess, win32ts.WTSUserName
+        )
+        domain = win32ts.WTSQuerySessionInformation(
+            win32ts.WTS_CURRENT_SERVER_HANDLE, sess, win32ts.WTSDomainName
+        )
+        if not user:
+            return None
+        account = f"{domain}\\{user}" if domain else user
+        sid, _, _ = win32security.LookupAccountName(None, account)
+        return win32security.ConvertSidToStringSid(sid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def child_sid() -> str | None:
+    return (
+        os.environ.get("GIT1_CHILD_SID")
+        or _console_user_sid()
+        or _current_user_sid()
+    )
+
+
+def _sddl(sid: str) -> str:
+    # D:(A;;CC;;;<SID>) — the documented localuser SDDL for firewall rules.
+    return f"D:(A;;CC;;;{sid})"
+
+
+# ---------- public API ----------
+def heal_legacy_block() -> None:
+    """Remove the old global block rules so a locked-out machine recovers."""
+    for direction in ("in", "out"):  # old rule existed in both directions
+        _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={LEGACY_RULE_BLOCK}", f"dir={direction}"])
+    _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={LEGACY_RULE_BLOCK}"])
+    _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={LEGACY_RULE_ALLOW}"])
+
+
 def is_blocked() -> bool:
-    code, out = _run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={RULE_BLOCK}"])
+    code, out = _run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={RULE_BLOCK_CHILD}"])
     return code == 0 and "No rules match" not in out
 
 
-def _ensure_agent_allow() -> None:
-    """Add/refresh an allow rule for the agent's python.exe so it can talk
-    to the server even while RULE_BLOCK is in place. Allow rules take
-    precedence over block rules at the same priority in Windows Firewall.
-    """
-    py = sys.executable
-    if not py:
-        return
-    # Delete any stale rule first so we don't accumulate them.
-    _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_ALLOW}"])
-    _run(
+def block_internet() -> bool:
+    sid = child_sid()
+    if not sid:
+        print("[net] could not resolve child SID — refusing to add a global block (would lock parent out).")
+        return False
+    if is_blocked():
+        print("[net] already blocked (child SID).")
+        return True
+    code, out = _run(
         [
             "netsh",
             "advfirewall",
             "firewall",
             "add",
             "rule",
-            f"name={RULE_ALLOW}",
+            f"name={RULE_BLOCK_CHILD}",
             "dir=out",
-            "action=allow",
-            f"program={py}",
+            "action=block",
             "enable=yes",
             "profile=any",
+            f"localuser={_sddl(sid)}",
         ],
     )
-
-
-def _remove_agent_allow() -> None:
-    _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_ALLOW}"])
-
-
-def block_internet() -> bool:
-    # Always (re)apply the agent allow rule first, even if already blocked,
-    # in case the agent path changed.
-    _ensure_agent_allow()
-    if is_blocked():
-        print("[net] already blocked.")
-        return True
-    ok = True
-    for direction in ("in", "out"):
-        code, out = _run(
-            [
-                "netsh",
-                "advfirewall",
-                "firewall",
-                "add",
-                "rule",
-                f"name={RULE_BLOCK}",
-                f"dir={direction}",
-                "action=block",
-                "enable=yes",
-                "remoteip=any",
-            ],
-        )
-        if code != 0:
-            ok = False
-            print(f"[net] BLOCK ({direction}) FAILED: {out}")
-            if "elevation" in out.lower() or "administrator" in out.lower():
-                print("[net] *** Agent must be run as Administrator to add firewall rules. ***")
-        else:
-            print(f"[net] block rule ({direction}) added.")
-    return ok
+    if code != 0:
+        print(f"[net] BLOCK FAILED: {out}")
+        if "elevation" in out.lower() or "administrator" in out.lower():
+            print("[net] *** Agent must run as Administrator/LocalSystem to add firewall rules. ***")
+        return False
+    print(f"[net] block rule added for child SID {sid}.")
+    return True
 
 
 def unblock_internet() -> bool:
-    code, out = _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK}"])
-    _remove_agent_allow()
-    if code != 0:
+    code, out = _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK_CHILD}"])
+    # Also clear any legacy rules, in case this agent is healing an old block.
+    heal_legacy_block()
+    if code != 0 and "No rules match" not in out:
         print(f"[net] UNBLOCK FAILED: {out}")
-    else:
-        print("[net] block rules removed.")
-    return code == 0
+        return False
+    print("[net] block rule removed.")
+    return True

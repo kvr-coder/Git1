@@ -61,23 +61,22 @@ Parental-control system for Windows PCs, driven from an iPhone (Expo Go).
 
 ## KNOWN ISSUES / IN-FLIGHT (read before continuing)
 
-### 1. Internet block can lock the parent out (PARTIALLY mitigated)
-`enforcer_net.block_internet()` adds a `netsh advfirewall` **block-all-outbound**
-rule. Problem: in Windows Firewall a block rule outranks the program-allow
-rule we add for the agent, so blocking internet ALSO kills the agent's own
-WS connection → no way to send `unblock` remotely.
-- **Mitigation shipped** (commit 3bf7147): deadman switch in `agent.py`
-  `main()` — if offline > `NET_DEADMAN_SEC` (5 min) AND firewall still
-  blocking, agent auto-removes its block rules.
-- **STILL TODO (next priority)**: replace blanket block with a strategy
-  that never severs the agent:
-    - block by the kid's Windows **user SID** (`netsh ... `localuser` owner`),
-      agent runs as admin/LocalSystem so unaffected; OR
-    - block specific app `.exe` paths only (Chrome/Edge/Steam/Discord); OR
-    - DNS sinkhole for the kid's profile.
-- Manual recovery if locked out: admin PowerShell on the PC →
-  `netsh advfirewall firewall delete rule name="Git1Block"` and
-  `name="Git1AllowAgent"`; nuclear: `netsh advfirewall reset`.
+### 1. Internet block lockout — FIXED (per-child-SID block)
+**Resolved.** `enforcer_net.block_internet()` now scopes the firewall block to
+the **child's user SID** via the documented `localuser="D:(A;;CC;;;<SID>)"`
+SDDL condition, instead of a global block-all rule. The agent's own connection
+(a different security principal — LocalSystem once installed as a service, or a
+different user) is never severed, so the parent can always send `unblock`.
+Child SID resolves from `GIT1_CHILD_SID` env → active console-session user →
+current process owner. If no SID can be resolved it **refuses to block**
+(fail-safe) rather than risk a global lockout.
+- **Self-healing:** `heal_legacy_block()` runs at agent startup and on every
+  `unblock`, deleting old global `Git1Block`/`Git1AllowAgent` rules — so a
+  machine currently locked out by the old agent recovers as soon as the new
+  agent runs.
+- Deadman switch (5-min offline auto-unblock) retained as belt-and-suspenders.
+- New rule name is `Git1BlockChild` (old: `Git1Block`/`Git1AllowAgent`).
+- Requires `pywin32` on the agent for SID lookup (win32api/win32security/win32ts).
 - Firewall rules PERSIST across reboot — restarting the PC does NOT clear them.
 
 ### 2. Lock is a re-lock loop, not a logon block
