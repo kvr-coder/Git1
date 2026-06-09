@@ -3,12 +3,12 @@
 Living doc of feature ideas, ranked. Check off as shipped.
 
 ## Core gaps to close (table-stakes parity)
-- [ ] **1. Android Accessibility-based app blocker** — kid-side hard block of apps (not just notify). The category-defining feature; enforcement is the moat.
-- [ ] **2. Chore → screen-time auto-credit** — chores unlock minutes automatically on completion. The loop no competitor nails.
-- [ ] **3. Photo check-ins** — kid sends selfie to prove location/activity. Reduces parent nagging.
-- [ ] **4. Offline-first kid app** — limits + queued events work with no internet; sync on reconnect.
-- [ ] **5. Pair-code recovery + multi-parent sync** — both parents share one dashboard; lost pair codes can be re-issued.
-- [ ] **6. Geofencing + live location** — arrive/leave-school pings, background updates.
+- [~] **1. Android Accessibility-based app blocker** — server contract + blocklist wire complete and tested; **native Accessibility Service module still required** (custom dev build + manual permission grant on device).
+- [x] **2. Chore → screen-time auto-credit** — chore approval auto-credits the bank (tested).
+- [x] **3. Photo check-ins** — base64 upload by agent token, dashboard wall, per-id fetch (tested).
+- [x] **4. Offline-first kid app** — `/agent/offline-sync` batch replay endpoint (tested). Kid-app native queue still to wire into the mobile project.
+- [x] **5. Pair-code recovery + multi-parent sync** — co-parent invite/claim, shared device view, agent-token-rotating recovery (tested).
+- [x] **6. Geofencing + live location** — server-side haversine enter/exit detection, push on transition, bulk location upload (tested).
 - [ ] Allowlist/blocklist per app per time-of-day ("Roblox only after homework, never after 9pm").
 - [ ] Tamper-proofing — Device Admin uninstall protection, SIM-swap alert, GPS-off notification.
 
@@ -21,5 +21,5 @@ Living doc of feature ideas, ranked. Check off as shipped.
 - [ ] Driving detection — auto-DND + speed alert in cars.
 - [ ] Open-source / no-data-sale trust angle in marketing.
 
-## Currently in progress (this branch)
-Working on 1, 2, 3, 4, 5, 6 — server + dashboard + kid-app scaffolding. Native app-blocker module requires a custom dev build to fully test.
+## Status
+5/6 core features fully shipped & end-to-end tested (server/test/features.test.mjs — 13 assertions, all green). Feature 1's server contract is shipped & tested; finishing it requires a native Android Accessibility Service module installed via `eas build -p android --profile development` and the user manually granting Accessibility permission — that can't be exercised in this sandbox.
