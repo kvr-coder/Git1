@@ -64,9 +64,9 @@
     <div style="display:grid; gap:10px">
       <input id="email" type="email" autocomplete="username" placeholder="email" />
       <input id="password" type="password" autocomplete="current-password" placeholder="password" />
-      <input id="invite" type="text" autocomplete="off" placeholder="invite code (new accounts only)" />
+      <input id="invite" type="password" autocomplete="off" placeholder="invite code" class="hidden" />
       <button onclick="login()">Sign in</button>
-      <div class="mut">Uses your Git1 parent account (same as the app).</div>
+      <div class="mut">Uses your Git1 parent account (same as the app). <a href="#" onclick="document.getElementById('invite').classList.remove('hidden');this.style.display='none';return false;" style="color:#7aa2ff">New here? Add invite code</a></div>
     </div>
   </div>
 
