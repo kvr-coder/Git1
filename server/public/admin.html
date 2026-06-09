@@ -82,6 +82,19 @@
         <button class="sec" onclick="pair()">Pair</button>
       </div>
     </div>
+
+    <h2>Photo check-ins</h2>
+    <div id="photos" class="card mut">No photos yet.</div>
+
+    <h2>Co-parent</h2>
+    <div class="card">
+      <div class="row">
+        <button class="sec" onclick="inviteCoParent()">Invite co-parent</button>
+        <input id="coCode" class="grow" inputmode="numeric" maxlength="6" placeholder="enter co-parent code" />
+        <button class="sec" onclick="claimCoParent()">Join</button>
+      </div>
+      <div class="mut" id="coStatus" style="margin-top:8px"></div>
+    </div>
   </div>
 </main>
 <div id="toast" class="toast"></div>
@@ -195,11 +208,60 @@ async function pair(){
 
 async function refresh(){
   try{
-    const [devices, reqs, chores] = await Promise.all([
+    const [devices, reqs, chores, photos, cop] = await Promise.all([
       api('/devices'), api('/requests?status=pending'), api('/chores?status=pending'),
+      api('/photos').catch(()=>[]), api('/co-parents').catch(()=>[]),
     ]);
     renderRequests(reqs); renderChores(chores); renderDevices(devices);
+    renderPhotos(photos); renderCoParents(cop);
   }catch(e){ /* 401 already handled */ }
+}
+
+function renderPhotos(list){
+  const el=document.getElementById('photos');
+  if(!list || !list.length){ el.innerHTML='<div class="mut">No photos yet.</div>'; return; }
+  el.innerHTML = '<div class="row" style="gap:8px;flex-wrap:wrap">'+list.slice(0,12).map(p=>`
+    <a href="/photos/${p.id}" target="_blank" style="display:block">
+      <img src="/photos/${p.id}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line)"
+           onerror="this.style.background='#24324c'" />
+      <div class="mut" style="font-size:11px;max-width:90px">${esc(p.caption||ago(p.capturedAt))}</div>
+    </a>`).join('')+'</div>';
+}
+
+function renderCoParents(list){
+  const el=document.getElementById('coStatus');
+  if(!el) return;
+  el.textContent = list.length ? `Linked with ${list.length} other parent(s).` : 'No co-parent linked yet.';
+}
+
+async function inviteCoParent(){
+  try{ const r = await api('/co-parents/invite',{method:'POST'});
+       prompt('Share this 6-digit code with the other parent (expires in 24h):', r.code); }
+  catch(e){ toast(e.message); }
+}
+async function claimCoParent(){
+  const code = document.getElementById('coCode').value.trim();
+  if(code.length!==6) return toast('Enter the 6-digit code');
+  try{ await api('/co-parents/claim',{method:'POST',body:JSON.stringify({code})});
+       document.getElementById('coCode').value=''; toast('Linked!'); refresh(); }
+  catch(e){ toast(e.message); }
+}
+async function recoverDevice(id){
+  try{ const r = await api('/devices/'+id+'/recovery-code',{method:'POST'});
+       prompt('New recovery pair code (enter on kid device, expires 10 min):', r.code); }
+  catch(e){ toast(e.message); }
+}
+async function addGeofence(deviceId){
+  const name = prompt('Name (e.g. "School", "Home"):'); if(!name) return;
+  if(!navigator.geolocation) return toast('Geolocation not supported');
+  toast('Capturing current location…');
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const radius = +prompt('Radius in meters (e.g. 150):', '150') || 150;
+    try{ await api('/geofences',{method:'POST',body:JSON.stringify({
+      deviceId, name, lat:pos.coords.latitude, lng:pos.coords.longitude,
+      radiusMeters:radius, notifyOnEnter:true, notifyOnExit:true,
+    })}); toast('Geofence added'); }catch(e){ toast(e.message); }
+  }, err=>toast(err.message), {enableHighAccuracy:true});
 }
 
 function renderDevices(list){
@@ -223,6 +285,8 @@ function renderDevices(list){
         <button class="sec" onclick="cmd('${d.id}','grant_minutes',{minutes:15})">+15 min</button>
         <button class="${net?'ok':'warn'}" onclick="cmd('${d.id}','${net?'unblock_internet':'block_internet'}')">
           ${net?'Internet ON':'Internet OFF'}</button>
+        <button class="sec" onclick="addGeofence('${d.id}')">+ Geofence</button>
+        <button class="sec" onclick="recoverDevice('${d.id}')">Recovery code</button>
       </div>
     </div>`;
   }).join('');

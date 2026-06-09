@@ -6,7 +6,14 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { WebSocketServer, type WebSocket } from 'ws';
 import { z } from 'zod';
 import { store, type DeviceRow } from './store.js';
-import { notifyUser, sendPush, shouldNotify, webPushPublicKey } from './push.js';
+import { notifyUser as notifyOne, sendPush, shouldNotify, webPushPublicKey } from './push.js';
+
+// Fan a notification out across the primary parent and all co-parents.
+async function notifyUser(userId: string, title: string, body: string, data: any) {
+  for (const uid of store.parentUserIdsFor(userId)) {
+    await notifyOne(uid, title, body, data);
+  }
+}
 import type { AgentMessage, Command, ServerMessage } from './types.js';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -435,6 +442,239 @@ app.post('/chores/:id/resolve', auth, (req: AuthedRequest, res) => {
   res.json({ ok: true, status: p.data.status, minutes });
 });
 
+// ---------- Co-parents (multi-parent sync) ----------
+// Primary parent generates a 6-digit invite; second parent enters it after
+// registering. Both then share the same devices/activity/notifications.
+app.post('/co-parents/invite', auth, (req: AuthedRequest, res) => {
+  const code = store.createCoParentInvite(req.userId!);
+  res.json({ code, expiresInHours: 24 });
+});
+app.post('/co-parents/claim', auth, (req: AuthedRequest, res) => {
+  const p = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const claim = store.claimCoParentInvite(p.data.code, req.userId!);
+  if (!claim) return res.status(400).json({ error: 'invalid or expired code' });
+  res.json({ ok: true, primaryUserId: claim.primaryUserId });
+});
+app.get('/co-parents', auth, (req: AuthedRequest, res) => {
+  res.json(store.listCoParents(req.userId!));
+});
+
+// ---------- Pair-code recovery ----------
+// Parent re-issues a pair code for an existing device (e.g. kid reinstalled).
+// Rotates the agent token so the old install is locked out.
+app.post('/devices/:id/recovery-code', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  const code = store.createRecoveryCode(req.userId!, d.id);
+  store.appendActivity({
+    userId: req.userId!,
+    deviceId: d.id,
+    kind: 'recovery_code_issued',
+    message: `${d.name}: recovery pair code issued`,
+  });
+  res.json({ code, expiresInMinutes: 10 });
+});
+
+// ---------- Geofences ----------
+const geofenceSchema = z.object({
+  deviceId: z.string(),
+  name: z.string().min(1).max(80),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  radiusMeters: z.number().int().min(20).max(10000),
+  notifyOnEnter: z.boolean().optional(),
+  notifyOnExit: z.boolean().optional(),
+});
+app.get('/geofences', auth, (req: AuthedRequest, res) => {
+  const deviceId = (req.query.deviceId as string | undefined) ?? undefined;
+  res.json(store.listGeofences(req.userId!, deviceId));
+});
+app.post('/geofences', auth, (req: AuthedRequest, res) => {
+  const p = geofenceSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const d = store.getDevice(req.userId!, p.data.deviceId);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  const row = store.createGeofence(
+    req.userId!,
+    p.data.deviceId,
+    p.data.name,
+    p.data.lat,
+    p.data.lng,
+    p.data.radiusMeters,
+    p.data.notifyOnEnter ?? true,
+    p.data.notifyOnExit ?? true,
+  );
+  pushSnapshotToAgent(d.id);
+  res.json(row);
+});
+app.delete('/geofences/:id', auth, (req: AuthedRequest, res) => {
+  store.deleteGeofence(req.userId!, req.params.id);
+  res.json({ ok: true });
+});
+
+// Kid-side: bulk location upload (supports offline replay — array of points).
+const locUploadSchema = z.object({
+  points: z
+    .array(
+      z.object({
+        lat: z.number(),
+        lng: z.number(),
+        accuracyMeters: z.number().optional(),
+        recordedAt: z.number().int(),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+app.post('/agent/locations', (req, res) => {
+  const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
+  const device = store.deviceByAgentToken(token);
+  if (!device) return res.status(401).json({ error: 'unauthorized' });
+  const p = locUploadSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const fences = store.geofencesForDevice(device.id);
+  const previous = store.lastLocation(device.id);
+  let prevInside: Record<string, boolean> = {};
+  if (previous) {
+    for (const f of fences) {
+      prevInside[f.id] = haversine(previous.lat, previous.lng, f.lat, f.lng) <= f.radiusMeters;
+    }
+  }
+  for (const pt of p.data.points) {
+    store.appendLocation(
+      device.userId,
+      device.id,
+      pt.lat,
+      pt.lng,
+      pt.accuracyMeters ?? null,
+      pt.recordedAt,
+    );
+    for (const f of fences) {
+      const inside = haversine(pt.lat, pt.lng, f.lat, f.lng) <= f.radiusMeters;
+      const wasInside = prevInside[f.id] ?? inside;
+      if (inside !== wasInside) {
+        const kind = inside ? 'geofence_enter' : 'geofence_exit';
+        const message = `${device.name}: ${inside ? 'arrived at' : 'left'} ${f.name}`;
+        store.appendActivity({ userId: device.userId, deviceId: device.id, kind, message });
+        if ((inside && f.notifyOnEnter) || (!inside && f.notifyOnExit)) {
+          notifyUser(device.userId, inside ? 'Arrived' : 'Left', message, {
+            deviceId: device.id,
+            kind,
+            geofenceId: f.id,
+          });
+        }
+      }
+      prevInside[f.id] = inside;
+    }
+  }
+  res.json({ ok: true, accepted: p.data.points.length });
+});
+app.get('/devices/:id/locations', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  res.json(store.listLocations(req.userId!, d.id, 100));
+});
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ---------- Photo check-ins ----------
+// Kid uploads base64 JPEG via agent token. Server caps size to ~2MB after b64
+// (≈ 1.5MB raw). Parent dashboard lists thumbnails; full image via /photos/:id.
+const photoSchema = z.object({
+  caption: z.string().max(240).optional(),
+  imageData: z.string().min(20).max(4_000_000), // base64
+  mimeType: z.string().optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  capturedAt: z.number().int().optional(),
+});
+app.post('/agent/photo', (req, res) => {
+  const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
+  const device = store.deviceByAgentToken(token);
+  if (!device) return res.status(401).json({ error: 'unauthorized' });
+  const p = photoSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const row = store.createPhotoCheckin(
+    device.userId,
+    device.id,
+    p.data.caption ?? '',
+    p.data.imageData,
+    p.data.mimeType ?? 'image/jpeg',
+    p.data.lat ?? null,
+    p.data.lng ?? null,
+    p.data.capturedAt ?? Date.now(),
+  );
+  const message = `${device.name}: photo check-in${p.data.caption ? ` — "${p.data.caption.slice(0, 60)}"` : ''}`;
+  store.appendActivity({
+    userId: device.userId,
+    deviceId: device.id,
+    kind: 'photo_checkin',
+    message,
+  });
+  notifyUser(device.userId, 'Photo check-in', message, {
+    deviceId: device.id,
+    kind: 'photo_checkin',
+    photoId: row.id,
+  });
+  res.json({ ok: true, id: row.id });
+});
+app.get('/photos', auth, (req: AuthedRequest, res) => {
+  res.json(store.listPhotoCheckins(req.userId!));
+});
+app.get('/photos/:id', auth, (req: AuthedRequest, res) => {
+  const row = store.getPhotoCheckin(req.userId!, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not found' });
+  const buf = Buffer.from(row.imageData, 'base64');
+  res.type(row.mimeType || 'image/jpeg').send(buf);
+});
+app.delete('/photos/:id', auth, (req: AuthedRequest, res) => {
+  store.deletePhotoCheckin(req.userId!, req.params.id);
+  res.json({ ok: true });
+});
+
+// ---------- Offline-sync inbox (kid-app replay) ----------
+// Kid app stores events while offline; on reconnect it POSTs the batch here and
+// the server replays them in order. Keeps the wire format identical to live
+// WS events for code reuse.
+const offlineBatchSchema = z.object({
+  events: z
+    .array(
+      z.object({
+        name: z.string(),
+        payload: z.record(z.unknown()).optional(),
+        capturedAt: z.number().int().optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+app.post('/agent/offline-sync', (req, res) => {
+  const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
+  const device = store.deviceByAgentToken(token);
+  if (!device) return res.status(401).json({ error: 'unauthorized' });
+  const p = offlineBatchSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  for (const ev of p.data.events) {
+    store.appendActivity({
+      userId: device.userId,
+      deviceId: device.id,
+      kind: `offline:${ev.name}`,
+      message: `${device.name}: [offline] ${ev.name}`,
+    });
+  }
+  res.json({ ok: true, replayed: p.data.events.length });
+});
+
 // ---------- Agent WebSocket ----------
 const agentSockets = new Map<string, WebSocket>();
 
@@ -464,6 +704,7 @@ function buildSnapshot(d: DeviceRow) {
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
     bankedMinutes: d.bankedMinutes,
     choreTemplates: store.listChoreTemplates(d.userId, d.id),
+    geofences: store.geofencesForDevice(d.id),
     lockedByParent: d.lockedByParent,
     repoCommit: REPO_COMMIT,
   };

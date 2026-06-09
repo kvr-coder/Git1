@@ -159,6 +159,72 @@ CREATE TABLE IF NOT EXISTS web_push_subs (
   createdAt INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS web_push_subs_user ON web_push_subs(userId);
+
+CREATE TABLE IF NOT EXISTS co_parents (
+  primaryUserId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  coUserId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  createdAt INTEGER NOT NULL,
+  PRIMARY KEY (primaryUserId, coUserId)
+);
+CREATE INDEX IF NOT EXISTS co_parents_co ON co_parents(coUserId);
+
+CREATE TABLE IF NOT EXISTS co_parent_invites (
+  code TEXT PRIMARY KEY,
+  primaryUserId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  createdAt INTEGER NOT NULL,
+  claimedAt INTEGER,
+  claimedByUserId TEXT
+);
+
+CREATE TABLE IF NOT EXISTS geofences (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  lat REAL NOT NULL,
+  lng REAL NOT NULL,
+  radiusMeters INTEGER NOT NULL,
+  notifyOnEnter INTEGER NOT NULL DEFAULT 1,
+  notifyOnExit INTEGER NOT NULL DEFAULT 1,
+  createdAt INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS geofences_device ON geofences(deviceId);
+
+CREATE TABLE IF NOT EXISTS device_locations (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  lat REAL NOT NULL,
+  lng REAL NOT NULL,
+  accuracyMeters REAL,
+  recordedAt INTEGER NOT NULL,
+  receivedAt INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS device_locations_device_ts ON device_locations(deviceId, recordedAt DESC);
+
+CREATE TABLE IF NOT EXISTS photo_checkins (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  caption TEXT NOT NULL DEFAULT '',
+  imageData TEXT NOT NULL,
+  mimeType TEXT NOT NULL DEFAULT 'image/jpeg',
+  lat REAL,
+  lng REAL,
+  capturedAt INTEGER NOT NULL,
+  receivedAt INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS photo_checkins_user_ts ON photo_checkins(userId, capturedAt DESC);
+
+CREATE TABLE IF NOT EXISTS pair_recovery (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deviceId TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  recoveryCode TEXT NOT NULL,
+  createdAt INTEGER NOT NULL,
+  usedAt INTEGER
+);
+CREATE INDEX IF NOT EXISTS pair_recovery_device ON pair_recovery(deviceId);
 `);
 
 for (const stmt of [
@@ -320,17 +386,21 @@ export const store = {
     return row ? rowToDevice(row) : undefined;
   },
   listDevices(userId: string): DeviceRow[] {
-    return (db.prepare('SELECT * FROM devices WHERE userId = ?').all(userId) as any[]).map(
-      rowToDevice,
-    );
+    const ids = this.parentUserIdsFor(userId);
+    const placeholders = ids.map(() => '?').join(',');
+    return (
+      db.prepare(`SELECT * FROM devices WHERE userId IN (${placeholders})`).all(...ids) as any[]
+    ).map(rowToDevice);
   },
   allDevices(): DeviceRow[] {
     return (db.prepare('SELECT * FROM devices').all() as any[]).map(rowToDevice);
   },
   getDevice(userId: string, deviceId: string): DeviceRow | undefined {
+    const ids = this.parentUserIdsFor(userId);
+    const placeholders = ids.map(() => '?').join(',');
     const row = db
-      .prepare('SELECT * FROM devices WHERE id = ? AND userId = ?')
-      .get(deviceId, userId);
+      .prepare(`SELECT * FROM devices WHERE id = ? AND userId IN (${placeholders})`)
+      .get(deviceId, ...ids);
     return row ? rowToDevice(row) : undefined;
   },
   getDeviceById(deviceId: string): DeviceRow | undefined {
@@ -584,5 +654,229 @@ export const store = {
       templateId,
       userId,
     );
+  },
+
+  // ── Co-parents (multi-parent sync) ──
+  createCoParentInvite(primaryUserId: string): string {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    db.prepare(
+      'INSERT INTO co_parent_invites (code, primaryUserId, createdAt) VALUES (?, ?, ?)',
+    ).run(code, primaryUserId, Date.now());
+    return code;
+  },
+  claimCoParentInvite(code: string, coUserId: string): { primaryUserId: string } | null {
+    const inv = db.prepare('SELECT * FROM co_parent_invites WHERE code = ?').get(code) as any;
+    if (!inv || inv.claimedAt) return null;
+    if (Date.now() - inv.createdAt > 24 * 60 * 60 * 1000) return null;
+    if (inv.primaryUserId === coUserId) return null;
+    db.prepare(
+      'INSERT OR IGNORE INTO co_parents (primaryUserId, coUserId, createdAt) VALUES (?, ?, ?)',
+    ).run(inv.primaryUserId, coUserId, Date.now());
+    db.prepare(
+      'UPDATE co_parent_invites SET claimedAt = ?, claimedByUserId = ? WHERE code = ?',
+    ).run(Date.now(), coUserId, code);
+    return { primaryUserId: inv.primaryUserId };
+  },
+  listCoParents(userId: string): { primaryUserId: string; coUserId: string }[] {
+    return db
+      .prepare('SELECT primaryUserId, coUserId FROM co_parents WHERE primaryUserId = ? OR coUserId = ?')
+      .all(userId, userId) as any[];
+  },
+  // Returns every user id that should be notified / has access to this primaryUserId's data.
+  parentUserIdsFor(userId: string): string[] {
+    const primary =
+      (db
+        .prepare('SELECT primaryUserId FROM co_parents WHERE coUserId = ? LIMIT 1')
+        .get(userId) as any)?.primaryUserId ?? userId;
+    const cos = db
+      .prepare('SELECT coUserId FROM co_parents WHERE primaryUserId = ?')
+      .all(primary) as { coUserId: string }[];
+    return Array.from(new Set([primary, ...cos.map((c) => c.coUserId)]));
+  },
+  removeCoParent(primaryUserId: string, coUserId: string) {
+    db.prepare('DELETE FROM co_parents WHERE primaryUserId = ? AND coUserId = ?').run(
+      primaryUserId,
+      coUserId,
+    );
+  },
+
+  // ── Geofences ──
+  createGeofence(
+    userId: string,
+    deviceId: string,
+    name: string,
+    lat: number,
+    lng: number,
+    radiusMeters: number,
+    notifyOnEnter: boolean,
+    notifyOnExit: boolean,
+  ) {
+    const row = {
+      id: id(),
+      userId,
+      deviceId,
+      name,
+      lat,
+      lng,
+      radiusMeters,
+      notifyOnEnter,
+      notifyOnExit,
+      createdAt: Date.now(),
+    };
+    db.prepare(
+      `INSERT INTO geofences (id, userId, deviceId, name, lat, lng, radiusMeters, notifyOnEnter, notifyOnExit, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      row.id,
+      row.userId,
+      row.deviceId,
+      row.name,
+      row.lat,
+      row.lng,
+      row.radiusMeters,
+      notifyOnEnter ? 1 : 0,
+      notifyOnExit ? 1 : 0,
+      row.createdAt,
+    );
+    return row;
+  },
+  listGeofences(userId: string, deviceId?: string) {
+    if (deviceId) {
+      return db
+        .prepare('SELECT * FROM geofences WHERE userId = ? AND deviceId = ?')
+        .all(userId, deviceId) as any[];
+    }
+    return db.prepare('SELECT * FROM geofences WHERE userId = ?').all(userId) as any[];
+  },
+  geofencesForDevice(deviceId: string) {
+    return db.prepare('SELECT * FROM geofences WHERE deviceId = ?').all(deviceId) as any[];
+  },
+  deleteGeofence(userId: string, geofenceId: string) {
+    db.prepare('DELETE FROM geofences WHERE id = ? AND userId = ?').run(geofenceId, userId);
+  },
+
+  appendLocation(
+    userId: string,
+    deviceId: string,
+    lat: number,
+    lng: number,
+    accuracyMeters: number | null,
+    recordedAt: number,
+  ) {
+    const row = {
+      id: id(),
+      userId,
+      deviceId,
+      lat,
+      lng,
+      accuracyMeters,
+      recordedAt,
+      receivedAt: Date.now(),
+    };
+    db.prepare(
+      `INSERT INTO device_locations (id, userId, deviceId, lat, lng, accuracyMeters, recordedAt, receivedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      row.id,
+      row.userId,
+      row.deviceId,
+      row.lat,
+      row.lng,
+      row.accuracyMeters,
+      row.recordedAt,
+      row.receivedAt,
+    );
+    return row;
+  },
+  lastLocation(deviceId: string) {
+    return db
+      .prepare(
+        'SELECT * FROM device_locations WHERE deviceId = ? ORDER BY recordedAt DESC LIMIT 1',
+      )
+      .get(deviceId) as any;
+  },
+  listLocations(userId: string, deviceId: string, limit = 50) {
+    return db
+      .prepare(
+        `SELECT * FROM device_locations WHERE userId = ? AND deviceId = ?
+         ORDER BY recordedAt DESC LIMIT ?`,
+      )
+      .all(userId, deviceId, limit) as any[];
+  },
+
+  // ── Photo check-ins ──
+  createPhotoCheckin(
+    userId: string,
+    deviceId: string,
+    caption: string,
+    imageData: string,
+    mimeType: string,
+    lat: number | null,
+    lng: number | null,
+    capturedAt: number,
+  ) {
+    const row = {
+      id: id(),
+      userId,
+      deviceId,
+      caption,
+      imageData,
+      mimeType,
+      lat,
+      lng,
+      capturedAt,
+      receivedAt: Date.now(),
+    };
+    db.prepare(
+      `INSERT INTO photo_checkins (id, userId, deviceId, caption, imageData, mimeType, lat, lng, capturedAt, receivedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      row.id,
+      row.userId,
+      row.deviceId,
+      row.caption,
+      row.imageData,
+      row.mimeType,
+      row.lat,
+      row.lng,
+      row.capturedAt,
+      row.receivedAt,
+    );
+    return row;
+  },
+  listPhotoCheckins(userId: string, limit = 50) {
+    return db
+      .prepare(
+        `SELECT id, deviceId, caption, mimeType, lat, lng, capturedAt, receivedAt
+         FROM photo_checkins WHERE userId = ? ORDER BY capturedAt DESC LIMIT ?`,
+      )
+      .all(userId, limit) as any[];
+  },
+  getPhotoCheckin(userId: string, photoId: string) {
+    return db
+      .prepare('SELECT * FROM photo_checkins WHERE id = ? AND userId = ?')
+      .get(photoId, userId) as any;
+  },
+  deletePhotoCheckin(userId: string, photoId: string) {
+    db.prepare('DELETE FROM photo_checkins WHERE id = ? AND userId = ?').run(photoId, userId);
+  },
+
+  // ── Pair-code recovery ──
+  // Issues a fresh pair code for an already-paired device so the kid can re-pair
+  // after wiping the app, without the parent losing settings/history.
+  createRecoveryCode(userId: string, deviceId: string): string {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    db.prepare(
+      `INSERT INTO pair_recovery (id, userId, deviceId, recoveryCode, createdAt)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(id(), userId, deviceId, code, Date.now());
+    // Also stash in pair_codes table so existing claim flow works.
+    const agentToken = token();
+    db.prepare(
+      'INSERT INTO pair_codes (code, agentToken, createdAt, claimedByUserId, deviceId) VALUES (?, ?, ?, ?, ?)',
+    ).run(code, agentToken, Date.now(), userId, deviceId);
+    // Rotate the device's agent token so the old install loses access.
+    db.prepare('UPDATE devices SET agentToken = ? WHERE id = ?').run(agentToken, deviceId);
+    return code;
   },
 };
