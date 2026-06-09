@@ -64,6 +64,7 @@
     <div style="display:grid; gap:10px">
       <input id="email" type="email" autocomplete="username" placeholder="email" />
       <input id="password" type="password" autocomplete="current-password" placeholder="password" />
+      <input id="invite" type="text" autocomplete="off" placeholder="invite code (new accounts only)" />
       <button onclick="login()">Sign in</button>
       <div class="mut">Uses your Git1 parent account (same as the app).</div>
     </div>
@@ -105,11 +106,12 @@ async function api(path, opts={}){
 async function login(){
   const email=document.getElementById('email').value.trim();
   const password=document.getElementById('password').value;
+  const invite=document.getElementById('invite').value.trim();
   try{
     let r;
     try { r = await api('/auth/login',{method:'POST',body:JSON.stringify({email,password})}); }
-    catch(e){ // auto-register fallback (matches the app)
-      r = await api('/auth/register',{method:'POST',body:JSON.stringify({email,password})});
+    catch(e){ // fall through to register if account doesn't exist
+      r = await api('/auth/register',{method:'POST',body:JSON.stringify({email,password,invite})});
     }
     TOKEN=r.token; localStorage.setItem('git1_token',TOKEN);
     showApp();

@@ -126,9 +126,18 @@ const auth = (req: AuthedRequest, res: Response, next: NextFunction) => {
 // ---------- Auth ----------
 const credSchema = z.object({ email: z.string().email(), password: z.string().min(6) });
 
+// Invite-code gate: only people who know PARENT_INVITE_CODE may register.
+// Unset = registration disabled entirely (use this once both parents are in).
+const INVITE_CODE = process.env.PARENT_INVITE_CODE ?? '';
 app.post('/auth/register', (req, res) => {
-  const p = credSchema.safeParse(req.body);
+  const p = z.object({
+    email: z.string().email(),
+    password: z.string().min(8),
+    invite: z.string().optional(),
+  }).safeParse(req.body);
   if (!p.success) return res.status(400).json(p.error);
+  if (!INVITE_CODE) return res.status(403).json({ error: 'registration disabled' });
+  if (p.data.invite !== INVITE_CODE) return res.status(403).json({ error: 'invalid invite code' });
   if (store.findUserByEmail(p.data.email))
     return res.status(409).json({ error: 'email taken' });
   const u = store.createUser(p.data.email, sha(p.data.password));
