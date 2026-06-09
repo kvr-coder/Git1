@@ -104,9 +104,19 @@ current process owner. If no SID can be resolved it **refuses to block**
   ping `/health` and wait.
 - Alternative to Litestream: $7/mo Render disk + `GIT1_DB=/var/data/git1.db`.
 
-### 4. Expo Go push notifications
-Apple/Expo removed remote push from Expo Go. No lock-screen banners without
-a $99/yr Apple Developer account + EAS dev build. In-app toasts only.
+### 4. Push notifications — FIXED via browser Web Push (free)
+Apple/Expo removed remote push from Expo Go (no lock-screen banners without
+$99/yr Apple Dev + EAS dev build). Replaced with **W3C Web Push** to the
+parent web dashboard at `/`:
+- VAPID keys (auto-generated at first boot; copy from logs into Render env
+  `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` to make them stable across redeploys).
+- Service worker at `/sw.js`, manifest at `/manifest.webmanifest`.
+- Tap 🔔 in the dashboard header → permission prompt → subscribed; a test
+  notification is sent immediately to confirm.
+- iPhone: **Share → Add to Home Screen** once (iOS 16.4+); banners then arrive
+  even with the phone locked. Android Chrome: works straight from a tab.
+- All existing notify kinds (request_minutes, chore_request, tamper_offline,
+  device_online, etc.) now fan out via `notifyUser()` to both Expo + Web Push.
 
 ---
 

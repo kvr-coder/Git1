@@ -150,6 +150,15 @@ CREATE TABLE IF NOT EXISTS chore_templates (
   createdAt INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS chore_templates_device ON chore_templates(deviceId);
+
+CREATE TABLE IF NOT EXISTS web_push_subs (
+  endpoint TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  createdAt INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS web_push_subs_user ON web_push_subs(userId);
 `);
 
 for (const stmt of [
@@ -227,6 +236,21 @@ export const store = {
     db.prepare(
       'INSERT OR IGNORE INTO push_tokens (userId, token) VALUES (?, ?)',
     ).run(userId, pushToken);
+  },
+  addWebPushSub(userId: string, sub: { endpoint: string; keys: { p256dh: string; auth: string } }) {
+    db.prepare(
+      'INSERT OR REPLACE INTO web_push_subs (endpoint, userId, p256dh, auth, createdAt) VALUES (?, ?, ?, ?, ?)',
+    ).run(sub.endpoint, userId, sub.keys.p256dh, sub.keys.auth, Date.now());
+  },
+  removeWebPushSub(endpoint: string) {
+    db.prepare('DELETE FROM web_push_subs WHERE endpoint = ?').run(endpoint);
+  },
+  webPushSubsForUser(userId: string): { endpoint: string; keys: { p256dh: string; auth: string } }[] {
+    return (db.prepare('SELECT endpoint, p256dh, auth FROM web_push_subs WHERE userId = ?')
+      .all(userId) as any[]).map((r) => ({
+      endpoint: r.endpoint,
+      keys: { p256dh: r.p256dh, auth: r.auth },
+    }));
   },
   pushTokensForUser(userId: string): string[] {
     return (

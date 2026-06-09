@@ -6,7 +6,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { WebSocketServer, type WebSocket } from 'ws';
 import { z } from 'zod';
 import { store, type DeviceRow } from './store.js';
-import { sendPush, shouldNotify } from './push.js';
+import { notifyUser, sendPush, shouldNotify, webPushPublicKey } from './push.js';
 import type { AgentMessage, Command, ServerMessage } from './types.js';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -43,6 +43,26 @@ const ADMIN_HTML = (() => {
   }
 })();
 app.get('/', (_req, res) => res.type('html').send(ADMIN_HTML));
+
+// Service worker + PWA manifest — required for Web Push and iOS A2HS.
+const SW_JS = (() => {
+  try { return readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8'); } catch { return ''; }
+})();
+app.get('/sw.js', (_req, res) => res.type('application/javascript').send(SW_JS));
+app.get('/manifest.webmanifest', (_req, res) => res.json({
+  name: 'Git1 — Parent', short_name: 'Git1',
+  start_url: '/', display: 'standalone',
+  background_color: '#0b1220', theme_color: '#0b1220',
+  icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }],
+}));
+// Tiny inline PNG icons (blue circle) so install works without binary assets.
+const ICON_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+app.get('/icon-192.png', (_req, res) => res.type('png').send(ICON_PNG));
+app.get('/icon-512.png', (_req, res) => res.type('png').send(ICON_PNG));
 
 // ----- Kid dashboard PREVIEW (no agent, no locking) -----
 // Lets you see the kid UI from anywhere by hitting /kid in a browser. All
@@ -128,6 +148,31 @@ app.post('/push/register', auth, (req: AuthedRequest, res) => {
   const t = z.object({ token: z.string() }).safeParse(req.body);
   if (!t.success) return res.status(400).json(t.error);
   store.addPushToken(req.userId!, t.data.token);
+  res.json({ ok: true });
+});
+
+// ---------- Web Push (browser dashboard) ----------
+// Public key for the dashboard to subscribe with (no auth — it's public).
+app.get('/webpush/key', (_req, res) => res.json({ key: webPushPublicKey() }));
+const webSubSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({ p256dh: z.string(), auth: z.string() }),
+});
+app.post('/webpush/subscribe', auth, (req: AuthedRequest, res) => {
+  const p = webSubSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  store.addWebPushSub(req.userId!, p.data);
+  res.json({ ok: true });
+});
+app.post('/webpush/unsubscribe', auth, (req: AuthedRequest, res) => {
+  const p = z.object({ endpoint: z.string().url() }).safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  store.removeWebPushSub(p.data.endpoint);
+  res.json({ ok: true });
+});
+// Lets the parent verify push works end-to-end without bothering the kid.
+app.post('/webpush/test', auth, async (req: AuthedRequest, res) => {
+  await notifyUser(req.userId!, 'Git1 test', 'Push notifications are working.', { kind: 'test' });
   res.json({ ok: true });
 });
 
@@ -442,8 +487,7 @@ wss.on('connection', (ws, req) => {
   agentSockets.set(device.id, ws);
   // If this device was previously flagged offline (tamper), notify recovery.
   if (offlineAlerted.delete(device.id)) {
-    const tokens = store.pushTokensForUser(device.userId);
-    sendPush(tokens, 'Device back online', `${device.name} reconnected`, {
+    notifyUser(device.userId,'Device back online', `${device.name} reconnected`, {
       deviceId: device.id,
       kind: 'device_online',
     });
@@ -508,8 +552,7 @@ wss.on('connection', (ws, req) => {
           kind: 'request_minutes',
           message,
         });
-        const tokens = store.pushTokensForUser(device.userId);
-        sendPush(tokens, 'Time request', message, {
+        notifyUser(device.userId,'Time request', message, {
           deviceId: device.id,
           kind: 'request_minutes',
           requestId: req.id,
@@ -524,8 +567,7 @@ wss.on('connection', (ws, req) => {
           kind: 'borrow',
           message,
         });
-        const tokens = store.pushTokensForUser(device.userId);
-        sendPush(tokens, 'Time borrowed', message, {
+        notifyUser(device.userId,'Time borrowed', message, {
           deviceId: device.id,
           kind: 'borrow',
           minutes,
@@ -542,8 +584,7 @@ wss.on('connection', (ws, req) => {
           kind: 'chore_request',
           message,
         });
-        const tokens = store.pushTokensForUser(device.userId);
-        sendPush(tokens, 'Chore submitted', message, {
+        notifyUser(device.userId,'Chore submitted', message, {
           deviceId: device.id,
           kind: 'chore_request',
           requestId: cr.id,
@@ -568,8 +609,7 @@ wss.on('connection', (ws, req) => {
           kind: 'bank_spent',
           message,
         });
-        const tokens = store.pushTokensForUser(device.userId);
-        sendPush(tokens, 'Bank spent', message, { deviceId: device.id, kind: 'bank_spent' });
+        notifyUser(device.userId,'Bank spent', message, { deviceId: device.id, kind: 'bank_spent' });
       } else {
         store.appendActivity({
           userId: device.userId,
@@ -580,8 +620,7 @@ wss.on('connection', (ws, req) => {
         if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
         if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
         if (shouldNotify(msg.name)) {
-          const tokens = store.pushTokensForUser(device.userId);
-          sendPush(tokens, 'Git1', message, { deviceId: device.id, kind: msg.name });
+          notifyUser(device.userId, 'Git1', message, { deviceId: device.id, kind: msg.name });
         }
       }
     }
@@ -624,7 +663,7 @@ setInterval(() => {
       const message = `${d.name}: agent offline for ${mins} min — possible tamper`;
       console.warn(`[tamper] ${message}`);
       store.appendActivity({ userId: d.userId, deviceId: d.id, kind: 'tamper_offline', message });
-      sendPush(store.pushTokensForUser(d.userId), 'Agent offline', message, {
+      notifyUser(d.userId, 'Agent offline', message, {
         deviceId: d.id,
         kind: 'tamper_offline',
       });
