@@ -34,6 +34,9 @@ import enforcer_net
 import enforcer_schedule
 import enforcer_vpn
 import lockmsg
+import location_uploader
+import offline_queue
+import recovery as recovery_mod
 import session_win
 import updater
 
@@ -49,6 +52,8 @@ USAGE_PATH = CONFIG_DIR / "usage.json"
 # which a Standard-user child cannot write — so they can't forge a permissive
 # policy. (Signed policies are a planned further hardening.)
 POLICY_PATH = CONFIG_DIR / "policy.json"
+QUEUE_PATH = CONFIG_DIR / "offline-queue.json"
+RECOVERY_HINT_PATH = CONFIG_DIR / "recovery.txt"
 
 IDLE_THRESHOLD_SEC = 60
 SAMPLE_INTERVAL_SEC = 15
@@ -233,6 +238,10 @@ class Usage:
 
 
 # ---------- Pairing ----------
+def try_recovery() -> str | None:
+    return recovery_mod.try_recovery(SERVER_HTTP, RECOVERY_HINT_PATH)
+
+
 def pair() -> str:
     # Retry the initial pair/start until the server responds. The Cloudflare
     # quick tunnel can take 10-30s after launch before DNS resolves.
@@ -288,22 +297,24 @@ class WSBridge:
     def emit(self, name: str, payload: dict | None = None) -> None:
         loop = self.loop
         ws = self.ws
-        if loop is None or ws is None:
-            print(f"[bridge] no active WS; dropping {name}")
-            return
-        if loop.is_closed():
-            print(f"[bridge] loop is closed; dropping {name}")
+        # WS down — persist so we can replay after reconnect (offline-first).
+        if loop is None or ws is None or loop.is_closed():
+            print(f"[bridge] WS down; queueing {name}")
+            queue.append(name, payload)
             self.unbind()
             return
         msg = json.dumps({"kind": "event", "name": name, "payload": payload or {}})
         try:
             asyncio.run_coroutine_threadsafe(ws.send(msg), loop)
         except RuntimeError as e:
-            print(f"[bridge] emit failed: {e}; dropping {name}")
+            print(f"[bridge] emit failed: {e}; queueing {name}")
+            queue.append(name, payload)
             self.unbind()
 
 
 bridge = WSBridge()
+# Initialised after server URL/token are known (in main()).
+queue: "offline_queue.OfflineQueue" = None  # type: ignore[assignment]
 
 
 # ---------- Command handler ----------
@@ -558,6 +569,12 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
     async with websockets.connect(url) as ws:
         print("[ws] connected")
         bridge.bind(asyncio.get_running_loop(), ws)
+        # Drain anything we queued while offline.
+        if queue is not None and queue.size() > 0:
+            try:
+                queue.drain(token)
+            except Exception as e:  # noqa: BLE001
+                print(f"[offline-q] drain at connect failed: {e}")
         loop = asyncio.create_task(enforcer(ws, usage, dash))
         try:
             async for raw in ws:
@@ -600,6 +617,7 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
 
 
 def main() -> None:
+    global queue
     cfg = load_json(CONFIG_PATH)
     token = cfg.get("agentToken")
     if not token:
@@ -607,6 +625,11 @@ def main() -> None:
         cfg["agentToken"] = token
         save_json(CONFIG_PATH, cfg)
         print("[pair] success, token saved")
+    queue = offline_queue.OfflineQueue(QUEUE_PATH, SERVER_HTTP)
+    if queue.size():
+        print(f"[offline-q] {queue.size()} event(s) from previous run will replay on connect")
+    # Best-effort location reporter (no-op on machines without internet).
+    location_uploader.start(SERVER_HTTP, lambda: cfg.get("agentToken"))
 
     # Initialise NTP anchor + VPN baseline before the loop runs.
     if clock.refresh(force=True) is None:
@@ -673,7 +696,19 @@ def main() -> None:
             backoff = 2
         except Exception as e:
             offline_for = time.time() - last_connected
+            err_str = str(e)
             print(f"[ws] disconnected: {e}; offline {int(offline_for)}s; retrying in {backoff}s")
+            # Recovery: parent rotated the agent token (e.g. issued a recovery
+            # code). The server closes the WS with 4401 unauthorized. Try the
+            # recovery hint file before falling back to backoff.
+            if "4401" in err_str or "unauthorized" in err_str.lower():
+                new_token = try_recovery()
+                if new_token:
+                    token = new_token
+                    cfg["agentToken"] = token
+                    save_json(CONFIG_PATH, cfg)
+                    backoff = 2
+                    continue
             # Deadman: if internet is firewall-blocked AND we've been offline
             # too long, auto-unblock so parent can recover.
             if enforcer_net.is_blocked() and offline_for > NET_DEADMAN_SEC:
