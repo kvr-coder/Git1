@@ -61,28 +61,56 @@ if (-not $nssm) {
   $nssmDir = Join-Path $AgentDir ".bin"
   $nssm = Join-Path $nssmDir "nssm.exe"
   if (-not (Test-Path $nssm)) {
-    Write-Host "[svc] downloading NSSM..."
     New-Item -ItemType Directory -Force -Path $nssmDir | Out-Null
-    $zip = Join-Path $env:TEMP "nssm.zip"
-    $mirrors = @(
-      "https://nssm.cc/release/nssm-2.24.zip",
-      "https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip",
-      "https://github.com/kvr-coder/git1/raw/main/scripts/vendor/nssm-2.24.zip"
+    $zip = $null
+
+    # 1. Look for nssm.zip the user dropped locally (preferred — no network).
+    $localCandidates = @(
+      "$env:USERPROFILE\Downloads\nssm-2.24.zip",
+      "$env:USERPROFILE\Downloads\nssm.zip",
+      "C:\Users\Public\Downloads\nssm-2.24.zip",
+      "$PSScriptRoot\nssm-2.24.zip",
+      (Join-Path $AgentDir "nssm-2.24.zip")
     )
-    $ok = $false
-    foreach ($url in $mirrors) {
-      for ($i=1; $i -le 3; $i++) {
-        try {
-          Write-Host "[svc] trying $url (attempt $i)"
-          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30
-          if ((Get-Item $zip).Length -gt 100000) { $ok = $true; break }
-        } catch { Write-Host "[svc]   failed: $_" }
-        Start-Sleep -Seconds ($i * 2)
-      }
-      if ($ok) { break }
+    # Also scan all drive roots for nssm-2.24.zip (USB sticks etc).
+    foreach ($d in (Get-PSDrive -PSProvider FileSystem)) {
+      $localCandidates += (Join-Path $d.Root "nssm-2.24.zip")
     }
-    if (-not $ok) { throw "Could not download NSSM from any mirror." }
+    foreach ($p in $localCandidates) {
+      if (Test-Path $p) { Write-Host "[svc] using local NSSM: $p"; $zip = $p; break }
+    }
+
+    # 2. Otherwise, try mirrors with retry.
+    if (-not $zip) {
+      $zip = Join-Path $env:TEMP "nssm.zip"
+      $mirrors = @(
+        "https://nssm.cc/release/nssm-2.24.zip",
+        "https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip"
+      )
+      $ok = $false
+      foreach ($url in $mirrors) {
+        for ($i=1; $i -le 3; $i++) {
+          try {
+            Write-Host "[svc] trying $url (attempt $i)"
+            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30
+            if ((Get-Item $zip).Length -gt 100000) { $ok = $true; break }
+          } catch { Write-Host "[svc]   failed: $_" }
+          Start-Sleep -Seconds ($i * 2)
+        }
+        if ($ok) { break }
+      }
+      if (-not $ok) {
+        Write-Host ""
+        Write-Host "Could not download NSSM. Easy fix:" -ForegroundColor Yellow
+        Write-Host "  1. On any PC with internet, download: https://nssm.cc/release/nssm-2.24.zip"
+        Write-Host "  2. Put nssm-2.24.zip in this PC's Downloads folder (or anywhere)"
+        Write-Host "  3. Re-run the installer"
+        throw "NSSM not available."
+      }
+    }
+
     $tmp = Join-Path $env:TEMP "nssm-extract"
+    if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
     Expand-Archive -Force $zip $tmp
     $arch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
     Copy-Item (Join-Path $tmp "nssm-2.24\$arch\nssm.exe") $nssm -Force
