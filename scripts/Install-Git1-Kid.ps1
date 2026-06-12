@@ -1,5 +1,5 @@
 <#
-  Install-Git1-Kid.ps1 — set up the Git1 agent on a CHILD's Windows PC.
+  Install-Git1-Kid.ps1 - set up the Git1 agent on a CHILD's Windows PC.
 
   Run once (the .bat wrapper self-elevates to Administrator). From zero it:
     1. ensures Python 3 + Git are installed (via winget if missing)
@@ -50,8 +50,8 @@ if (-not (Have git))    { Winget-Install "Git.Git" }
 # refresh PATH for this session so the just-installed tools are visible
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
             [System.Environment]::GetEnvironmentVariable("Path","User")
-if (-not (Have python)) { throw "Python still not found after install — open a new shell and re-run." }
-if (-not (Have git))    { throw "Git still not found after install — open a new shell and re-run." }
+if (-not (Have python)) { throw "Python still not found after install - open a new shell and re-run." }
+if (-not (Have git))    { throw "Git still not found after install - open a new shell and re-run." }
 
 # --- 2. clone (or update) the repo into a protected location ---
 Step "Fetching agent code -> $InstallDir"
@@ -74,7 +74,7 @@ python -m pip install -r (Join-Path $InstallDir "agent\requirements.txt")
 Step "Creating standard account '$ChildUser'"
 $existing = Get-LocalUser -Name $ChildUser -ErrorAction SilentlyContinue
 if ($existing) {
-  Write-Host "  account already exists — leaving it as-is."
+  Write-Host "  account already exists - leaving it as-is."
 } else {
   if ($ChildPassword) {
     $sec = ConvertTo-SecureString $ChildPassword -AsPlainText -Force
@@ -88,7 +88,7 @@ if ($existing) {
 # Safety: make sure the child is NOT a local Administrator (would bypass everything).
 try {
   Remove-LocalGroupMember -Group "Administrators" -Member $ChildUser -ErrorAction Stop
-  Write-Warning "  '$ChildUser' was an Administrator — demoted to Standard."
+  Write-Warning "  '$ChildUser' was an Administrator - demoted to Standard."
 } catch { } # not an admin: expected
 
 # --- 5. install the hardened service (reuses install-service.ps1) ---
@@ -97,7 +97,7 @@ Step "Installing hardened agent service"
     -Server $Server -ChildUser $ChildUser -UpdateBranch $Branch
 
 # --- 5b. kid-facing app: tray icon + shortcuts + autorun at kid login ---
-Step "Setting up the kid's 'Git1 — My time' app"
+Step "Setting up the kid's 'Git1 - My time' app"
 $python    = (Get-Command python -ErrorAction SilentlyContinue).Source
 $pythonw   = if ($python) { Join-Path (Split-Path $python) "pythonw.exe" } else { "" }
 if (-not (Test-Path $pythonw)) { $pythonw = $python }   # fallback
@@ -185,9 +185,9 @@ try {
 } catch { Write-Host "  Re-pair script lives at: $repairSrc" }
 
 Write-Host ""
-Write-Host "IMPORTANT — you can ALWAYS undo this:" -ForegroundColor Yellow
+Write-Host "IMPORTANT - you can ALWAYS undo this:" -ForegroundColor Yellow
 Write-Host "  * Enforcement only affects the '$ChildUser' account. Your OWN admin"
-Write-Host "    account is never locked and keeps internet — log into it to fix things."
+Write-Host "    account is never locked and keeps internet - log into it to fix things."
 Write-Host "  * Run 'Recover-Git1.bat' (desktop) to fully disarm, even with no server."
 Write-Host "  * Worst case, boot into SAFE MODE then run Recover-Git1.bat."
 Write-Host "  >> Make sure your admin account has a PASSWORD YOU REMEMBER before you"
