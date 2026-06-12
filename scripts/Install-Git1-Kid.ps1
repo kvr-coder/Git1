@@ -48,12 +48,12 @@ function Winget-Install($id) {
   }
   return $true
 }
-function Download-And-Install($url, $args) {
+function Download-And-Install($url, $installArgs) {
   $tmp = Join-Path $env:TEMP ([IO.Path]::GetFileName($url))
   Write-Host "  downloading $url"
   Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $tmp
   Write-Host "  running installer..."
-  Start-Process -FilePath $tmp -ArgumentList $args -Wait
+  Start-Process -FilePath $tmp -ArgumentList $installArgs -Wait
   Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 }
 if (-not (Have python)) {
