@@ -141,8 +141,13 @@ if (-not $nssm) {
 Write-Host "[svc] nssm: $nssm"
 
 # --- (re)install the service ---
-& $nssm stop $ServiceName 2>$null | Out-Null
-& $nssm remove $ServiceName confirm 2>$null | Out-Null
+# These cleanup calls fail harmlessly on a fresh install ("Can't open service!").
+# Run them with errors silenced so $ErrorActionPreference='Stop' doesn't abort.
+$eapPrev = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& cmd /c "`"$nssm`" stop $ServiceName" 2>$null | Out-Null
+& cmd /c "`"$nssm`" remove $ServiceName confirm" 2>$null | Out-Null
+$ErrorActionPreference = $eapPrev
 
 & $nssm install $ServiceName $python $AgentPy
 & $nssm set $ServiceName AppDirectory $AgentDir
