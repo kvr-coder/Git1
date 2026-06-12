@@ -4,6 +4,11 @@ REM  Git1 EMERGENCY OFF SWITCH. Double-click to fully disarm
 REM  Git1 on this PC (stops service+watchdog, restores internet
 REM  and logon, clears sticky lock). Works offline.
 REM
+REM  THIS IS THE "NUKE" BUTTON — it uninstalls all enforcement.
+REM  To just RE-PAIR the kid PC to the parent account (e.g. after
+REM  reinstall), use Repair-Pair-Git1.bat instead — it keeps Git1
+REM  running and only rotates the agent token.
+REM
 REM  If you're being re-locked every few seconds: reboot into
 REM  SAFE MODE first, then run this.
 REM ============================================================

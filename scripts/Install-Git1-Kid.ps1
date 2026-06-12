@@ -171,13 +171,18 @@ if ($code) {
 Write-Host "`nAll set. The agent will auto-start at boot and self-update on each push." -ForegroundColor Green
 Write-Host "Have the child log in to the '$ChildUser' account to use the PC."
 
-# --- safety net: put the emergency off-switch on the desktop ---
+# --- safety net: put the emergency off-switch + re-pair tool on the desktop ---
 Step "Lockout safety"
 $recoverSrc = Join-Path $InstallDir "scripts\Recover-Git1.bat"
+$repairSrc  = Join-Path $InstallDir "scripts\Repair-Pair-Git1.bat"
 try {
   Copy-Item $recoverSrc "C:\Users\Public\Desktop\Recover-Git1.bat" -Force
   Write-Host "  Placed 'Recover-Git1.bat' on the desktop (emergency off switch)."
 } catch { Write-Host "  Recovery script lives at: $recoverSrc" }
+try {
+  Copy-Item $repairSrc "C:\Users\Public\Desktop\Repair-Pair-Git1.bat" -Force
+  Write-Host "  Placed 'Repair-Pair-Git1.bat' on the desktop (parent recovery code -> re-pair)."
+} catch { Write-Host "  Re-pair script lives at: $repairSrc" }
 
 Write-Host ""
 Write-Host "IMPORTANT — you can ALWAYS undo this:" -ForegroundColor Yellow
