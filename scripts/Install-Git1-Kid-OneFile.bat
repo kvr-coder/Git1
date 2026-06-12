@@ -1,14 +1,14 @@
 @echo off
+setlocal
 REM ============================================================
-REM  Git1 Kid PC installer - SINGLE FILE, no other files needed.
-REM  Double-click this on the CHILD's PC. Self-elevates to Admin.
-REM  Edit the three lines below, then run.
+REM  Git1 Kid PC installer - SINGLE FILE. Double-click on CHILD PC.
+REM  Self-elevates to Admin. Edit the three lines below first.
 REM ============================================================
 set "GIT1_SERVER=https://git1-server.onrender.com"
 set "CHILD_USER=Kiddo"
 set "BRANCH=claude/setup-git1-dev-environment-QeNdU"
 
-net session >/dev/null 2>&1
+net session >nul 2>&1
 if %errorlevel% NEQ 0 (
   echo Requesting Administrator rights...
   powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
@@ -16,198 +16,221 @@ if %errorlevel% NEQ 0 (
 )
 
 echo Extracting embedded installer...
-set "B64=%~dp0git1install.b64"
-set "PS1=%~dp0git1install.ps1"
+set "PS1=%TEMP%\Install-Git1-Kid.ps1"
+echo   target: %PS1%
 
-if exist "%B64%" del "%B64%" >/dev/null 2>&1
-if exist "%PS1%" del "%PS1%" >/dev/null 2>&1
-
-echo -----BEGIN CERTIFICATE----- >> "%B64%"
-echo PCMKICBJbnN0YWxsLUdpdDEtS2lkLnBzMSAtIHNldCB1cCB0aGUgR2l0MSBhZ2VudCBvbiBhIENI>> "%B64%"
-echo SUxEJ3MgV2luZG93cyBQQy4KCiAgUnVuIG9uY2UgKHRoZSAuYmF0IHdyYXBwZXIgc2VsZi1lbGV2>> "%B64%"
-echo YXRlcyB0byBBZG1pbmlzdHJhdG9yKS4gRnJvbSB6ZXJvIGl0OgogICAgMS4gZW5zdXJlcyBQeXRo>> "%B64%"
-echo b24gMyArIEdpdCBhcmUgaW5zdGFsbGVkICh2aWEgd2luZ2V0IGlmIG1pc3NpbmcpCiAgICAyLiBj>> "%B64%"
-echo bG9uZXMgdGhlIHJlcG8gdG8gYSBwcm90ZWN0ZWQgbG9jYXRpb24gdGhlIGtpZCBjYW4ndCBlZGl0>> "%B64%"
-echo CiAgICAzLiBpbnN0YWxscyB0aGUgYWdlbnQncyBQeXRob24gZGVwZW5kZW5jaWVzCiAgICA0LiBj>> "%B64%"
-echo cmVhdGVzIGEgZGVkaWNhdGVkIFNUQU5EQVJEIChub24tYWRtaW4pIGFjY291bnQgZm9yIHRoZSBj>> "%B64%"
-echo aGlsZAogICAgNS4gaW5zdGFsbHMgdGhlIGhhcmRlbmVkIExvY2FsU3lzdGVtIHNlcnZpY2UgKyB3>> "%B64%"
-echo YXRjaGRvZyAoaW5zdGFsbC1zZXJ2aWNlLnBzMSkKICAgIDYuIHN0YXJ0cyBpdCBhbmQgc2hvd3Mg>> "%B64%"
-echo dGhlIHBhaXJpbmcgY29kZSB0byBlbnRlciBpbiB0aGUgcGFyZW50IGFwcAoKICBQbGFpbiBzY3Jp>> "%B64%"
-echo cHQgKG5vIHBhY2tlZCAuZXhlKSBzbyBhbnRpdmlydXMgZG9lc24ndCBxdWFyYW50aW5lIGl0LCBh>> "%B64%"
-echo bmQgc28gdGhlCiAgYWdlbnQgc3RheXMgYSBnaXQgY2hlY2tvdXQgdGhhdCBjYW4gc2VsZi11cGRh>> "%B64%"
-echo dGUgb24gZXZlcnkgcHVzaC4KCiAgRXhhbXBsZToKICAgIC5cSW5zdGFsbC1HaXQxLUtpZC5wczEg>> "%B64%"
-echo LVNlcnZlciBodHRwczovL2dpdDEtc2VydmVyLm9ucmVuZGVyLmNvbSBgCiAgICAgICAgLUNoaWxk>> "%B64%"
-echo VXNlciBLaWRkbyAtQnJhbmNoIGNsYXVkZS9zZXR1cC1naXQxLWRldi1lbnZpcm9ubWVudC1RZU5k>> "%B64%"
-echo VQojPgpwYXJhbSgKICBbc3RyaW5nXSRTZXJ2ZXIgICAgICA9ICJodHRwczovL2dpdDEtc2VydmVy>> "%B64%"
-echo Lm9ucmVuZGVyLmNvbSIsCiAgW3N0cmluZ10kQ2hpbGRVc2VyICAgPSAiS2lkZG8iLAogIFtzdHJp>> "%B64%"
-echo bmddJENoaWxkUGFzc3dvcmQgPSAiIiwgICAgICAgICAgICAgICAgICMgYmxhbmsgPSBwYXNzd29y>> "%B64%"
-echo ZGxlc3Mga2lkIGxvZ2luCiAgW3N0cmluZ10kQnJhbmNoICAgICAgPSAiY2xhdWRlL3NldHVwLWdp>> "%B64%"
-echo dDEtZGV2LWVudmlyb25tZW50LVFlTmRVIiwKICBbc3RyaW5nXSRSZXBvVXJsICAgICA9ICJodHRw>> "%B64%"
-echo czovL2dpdGh1Yi5jb20va3ZyLWNvZGVyL2dpdDEuZ2l0IiwKICBbc3RyaW5nXSRJbnN0YWxsRGly>> "%B64%"
-echo ICA9ICJDOlxQcm9ncmFtRGF0YVxHaXQxIiAjIG91dHNpZGUgdGhlIGtpZCdzIHByb2ZpbGUKKQoK>> "%B64%"
-echo JEVycm9yQWN0aW9uUHJlZmVyZW5jZSA9ICJTdG9wIgpmdW5jdGlvbiBTdGVwKCRtKSB7IFdyaXRl>> "%B64%"
-echo LUhvc3QgImBuPT09ICRtID09PSIgLUZvcmVncm91bmRDb2xvciBDeWFuIH0KCiMgLS0tIDAuIG11>> "%B64%"
-echo c3QgYmUgYWRtaW4gKHRoZSAuYmF0IGVsZXZhdGVzOyBkb3VibGUtY2hlY2sgaGVyZSkgLS0tCmlm>> "%B64%"
-echo ICgtbm90IChbU2VjdXJpdHkuUHJpbmNpcGFsLldpbmRvd3NQcmluY2lwYWxdW1NlY3VyaXR5LlBy>> "%B64%"
-echo aW5jaXBhbC5XaW5kb3dzSWRlbnRpdHldOjpHZXRDdXJyZW50KCkKICAgICAgICApLklzSW5Sb2xl>> "%B64%"
-echo KFtTZWN1cml0eS5QcmluY2lwYWwuV2luZG93c0J1aWx0aW5Sb2xlXTo6QWRtaW5pc3RyYXRvcikp>> "%B64%"
-echo IHsKICB0aHJvdyAiUnVuIGFzIEFkbWluaXN0cmF0b3IgKHVzZSBJbnN0YWxsLUdpdDEtS2lkLmJh>> "%B64%"
-echo dCkuIgp9CgojIC0tLSAxLiBwcmVyZXF1aXNpdGVzOiBQeXRob24gKyBHaXQgLS0tClN0ZXAgIkNo>> "%B64%"
-echo ZWNraW5nIHByZXJlcXVpc2l0ZXMgKFB5dGhvbiwgR2l0KSIKZnVuY3Rpb24gSGF2ZSgkY21kKSB7>> "%B64%"
-echo IFtib29sXShHZXQtQ29tbWFuZCAkY21kIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlKSB9>> "%B64%"
-echo CmZ1bmN0aW9uIFdpbmdldC1JbnN0YWxsKCRpZCkgewogIGlmIChIYXZlIHdpbmdldCkgewogICAg>> "%B64%"
-echo V3JpdGUtSG9zdCAiICBpbnN0YWxsaW5nICRpZCB2aWEgd2luZ2V0Li4uIgogICAgd2luZ2V0IGlu>> "%B64%"
-echo c3RhbGwgLS1pZCAkaWQgLWUgLS1zaWxlbnQgLS1hY2NlcHQtc291cmNlLWFncmVlbWVudHMgLS1h>> "%B64%"
-echo Y2NlcHQtcGFja2FnZS1hZ3JlZW1lbnRzCiAgfSBlbHNlIHsKICAgIHRocm93ICJ3aW5nZXQgbm90>> "%B64%"
-echo IGF2YWlsYWJsZSBhbmQgJGlkIGlzIG1pc3NpbmcuIEluc3RhbGwgJGlkIG1hbnVhbGx5LCB0aGVu>> "%B64%"
-echo IHJlLXJ1bi4iCiAgfQp9CmlmICgtbm90IChIYXZlIHB5dGhvbikpIHsgV2luZ2V0LUluc3RhbGwg>> "%B64%"
-echo IlB5dGhvbi5QeXRob24uMy4xMiIgfQppZiAoLW5vdCAoSGF2ZSBnaXQpKSAgICB7IFdpbmdldC1J>> "%B64%"
-echo bnN0YWxsICJHaXQuR2l0IiB9CiMgcmVmcmVzaCBQQVRIIGZvciB0aGlzIHNlc3Npb24gc28gdGhl>> "%B64%"
-echo IGp1c3QtaW5zdGFsbGVkIHRvb2xzIGFyZSB2aXNpYmxlCiRlbnY6UGF0aCA9IFtTeXN0ZW0uRW52>> "%B64%"
-echo aXJvbm1lbnRdOjpHZXRFbnZpcm9ubWVudFZhcmlhYmxlKCJQYXRoIiwiTWFjaGluZSIpICsgIjsi>> "%B64%"
-echo ICsKICAgICAgICAgICAgW1N5c3RlbS5FbnZpcm9ubWVudF06OkdldEVudmlyb25tZW50VmFyaWFi>> "%B64%"
-echo bGUoIlBhdGgiLCJVc2VyIikKaWYgKC1ub3QgKEhhdmUgcHl0aG9uKSkgeyB0aHJvdyAiUHl0aG9u>> "%B64%"
-echo IHN0aWxsIG5vdCBmb3VuZCBhZnRlciBpbnN0YWxsIC0gb3BlbiBhIG5ldyBzaGVsbCBhbmQgcmUt>> "%B64%"
-echo cnVuLiIgfQppZiAoLW5vdCAoSGF2ZSBnaXQpKSAgICB7IHRocm93ICJHaXQgc3RpbGwgbm90IGZv>> "%B64%"
-echo dW5kIGFmdGVyIGluc3RhbGwgLSBvcGVuIGEgbmV3IHNoZWxsIGFuZCByZS1ydW4uIiB9CgojIC0t>> "%B64%"
-echo LSAyLiBjbG9uZSAob3IgdXBkYXRlKSB0aGUgcmVwbyBpbnRvIGEgcHJvdGVjdGVkIGxvY2F0aW9u>> "%B64%"
-echo IC0tLQpTdGVwICJGZXRjaGluZyBhZ2VudCBjb2RlIC0+ICRJbnN0YWxsRGlyIgppZiAoVGVzdC1Q>> "%B64%"
-echo YXRoIChKb2luLVBhdGggJEluc3RhbGxEaXIgIi5naXQiKSkgewogIGdpdCAtQyAkSW5zdGFsbERp>> "%B64%"
-echo ciBmZXRjaCBvcmlnaW4gJEJyYW5jaAogIGdpdCAtQyAkSW5zdGFsbERpciBjaGVja291dCAkQnJh>> "%B64%"
-echo bmNoCiAgZ2l0IC1DICRJbnN0YWxsRGlyIHB1bGwgLS1mZi1vbmx5IG9yaWdpbiAkQnJhbmNoCn0g>> "%B64%"
-echo ZWxzZSB7CiAgZ2l0IGNsb25lIC0tYnJhbmNoICRCcmFuY2ggJFJlcG9VcmwgJEluc3RhbGxEaXIK>> "%B64%"
-echo fQojIExvY2sgZG93bjogb25seSBBZG1pbmlzdHJhdG9ycy9TWVNURU0gY2FuIG1vZGlmeSAoa2lk>> "%B64%"
-echo IGNhbid0IHRhbXBlciB3aXRoIGNvZGUpLgppY2FjbHMgJEluc3RhbGxEaXIgL2luaGVyaXRhbmNl>> "%B64%"
-echo OnIgL2dyYW50OnIgIkFkbWluaXN0cmF0b3JzOihPSSkoQ0kpRiIgIlNZU1RFTTooT0kpKENJKUYi>> "%B64%"
-echo ICJVc2VyczooT0kpKENJKVJYIiB8IE91dC1OdWxsCgojIC0tLSAzLiBweXRob24gZGVwcyAtLS0K>> "%B64%"
-echo U3RlcCAiSW5zdGFsbGluZyBQeXRob24gZGVwZW5kZW5jaWVzIgpweXRob24gLW0gcGlwIGluc3Rh>> "%B64%"
-echo bGwgLS11cGdyYWRlIHBpcCB8IE91dC1OdWxsCnB5dGhvbiAtbSBwaXAgaW5zdGFsbCAtciAoSm9p>> "%B64%"
-echo bi1QYXRoICRJbnN0YWxsRGlyICJhZ2VudFxyZXF1aXJlbWVudHMudHh0IikKCiMgLS0tIDQuIGNy>> "%B64%"
-echo ZWF0ZSB0aGUgZGVkaWNhdGVkIFNUQU5EQVJEIGNoaWxkIGFjY291bnQgLS0tClN0ZXAgIkNyZWF0>> "%B64%"
-echo aW5nIHN0YW5kYXJkIGFjY291bnQgJyRDaGlsZFVzZXInIgokZXhpc3RpbmcgPSBHZXQtTG9jYWxV>> "%B64%"
-echo c2VyIC1OYW1lICRDaGlsZFVzZXIgLUVycm9yQWN0aW9uIFNpbGVudGx5Q29udGludWUKaWYgKCRl>> "%B64%"
-echo eGlzdGluZykgewogIFdyaXRlLUhvc3QgIiAgYWNjb3VudCBhbHJlYWR5IGV4aXN0cyAtIGxlYXZp>> "%B64%"
-echo bmcgaXQgYXMtaXMuIgp9IGVsc2UgewogIGlmICgkQ2hpbGRQYXNzd29yZCkgewogICAgJHNlYyA9>> "%B64%"
-echo IENvbnZlcnRUby1TZWN1cmVTdHJpbmcgJENoaWxkUGFzc3dvcmQgLUFzUGxhaW5UZXh0IC1Gb3Jj>> "%B64%"
-echo ZQogICAgTmV3LUxvY2FsVXNlciAtTmFtZSAkQ2hpbGRVc2VyIC1QYXNzd29yZCAkc2VjIC1QYXNz>> "%B64%"
-echo d29yZE5ldmVyRXhwaXJlcyAtRnVsbE5hbWUgIkdpdDEgS2lkIiB8IE91dC1OdWxsCiAgfSBlbHNl>> "%B64%"
-echo IHsKICAgIE5ldy1Mb2NhbFVzZXIgLU5hbWUgJENoaWxkVXNlciAtTm9QYXNzd29yZCAtRnVsbE5h>> "%B64%"
-echo bWUgIkdpdDEgS2lkIiB8IE91dC1OdWxsCiAgfQogIEFkZC1Mb2NhbEdyb3VwTWVtYmVyIC1Hcm91>> "%B64%"
-echo cCAiVXNlcnMiIC1NZW1iZXIgJENoaWxkVXNlciAtRXJyb3JBY3Rpb24gU2lsZW50bHlDb250aW51>> "%B64%"
-echo ZQogIFdyaXRlLUhvc3QgIiAgY3JlYXRlZCAnJENoaWxkVXNlcicgYXMgYSBTdGFuZGFyZCB1c2Vy>> "%B64%"
-echo LiIKfQojIFNhZmV0eTogbWFrZSBzdXJlIHRoZSBjaGlsZCBpcyBOT1QgYSBsb2NhbCBBZG1pbmlz>> "%B64%"
-echo dHJhdG9yICh3b3VsZCBieXBhc3MgZXZlcnl0aGluZykuCnRyeSB7CiAgUmVtb3ZlLUxvY2FsR3Jv>> "%B64%"
-echo dXBNZW1iZXIgLUdyb3VwICJBZG1pbmlzdHJhdG9ycyIgLU1lbWJlciAkQ2hpbGRVc2VyIC1FcnJv>> "%B64%"
-echo ckFjdGlvbiBTdG9wCiAgV3JpdGUtV2FybmluZyAiICAnJENoaWxkVXNlcicgd2FzIGFuIEFkbWlu>> "%B64%"
-echo aXN0cmF0b3IgLSBkZW1vdGVkIHRvIFN0YW5kYXJkLiIKfSBjYXRjaCB7IH0gIyBub3QgYW4gYWRt>> "%B64%"
-echo aW46IGV4cGVjdGVkCgojIC0tLSA1LiBpbnN0YWxsIHRoZSBoYXJkZW5lZCBzZXJ2aWNlIChyZXVz>> "%B64%"
-echo ZXMgaW5zdGFsbC1zZXJ2aWNlLnBzMSkgLS0tClN0ZXAgIkluc3RhbGxpbmcgaGFyZGVuZWQgYWdl>> "%B64%"
-echo bnQgc2VydmljZSIKJiAoSm9pbi1QYXRoICRJbnN0YWxsRGlyICJzY3JpcHRzXGluc3RhbGwtc2Vy>> "%B64%"
-echo dmljZS5wczEiKSBgCiAgICAtU2VydmVyICRTZXJ2ZXIgLUNoaWxkVXNlciAkQ2hpbGRVc2VyIC1V>> "%B64%"
-echo cGRhdGVCcmFuY2ggJEJyYW5jaAoKIyAtLS0gNWIuIGtpZC1mYWNpbmcgYXBwOiB0cmF5IGljb24g>> "%B64%"
-echo KyBzaG9ydGN1dHMgKyBhdXRvcnVuIGF0IGtpZCBsb2dpbiAtLS0KU3RlcCAiU2V0dGluZyB1cCB0>> "%B64%"
-echo aGUga2lkJ3MgJ0dpdDEgLSBNeSB0aW1lJyBhcHAiCiRweXRob24gICAgPSAoR2V0LUNvbW1hbmQg>> "%B64%"
-echo cHl0aG9uIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlKS5Tb3VyY2UKJHB5dGhvbncgICA9>> "%B64%"
-echo IGlmICgkcHl0aG9uKSB7IEpvaW4tUGF0aCAoU3BsaXQtUGF0aCAkcHl0aG9uKSAicHl0aG9udy5l>> "%B64%"
-echo eGUiIH0gZWxzZSB7ICIiIH0KaWYgKC1ub3QgKFRlc3QtUGF0aCAkcHl0aG9udykpIHsgJHB5dGhv>> "%B64%"
-echo bncgPSAkcHl0aG9uIH0gICAjIGZhbGxiYWNrCiR0cmF5UHkgICAgPSBKb2luLVBhdGggJEluc3Rh>> "%B64%"
-echo bGxEaXIgImFnZW50XHRyYXkucHkiCiR3c2ggICAgICAgPSBOZXctT2JqZWN0IC1Db21PYmplY3Qg>> "%B64%"
-echo V1NjcmlwdC5TaGVsbAoKIyBSZXNvbHZlIHRoZSBjaGlsZCdzIHByb2ZpbGUgcGF0aCAoaGFuZGxl>> "%B64%"
-echo cyBub24tZGVmYXVsdCBVc2VycyBsb2NhdGlvbnMpLgokY2hpbGRQcm9maWxlID0gJG51bGwKdHJ5>> "%B64%"
-echo IHsKICAkY2hpbGRTaWRPYmogPSAoTmV3LU9iamVjdCBTeXN0ZW0uU2VjdXJpdHkuUHJpbmNpcGFs>> "%B64%"
-echo Lk5UQWNjb3VudCgkQ2hpbGRVc2VyKQogICAgICAgICAgICAgICAgKS5UcmFuc2xhdGUoW1N5c3Rl>> "%B64%"
-echo bS5TZWN1cml0eS5QcmluY2lwYWwuU2VjdXJpdHlJZGVudGlmaWVyXSkuVmFsdWUKICAkcHJvZktl>> "%B64%"
-echo eSA9ICJIS0xNOlxTT0ZUV0FSRVxNaWNyb3NvZnRcV2luZG93cyBOVFxDdXJyZW50VmVyc2lvblxQ>> "%B64%"
-echo cm9maWxlTGlzdFwkY2hpbGRTaWRPYmoiCiAgaWYgKFRlc3QtUGF0aCAkcHJvZktleSkgeyAkY2hp>> "%B64%"
-echo bGRQcm9maWxlID0gKEdldC1JdGVtUHJvcGVydHkgJHByb2ZLZXkpLlByb2ZpbGVJbWFnZVBhdGgg>> "%B64%"
-echo fQp9IGNhdGNoIHt9CmlmICgtbm90ICRjaGlsZFByb2ZpbGUpIHsgJGNoaWxkUHJvZmlsZSA9ICJD>> "%B64%"
-echo OlxVc2Vyc1wkQ2hpbGRVc2VyIiB9CgojIE1ha2UgdGhlIHByb2ZpbGUgc2hlbGwgZm9sZGVycyBp>> "%B64%"
-echo ZiBXaW5kb3dzIGhhc24ndCBpbml0aWFsaXNlZCB0aGVtIHlldC4KJGNoaWxkRGVza3RvcCA9IEpv>> "%B64%"
-echo aW4tUGF0aCAkY2hpbGRQcm9maWxlICJEZXNrdG9wIgokY2hpbGRTdGFydHVwID0gSm9pbi1QYXRo>> "%B64%"
-echo ICRjaGlsZFByb2ZpbGUgIkFwcERhdGFcUm9hbWluZ1xNaWNyb3NvZnRcV2luZG93c1xTdGFydCBN>> "%B64%"
-echo ZW51XFByb2dyYW1zXFN0YXJ0dXAiCiRjaGlsZFN0YXJ0ICAgPSBKb2luLVBhdGggJGNoaWxkUHJv>> "%B64%"
-echo ZmlsZSAiQXBwRGF0YVxSb2FtaW5nXE1pY3Jvc29mdFxXaW5kb3dzXFN0YXJ0IE1lbnVcUHJvZ3Jh>> "%B64%"
-echo bXMiCmZvcmVhY2ggKCRkIGluIEAoJGNoaWxkRGVza3RvcCwgJGNoaWxkU3RhcnR1cCwgJGNoaWxk>> "%B64%"
-echo U3RhcnQpKSB7CiAgTmV3LUl0ZW0gLUl0ZW1UeXBlIERpcmVjdG9yeSAtRm9yY2UgLVBhdGggJGQg>> "%B64%"
-echo fCBPdXQtTnVsbAp9CgpmdW5jdGlvbiBOZXctU2hvcnRjdXQoJHBhdGgsICR0YXJnZXQsICRhcmdz>> "%B64%"
-echo LCAkZGVzY3JpcHRpb24pIHsKICAkc2MgPSAkd3NoLkNyZWF0ZVNob3J0Y3V0KCRwYXRoKQogICRz>> "%B64%"
-echo Yy5UYXJnZXRQYXRoID0gJHRhcmdldAogICRzYy5Bcmd1bWVudHMgID0gJGFyZ3MKICAkc2MuRGVz>> "%B64%"
-echo Y3JpcHRpb24gPSAkZGVzY3JpcHRpb24KICAkc2MuV29ya2luZ0RpcmVjdG9yeSA9IChTcGxpdC1Q>> "%B64%"
-echo YXRoICR0YXJnZXQgLVBhcmVudCkKICAkc2MuSWNvbkxvY2F0aW9uID0gIiR0YXJnZXQsMCIKICAk>> "%B64%"
-echo c2MuU2F2ZSgpCn0KCiMgRGVza3RvcCArIFN0YXJ0IE1lbnUgc2hvcnRjdXQ6IG9wZW5zIGRhc2hi>> "%B64%"
-echo b2FyZCBpbiBkZWZhdWx0IGJyb3dzZXIuCiRkYXNoVXJsID0gImh0dHA6Ly8xMjcuMC4wLjE6MTc2>> "%B64%"
-echo NTQiCiRpZUV4cGxvcmUgPSAiJGVudjpTeXN0ZW1Sb290XGV4cGxvcmVyLmV4ZSIKTmV3LVNob3J0>> "%B64%"
-echo Y3V0IChKb2luLVBhdGggJGNoaWxkRGVza3RvcCAiR2l0MSAtIE15IHRpbWUubG5rIikgJGllRXhw>> "%B64%"
-echo bG9yZSAkZGFzaFVybCAiWW91ciBHaXQxIHRpbWUgZGFzaGJvYXJkIgpOZXctU2hvcnRjdXQgKEpv>> "%B64%"
-echo aW4tUGF0aCAkY2hpbGRTdGFydCAgICJHaXQxIC0gTXkgdGltZS5sbmsiKSAkaWVFeHBsb3JlICRk>> "%B64%"
-echo YXNoVXJsICJZb3VyIEdpdDEgdGltZSBkYXNoYm9hcmQiCgojIFN0YXJ0dXAgaXRlbXM6IHRyYXkg>> "%B64%"
-echo aWNvbiArIHN1YnRsZSBkZXNrdG9wIG92ZXJsYXksIGJvdGggYXQgdGhlIGtpZCdzIGxvZ29uLgok>> "%B64%"
-echo b3ZlcmxheVB5ID0gSm9pbi1QYXRoICRJbnN0YWxsRGlyICJhZ2VudFxvdmVybGF5LnB5IgpOZXct>> "%B64%"
-echo U2hvcnRjdXQgKEpvaW4tUGF0aCAkY2hpbGRTdGFydHVwICJHaXQxIFRyYXkubG5rIikgICAgJHB5>> "%B64%"
-echo dGhvbncgImAiJHRyYXlQeWAiIiAgICAiR2l0MSB0cmF5IGljb24iCk5ldy1TaG9ydGN1dCAoSm9p>> "%B64%"
-echo bi1QYXRoICRjaGlsZFN0YXJ0dXAgIkdpdDEgT3ZlcmxheS5sbmsiKSAkcHl0aG9udyAiYCIkb3Zl>> "%B64%"
-echo cmxheVB5YCIiICJHaXQxIHRpbWUtbGVmdCBvdmVybGF5IgoKV3JpdGUtSG9zdCAiICBEZXNrdG9w>> "%B64%"
-echo ICsgU3RhcnQgTWVudSBzaG9ydGN1dDogJ0dpdDEgLSBNeSB0aW1lJyAob3BlbnMgZGFzaGJvYXJk>> "%B64%"
-echo KS4iCldyaXRlLUhvc3QgIiAgVHJheSBpY29uICsgY29ybmVyIG92ZXJsYXkgc3RhcnQgYXV0b21h>> "%B64%"
-echo dGljYWxseSB3aGVuICckQ2hpbGRVc2VyJyBsb2dzIGluLiIKCiMgLS0tIDYuIHNob3cgdGhlIHBh>> "%B64%"
-echo aXJpbmcgY29kZSAtLS0KU3RlcCAiUGFpcmluZyIKJGxvZyA9IEpvaW4tUGF0aCAkSW5zdGFsbERp>> "%B64%"
-echo ciAiYWdlbnRcYWdlbnQubG9nIgpXcml0ZS1Ib3N0ICJXYWl0aW5nIGZvciB0aGUgYWdlbnQgdG8g>> "%B64%"
-echo cHJpbnQgYSBwYWlyaW5nIGNvZGUuLi4iCiRjb2RlID0gJG51bGwKZm9yICgkaSA9IDA7ICRpIC1s>> "%B64%"
-echo dCAzMCAtYW5kIC1ub3QgJGNvZGU7ICRpKyspIHsKICBTdGFydC1TbGVlcCAtU2Vjb25kcyAyCiAg>> "%B64%"
-echo aWYgKFRlc3QtUGF0aCAkbG9nKSB7CiAgICAkbSA9IFNlbGVjdC1TdHJpbmcgLVBhdGggJGxvZyAt>> "%B64%"
-echo UGF0dGVybiAicGFpci4qPyhcZHs2fSkiIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlIHwK>> "%B64%"
-echo ICAgICAgICAgU2VsZWN0LU9iamVjdCAtTGFzdCAxCiAgICBpZiAoJG0pIHsgJGNvZGUgPSAkbS5N>> "%B64%"
-echo YXRjaGVzWzBdLkdyb3Vwc1sxXS5WYWx1ZSB9CiAgfQp9CldyaXRlLUhvc3QgIiIKaWYgKCRjb2Rl>> "%B64%"
-echo KSB7CiAgV3JpdGUtSG9zdCAiICBQQUlSSU5HIENPREU6ICRjb2RlIiAtRm9yZWdyb3VuZENvbG9y>> "%B64%"
-echo IEdyZWVuCiAgV3JpdGUtSG9zdCAiICBFbnRlciBpdCBpbiB0aGUgR2l0MSBhcHAgKFBhaXIgbmV3>> "%B64%"
-echo IGRldmljZSkuIgp9IGVsc2UgewogIFdyaXRlLUhvc3QgIiAgTm8gY29kZSB5ZXQuIFRhaWwgdGhl>> "%B64%"
-echo IGxvZyB0byBmaW5kIGl0OiIgLUZvcmVncm91bmRDb2xvciBZZWxsb3cKICBXcml0ZS1Ib3N0ICIg>> "%B64%"
-echo ICAgR2V0LUNvbnRlbnQgYCIkbG9nYCIgLVdhaXQiCn0KCldyaXRlLUhvc3QgImBuQWxsIHNldC4g>> "%B64%"
-echo VGhlIGFnZW50IHdpbGwgYXV0by1zdGFydCBhdCBib290IGFuZCBzZWxmLXVwZGF0ZSBvbiBlYWNo>> "%B64%"
-echo IHB1c2guIiAtRm9yZWdyb3VuZENvbG9yIEdyZWVuCldyaXRlLUhvc3QgIkhhdmUgdGhlIGNoaWxk>> "%B64%"
-echo IGxvZyBpbiB0byB0aGUgJyRDaGlsZFVzZXInIGFjY291bnQgdG8gdXNlIHRoZSBQQy4iCgojIC0t>> "%B64%"
-echo LSBzYWZldHkgbmV0OiBwdXQgdGhlIGVtZXJnZW5jeSBvZmYtc3dpdGNoICsgcmUtcGFpciB0b29s>> "%B64%"
-echo IG9uIHRoZSBkZXNrdG9wIC0tLQpTdGVwICJMb2Nrb3V0IHNhZmV0eSIKJHJlY292ZXJTcmMgPSBK>> "%B64%"
-echo b2luLVBhdGggJEluc3RhbGxEaXIgInNjcmlwdHNcUmVjb3Zlci1HaXQxLmJhdCIKJHJlcGFpclNy>> "%B64%"
-echo YyAgPSBKb2luLVBhdGggJEluc3RhbGxEaXIgInNjcmlwdHNcUmVwYWlyLVBhaXItR2l0MS5iYXQi>> "%B64%"
-echo CnRyeSB7CiAgQ29weS1JdGVtICRyZWNvdmVyU3JjICJDOlxVc2Vyc1xQdWJsaWNcRGVza3RvcFxS>> "%B64%"
-echo ZWNvdmVyLUdpdDEuYmF0IiAtRm9yY2UKICBXcml0ZS1Ib3N0ICIgIFBsYWNlZCAnUmVjb3Zlci1H>> "%B64%"
-echo aXQxLmJhdCcgb24gdGhlIGRlc2t0b3AgKGVtZXJnZW5jeSBvZmYgc3dpdGNoKS4iCn0gY2F0Y2gg>> "%B64%"
-echo eyBXcml0ZS1Ib3N0ICIgIFJlY292ZXJ5IHNjcmlwdCBsaXZlcyBhdDogJHJlY292ZXJTcmMiIH0K>> "%B64%"
-echo dHJ5IHsKICBDb3B5LUl0ZW0gJHJlcGFpclNyYyAiQzpcVXNlcnNcUHVibGljXERlc2t0b3BcUmVw>> "%B64%"
-echo YWlyLVBhaXItR2l0MS5iYXQiIC1Gb3JjZQogIFdyaXRlLUhvc3QgIiAgUGxhY2VkICdSZXBhaXIt>> "%B64%"
-echo UGFpci1HaXQxLmJhdCcgb24gdGhlIGRlc2t0b3AgKHBhcmVudCByZWNvdmVyeSBjb2RlIC0+IHJl>> "%B64%"
-echo LXBhaXIpLiIKfSBjYXRjaCB7IFdyaXRlLUhvc3QgIiAgUmUtcGFpciBzY3JpcHQgbGl2ZXMgYXQ6>> "%B64%"
-echo ICRyZXBhaXJTcmMiIH0KCldyaXRlLUhvc3QgIiIKV3JpdGUtSG9zdCAiSU1QT1JUQU5UIC0geW91>> "%B64%"
-echo IGNhbiBBTFdBWVMgdW5kbyB0aGlzOiIgLUZvcmVncm91bmRDb2xvciBZZWxsb3cKV3JpdGUtSG9z>> "%B64%"
-echo dCAiICAqIEVuZm9yY2VtZW50IG9ubHkgYWZmZWN0cyB0aGUgJyRDaGlsZFVzZXInIGFjY291bnQu>> "%B64%"
-echo IFlvdXIgT1dOIGFkbWluIgpXcml0ZS1Ib3N0ICIgICAgYWNjb3VudCBpcyBuZXZlciBsb2NrZWQg>> "%B64%"
-echo YW5kIGtlZXBzIGludGVybmV0IC0gbG9nIGludG8gaXQgdG8gZml4IHRoaW5ncy4iCldyaXRlLUhv>> "%B64%"
-echo c3QgIiAgKiBSdW4gJ1JlY292ZXItR2l0MS5iYXQnIChkZXNrdG9wKSB0byBmdWxseSBkaXNhcm0s>> "%B64%"
-echo IGV2ZW4gd2l0aCBubyBzZXJ2ZXIuIgpXcml0ZS1Ib3N0ICIgICogV29yc3QgY2FzZSwgYm9vdCBp>> "%B64%"
-echo bnRvIFNBRkUgTU9ERSB0aGVuIHJ1biBSZWNvdmVyLUdpdDEuYmF0LiIKV3JpdGUtSG9zdCAiICA+>> "%B64%"
-echo PiBNYWtlIHN1cmUgeW91ciBhZG1pbiBhY2NvdW50IGhhcyBhIFBBU1NXT1JEIFlPVSBSRU1FTUJF>> "%B64%"
-echo UiBiZWZvcmUgeW91IgpXcml0ZS1Ib3N0ICIgICAgIGxlYXZlIHRoaXMgUEMgd2l0aCB0aGUgY2hp>> "%B64%"
-echo bGQuIFRoYXQncyB5b3VyIGd1YXJhbnRlZWQgd2F5IGJhY2sgaW4uIgpXcml0ZS1Ib3N0ICIiCldy>> "%B64%"
-echo aXRlLUhvc3QgIlJFQ09NTUVOREVEIEZJUlNUOiBydW4gYSBzYWZlIHRyaWFsIGJlZm9yZSB0cnVz>> "%B64%"
-echo dGluZyBpdCAtIiAtRm9yZWdyb3VuZENvbG9yIEN5YW4KV3JpdGUtSG9zdCAiICBUZXN0LUdpdDEu>> "%B64%"
-echo YmF0ICAgIChhcm1zIGEgZ3VhcmFudGVlZCBhdXRvLWRpc2FybSBhZnRlciAxMCBtaW4sIHNvIHlv>> "%B64%"
-echo dSIKV3JpdGUtSG9zdCAiICAgICAgICAgICAgICAgICAgICBjYW4gdGVzdCBsb2NrL2ludGVybmV0>> "%B64%"
-echo L3JlY292ZXIgd2l0aCB6ZXJvIHJpc2spLiIK>> "%B64%"
-echo -----END CERTIFICATE----- >> "%B64%"
-
-certutil -decode "%B64%" "%PS1%" >/dev/null 2>&1
-del "%B64%" >/dev/null 2>&1
+REM Read THIS file, take everything after the __PS1_BELOW__ marker, write as .ps1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$lines = Get-Content -LiteralPath '%~f0'; $i = ($lines | Select-String -SimpleMatch '__PS1_BELOW__' | Select-Object -Last 1).LineNumber; $ps = $lines[$i..($lines.Count-1)]; Set-Content -LiteralPath $env:TEMP'\Install-Git1-Kid.ps1' -Value $ps -Encoding UTF8"
 
 if not exist "%PS1%" (
   echo.
-  echo ERROR: Failed to extract installer.
+  echo ERROR: Could not write %PS1%
   pause
   exit /b 1
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -Server "%GIT1_SERVER%" -ChildUser "%CHILD_USER%" -Branch "%BRANCH%"
 
-del "%PS1%" >/dev/null 2>&1
+del "%PS1%" >nul 2>&1
 echo.
 pause
+exit /b
+REM __PS1_BELOW__
+<#
+  Install-Git1-Kid.ps1 - set up the Git1 agent on a CHILD's Windows PC.
+
+  Run once (the .bat wrapper self-elevates to Administrator). From zero it:
+    1. ensures Python 3 + Git are installed (via winget if missing)
+    2. clones the repo to a protected location the kid can't edit
+    3. installs the agent's Python dependencies
+    4. creates a dedicated STANDARD (non-admin) account for the child
+    5. installs the hardened LocalSystem service + watchdog (install-service.ps1)
+    6. starts it and shows the pairing code to enter in the parent app
+
+  Plain script (no packed .exe) so antivirus doesn't quarantine it, and so the
+  agent stays a git checkout that can self-update on every push.
+
+  Example:
+    .\Install-Git1-Kid.ps1 -Server https://git1-server.onrender.com `
+        -ChildUser Kiddo -Branch claude/setup-git1-dev-environment-QeNdU
+#>
+param(
+  [string]$Server      = "https://git1-server.onrender.com",
+  [string]$ChildUser   = "Kiddo",
+  [string]$ChildPassword = "",                 # blank = passwordless kid login
+  [string]$Branch      = "claude/setup-git1-dev-environment-QeNdU",
+  [string]$RepoUrl     = "https://github.com/kvr-coder/git1.git",
+  [string]$InstallDir  = "C:\ProgramData\Git1" # outside the kid's profile
+)
+
+$ErrorActionPreference = "Stop"
+function Step($m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
+
+# --- 0. must be admin (the .bat elevates; double-check here) ---
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+        ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+  throw "Run as Administrator (use Install-Git1-Kid.bat)."
+}
+
+# --- 1. prerequisites: Python + Git ---
+Step "Checking prerequisites (Python, Git)"
+function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
+function Winget-Install($id) {
+  if (Have winget) {
+    Write-Host "  installing $id via winget..."
+    winget install --id $id -e --silent --accept-source-agreements --accept-package-agreements
+  } else {
+    throw "winget not available and $id is missing. Install $id manually, then re-run."
+  }
+}
+if (-not (Have python)) { Winget-Install "Python.Python.3.12" }
+if (-not (Have git))    { Winget-Install "Git.Git" }
+# refresh PATH for this session so the just-installed tools are visible
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path","User")
+if (-not (Have python)) { throw "Python still not found after install - open a new shell and re-run." }
+if (-not (Have git))    { throw "Git still not found after install - open a new shell and re-run." }
+
+# --- 2. clone (or update) the repo into a protected location ---
+Step "Fetching agent code -> $InstallDir"
+if (Test-Path (Join-Path $InstallDir ".git")) {
+  git -C $InstallDir fetch origin $Branch
+  git -C $InstallDir checkout $Branch
+  git -C $InstallDir pull --ff-only origin $Branch
+} else {
+  git clone --branch $Branch $RepoUrl $InstallDir
+}
+# Lock down: only Administrators/SYSTEM can modify (kid can't tamper with code).
+icacls $InstallDir /inheritance:r /grant:r "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Users:(OI)(CI)RX" | Out-Null
+
+# --- 3. python deps ---
+Step "Installing Python dependencies"
+python -m pip install --upgrade pip | Out-Null
+python -m pip install -r (Join-Path $InstallDir "agent\requirements.txt")
+
+# --- 4. create the dedicated STANDARD child account ---
+Step "Creating standard account '$ChildUser'"
+$existing = Get-LocalUser -Name $ChildUser -ErrorAction SilentlyContinue
+if ($existing) {
+  Write-Host "  account already exists - leaving it as-is."
+} else {
+  if ($ChildPassword) {
+    $sec = ConvertTo-SecureString $ChildPassword -AsPlainText -Force
+    New-LocalUser -Name $ChildUser -Password $sec -PasswordNeverExpires -FullName "Git1 Kid" | Out-Null
+  } else {
+    New-LocalUser -Name $ChildUser -NoPassword -FullName "Git1 Kid" | Out-Null
+  }
+  Add-LocalGroupMember -Group "Users" -Member $ChildUser -ErrorAction SilentlyContinue
+  Write-Host "  created '$ChildUser' as a Standard user."
+}
+# Safety: make sure the child is NOT a local Administrator (would bypass everything).
+try {
+  Remove-LocalGroupMember -Group "Administrators" -Member $ChildUser -ErrorAction Stop
+  Write-Warning "  '$ChildUser' was an Administrator - demoted to Standard."
+} catch { } # not an admin: expected
+
+# --- 5. install the hardened service (reuses install-service.ps1) ---
+Step "Installing hardened agent service"
+& (Join-Path $InstallDir "scripts\install-service.ps1") `
+    -Server $Server -ChildUser $ChildUser -UpdateBranch $Branch
+
+# --- 5b. kid-facing app: tray icon + shortcuts + autorun at kid login ---
+Step "Setting up the kid's 'Git1 - My time' app"
+$python    = (Get-Command python -ErrorAction SilentlyContinue).Source
+$pythonw   = if ($python) { Join-Path (Split-Path $python) "pythonw.exe" } else { "" }
+if (-not (Test-Path $pythonw)) { $pythonw = $python }   # fallback
+$trayPy    = Join-Path $InstallDir "agent\tray.py"
+$wsh       = New-Object -ComObject WScript.Shell
+
+# Resolve the child's profile path (handles non-default Users locations).
+$childProfile = $null
+try {
+  $childSidObj = (New-Object System.Security.Principal.NTAccount($ChildUser)
+                ).Translate([System.Security.Principal.SecurityIdentifier]).Value
+  $profKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$childSidObj"
+  if (Test-Path $profKey) { $childProfile = (Get-ItemProperty $profKey).ProfileImagePath }
+} catch {}
+if (-not $childProfile) { $childProfile = "C:\Users\$ChildUser" }
+
+# Make the profile shell folders if Windows hasn't initialised them yet.
+$childDesktop = Join-Path $childProfile "Desktop"
+$childStartup = Join-Path $childProfile "AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"
+$childStart   = Join-Path $childProfile "AppData\Roaming\Microsoft\Windows\Start Menu\Programs"
+foreach ($d in @($childDesktop, $childStartup, $childStart)) {
+  New-Item -ItemType Directory -Force -Path $d | Out-Null
+}
+
+function New-Shortcut($path, $target, $args, $description) {
+  $sc = $wsh.CreateShortcut($path)
+  $sc.TargetPath = $target
+  $sc.Arguments  = $args
+  $sc.Description = $description
+  $sc.WorkingDirectory = (Split-Path $target -Parent)
+  $sc.IconLocation = "$target,0"
+  $sc.Save()
+}
+
+# Desktop + Start Menu shortcut: opens dashboard in default browser.
+$dashUrl = "http://127.0.0.1:17654"
+$ieExplore = "$env:SystemRoot\explorer.exe"
+New-Shortcut (Join-Path $childDesktop "Git1 - My time.lnk") $ieExplore $dashUrl "Your Git1 time dashboard"
+New-Shortcut (Join-Path $childStart   "Git1 - My time.lnk") $ieExplore $dashUrl "Your Git1 time dashboard"
+
+# Startup items: tray icon + subtle desktop overlay, both at the kid's logon.
+$overlayPy = Join-Path $InstallDir "agent\overlay.py"
+New-Shortcut (Join-Path $childStartup "Git1 Tray.lnk")    $pythonw "`"$trayPy`""    "Git1 tray icon"
+New-Shortcut (Join-Path $childStartup "Git1 Overlay.lnk") $pythonw "`"$overlayPy`"" "Git1 time-left overlay"
+
+Write-Host "  Desktop + Start Menu shortcut: 'Git1 - My time' (opens dashboard)."
+Write-Host "  Tray icon + corner overlay start automatically when '$ChildUser' logs in."
+
+# --- 6. show the pairing code ---
+Step "Pairing"
+$log = Join-Path $InstallDir "agent\agent.log"
+Write-Host "Waiting for the agent to print a pairing code..."
+$code = $null
+for ($i = 0; $i -lt 30 -and -not $code; $i++) {
+  Start-Sleep -Seconds 2
+  if (Test-Path $log) {
+    $m = Select-String -Path $log -Pattern "pair.*?(\d{6})" -ErrorAction SilentlyContinue |
+         Select-Object -Last 1
+    if ($m) { $code = $m.Matches[0].Groups[1].Value }
+  }
+}
+Write-Host ""
+if ($code) {
+  Write-Host "  PAIRING CODE: $code" -ForegroundColor Green
+  Write-Host "  Enter it in the Git1 app (Pair new device)."
+} else {
+  Write-Host "  No code yet. Tail the log to find it:" -ForegroundColor Yellow
+  Write-Host "    Get-Content `"$log`" -Wait"
+}
+
+Write-Host "`nAll set. The agent will auto-start at boot and self-update on each push." -ForegroundColor Green
+Write-Host "Have the child log in to the '$ChildUser' account to use the PC."
+
+# --- safety net: put the emergency off-switch + re-pair tool on the desktop ---
+Step "Lockout safety"
+$recoverSrc = Join-Path $InstallDir "scripts\Recover-Git1.bat"
+$repairSrc  = Join-Path $InstallDir "scripts\Repair-Pair-Git1.bat"
+try {
+  Copy-Item $recoverSrc "C:\Users\Public\Desktop\Recover-Git1.bat" -Force
+  Write-Host "  Placed 'Recover-Git1.bat' on the desktop (emergency off switch)."
+} catch { Write-Host "  Recovery script lives at: $recoverSrc" }
+try {
+  Copy-Item $repairSrc "C:\Users\Public\Desktop\Repair-Pair-Git1.bat" -Force
+  Write-Host "  Placed 'Repair-Pair-Git1.bat' on the desktop (parent recovery code -> re-pair)."
+} catch { Write-Host "  Re-pair script lives at: $repairSrc" }
+
+Write-Host ""
+Write-Host "IMPORTANT - you can ALWAYS undo this:" -ForegroundColor Yellow
+Write-Host "  * Enforcement only affects the '$ChildUser' account. Your OWN admin"
+Write-Host "    account is never locked and keeps internet - log into it to fix things."
+Write-Host "  * Run 'Recover-Git1.bat' (desktop) to fully disarm, even with no server."
+Write-Host "  * Worst case, boot into SAFE MODE then run Recover-Git1.bat."
+Write-Host "  >> Make sure your admin account has a PASSWORD YOU REMEMBER before you"
+Write-Host "     leave this PC with the child. That's your guaranteed way back in."
+Write-Host ""
+Write-Host "RECOMMENDED FIRST: run a safe trial before trusting it -" -ForegroundColor Cyan
+Write-Host "  Test-Git1.bat    (arms a guaranteed auto-disarm after 10 min, so you"
+Write-Host "                    can test lock/internet/recover with zero risk)."
