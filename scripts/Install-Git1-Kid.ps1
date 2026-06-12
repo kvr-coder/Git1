@@ -161,10 +161,10 @@ foreach ($d in @($childDesktop, $childStartup, $childStart)) {
   New-Item -ItemType Directory -Force -Path $d | Out-Null
 }
 
-function New-Shortcut($path, $target, $args, $description) {
+function New-Shortcut($path, $target, $shortcutArgs, $description) {
   $sc = $wsh.CreateShortcut($path)
   $sc.TargetPath = $target
-  $sc.Arguments  = $args
+  $sc.Arguments  = $shortcutArgs
   $sc.Description = $description
   $sc.WorkingDirectory = (Split-Path $target -Parent)
   $sc.IconLocation = "$target,0"
