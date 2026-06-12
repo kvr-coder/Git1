@@ -602,27 +602,6 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
 def main() -> None:
     cfg = load_json(CONFIG_PATH)
     token = cfg.get("agentToken")
-    if not token:
-        token = pair()
-        cfg["agentToken"] = token
-        save_json(CONFIG_PATH, cfg)
-        print("[pair] success, token saved")
-
-    # Initialise NTP anchor + VPN baseline before the loop runs.
-    if clock.refresh(force=True) is None:
-        print("[clock] NTP unreachable; falling back to local clock")
-    enforcer_vpn.init_baseline()
-    enforcer_vpn.block_tor_ports()
-
-    # Heal any old GLOBAL firewall block left by a previous agent version.
-    # The old block-all rule could sever the agent itself and lock the parent
-    # out; removing it on startup recovers a machine that's currently stuck.
-    # New blocks are scoped to the child's user SID (see enforcer_net).
-    enforcer_net.heal_legacy_block()
-
-    # Self-update: pull new features on a timer (server-signaled path runs from
-    # the snapshot handler). Disable with GIT1_AUTOUPDATE=0.
-    updater.start_timer()
 
     usage = Usage()
 
@@ -634,7 +613,11 @@ def main() -> None:
         print("[policy] loading cached policy (offline-safe startup)")
         apply_policy(cached, usage, persist=False)
 
-    # Kid dashboard on http://127.0.0.1:<port>. Override with GIT1_DASHBOARD_PORT.
+    # Kid dashboard on http://127.0.0.1:<port>. Start it FIRST — before pairing
+    # or any blocking network call — so the child's "My time" app always loads,
+    # even while the agent is still trying to reach the server. Otherwise a
+    # looping pair() (server asleep/unreachable) would leave this port unbound
+    # and the kid app stuck on "can't connect". Override with GIT1_DASHBOARD_PORT.
     dash_port = int(os.environ.get("GIT1_DASHBOARD_PORT", dashboard.DEFAULT_PORT))
     dash = dashboard.Dashboard(port=dash_port)
     dash.on_request(lambda minutes, reason: bridge.emit(
@@ -662,7 +645,34 @@ def main() -> None:
     dash.on_borrow(_do_borrow)
     dash.on_chore(_submit_chore)
     dash.on_spend(_spend_bank)
+    dash.update(paired=bool(token))
     dash.start()
+
+    # Initialise NTP anchor + VPN baseline before the loop runs.
+    if clock.refresh(force=True) is None:
+        print("[clock] NTP unreachable; falling back to local clock")
+    enforcer_vpn.init_baseline()
+    enforcer_vpn.block_tor_ports()
+
+    # Heal any old GLOBAL firewall block left by a previous agent version.
+    # The old block-all rule could sever the agent itself and lock the parent
+    # out; removing it on startup recovers a machine that's currently stuck.
+    # New blocks are scoped to the child's user SID (see enforcer_net).
+    enforcer_net.heal_legacy_block()
+
+    # Self-update: pull new features on a timer (server-signaled path runs from
+    # the snapshot handler). Disable with GIT1_AUTOUPDATE=0.
+    updater.start_timer()
+
+    # Pair only if we don't already have a token. The dashboard above is already
+    # serving, so this can block (retrying until the server answers) without
+    # making the kid app unreachable.
+    if not token:
+        token = pair()
+        cfg["agentToken"] = token
+        save_json(CONFIG_PATH, cfg)
+        dash.update(paired=True)
+        print("[pair] success, token saved")
 
     last_connected = time.time()
     backoff = 2

@@ -8,7 +8,10 @@ REM  Optional: edit the values below before running.
 REM ============================================================
 
 set "GIT1_SERVER=https://git1-server.onrender.com"
-set "CHILD_USER=Kiddo"
+REM  Leave CHILD_USER blank to PICK an existing account when the installer runs
+REM  (recommended — avoids creating a duplicate "Git1 Kid" account). Or set it
+REM  to an existing account name to manage that account directly.
+set "CHILD_USER="
 set "BRANCH=claude/setup-git1-dev-environment-QeNdU"
 
 REM --- self-elevate ---

@@ -383,6 +383,7 @@ class Dashboard:
     def __init__(self, port: int = DEFAULT_PORT) -> None:
         self.port = port
         self.status: dict[str, Any] = {
+            "paired": False,
             "usedTodayMinutes": 0,
             "limitMinutes": 120,
             "internetBlocked": False,
