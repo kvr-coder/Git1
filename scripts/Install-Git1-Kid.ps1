@@ -39,17 +39,39 @@ Step "Checking prerequisites (Python, Git)"
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 function Winget-Install($id) {
   if (Have winget) {
-    Write-Host "  installing $id via winget..."
-    winget install --id $id -e --silent --accept-source-agreements --accept-package-agreements
+    Write-Host "  installing $id via winget (source: winget)..."
+    winget install --id $id -e --silent --source winget --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "  winget install failed (exit $LASTEXITCODE). Trying direct download fallback..."
+      return $false
+    }
+    return $true
   } else {
-    throw "winget not available and $id is missing. Install $id manually, then re-run."
+    return $false
   }
 }
-if (-not (Have python)) { Winget-Install "Python.Python.3.12" }
-if (-not (Have git))    { Winget-Install "Git.Git" }
+function Download-And-Install($url, $args) {
+  $tmp = Join-Path $env:TEMP ([IO.Path]::GetFileName($url))
+  Write-Host "  downloading $url"
+  Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $tmp
+  Write-Host "  running installer..."
+  Start-Process -FilePath $tmp -ArgumentList $args -Wait
+  Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+}
+if (-not (Have python)) {
+  if (-not (Winget-Install "Python.Python.3.12")) {
+    Download-And-Install "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe" "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0"
+  }
+}
+if (-not (Have git)) {
+  if (-not (Winget-Install "Git.Git")) {
+    Download-And-Install "https://github.com/git-for-windows/git/releases/download/v2.47.0.windows.1/Git-2.47.0-64-bit.exe" "/VERYSILENT /NORESTART /NOCANCEL /SP- /SUPPRESSMSGBOXES"
+  }
+}
 # refresh PATH for this session so the just-installed tools are visible
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-            [System.Environment]::GetEnvironmentVariable("Path","User")
+            [System.Environment]::GetEnvironmentVariable("Path","User") + ";" +
+            "C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
 if (-not (Have python)) { throw "Python still not found after install - open a new shell and re-run." }
 if (-not (Have git))    { throw "Git still not found after install - open a new shell and re-run." }
 
