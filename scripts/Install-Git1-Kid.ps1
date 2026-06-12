@@ -38,17 +38,15 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Step "Checking prerequisites (Python, Git)"
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 function Winget-Install($id) {
-  if (Have winget) {
-    Write-Host "  installing $id via winget (source: winget)..."
-    winget install --id $id -e --silent --source winget --accept-source-agreements --accept-package-agreements
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "  winget install failed (exit $LASTEXITCODE). Trying direct download fallback..."
-      return $false
-    }
-    return $true
-  } else {
+  if (-not (Have winget)) { return $false }
+  Write-Host "  installing $id via winget (source: winget)..."
+  # Pipe winget output to host so it doesn't pollute the function's return value.
+  winget install --id $id -e --silent --source winget --accept-source-agreements --accept-package-agreements 2>&1 | Out-Host
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "  winget install failed (exit $LASTEXITCODE). Trying direct download fallback..."
     return $false
   }
+  return $true
 }
 function Download-And-Install($url, $args) {
   $tmp = Join-Path $env:TEMP ([IO.Path]::GetFileName($url))
