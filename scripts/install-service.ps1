@@ -64,7 +64,24 @@ if (-not $nssm) {
     Write-Host "[svc] downloading NSSM..."
     New-Item -ItemType Directory -Force -Path $nssmDir | Out-Null
     $zip = Join-Path $env:TEMP "nssm.zip"
-    Invoke-WebRequest "https://nssm.cc/release/nssm-2.24.zip" -OutFile $zip
+    $mirrors = @(
+      "https://nssm.cc/release/nssm-2.24.zip",
+      "https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip",
+      "https://github.com/kvr-coder/git1/raw/main/scripts/vendor/nssm-2.24.zip"
+    )
+    $ok = $false
+    foreach ($url in $mirrors) {
+      for ($i=1; $i -le 3; $i++) {
+        try {
+          Write-Host "[svc] trying $url (attempt $i)"
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30
+          if ((Get-Item $zip).Length -gt 100000) { $ok = $true; break }
+        } catch { Write-Host "[svc]   failed: $_" }
+        Start-Sleep -Seconds ($i * 2)
+      }
+      if ($ok) { break }
+    }
+    if (-not $ok) { throw "Could not download NSSM from any mirror." }
     $tmp = Join-Path $env:TEMP "nssm-extract"
     Expand-Archive -Force $zip $tmp
     $arch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }

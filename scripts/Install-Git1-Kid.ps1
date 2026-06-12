@@ -36,7 +36,18 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 # --- 1. prerequisites: Python + Git ---
 Step "Checking prerequisites (Python, Git)"
-function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
+function Have($cmd) {
+  $c = Get-Command $cmd -ErrorAction SilentlyContinue
+  if (-not $c) { return $false }
+  # Detect Windows "App Execution Alias" stubs (fake python.exe that opens Store).
+  if ($cmd -eq "python") {
+    try {
+      $out = & python --version 2>&1
+      if ($LASTEXITCODE -ne 0 -or $out -match "Microsoft Store") { return $false }
+    } catch { return $false }
+  }
+  return $true
+}
 function Winget-Install($id) {
   if (-not (Have winget)) { return $false }
   Write-Host "  installing $id via winget (source: winget)..."
@@ -55,6 +66,14 @@ function Download-And-Install($url, $installArgs) {
   Write-Host "  running installer..."
   Start-Process -FilePath $tmp -ArgumentList $installArgs -Wait
   Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+}
+# Disable Windows "App Execution Alias" stubs that hijack python.exe -> Microsoft Store
+$aliasDir = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+foreach ($stub in @("python.exe","python3.exe","python3.12.exe")) {
+  $p = Join-Path $aliasDir $stub
+  if (Test-Path $p) {
+    try { Remove-Item $p -Force -ErrorAction Stop; Write-Host "  removed Store alias: $stub" } catch {}
+  }
 }
 if (-not (Have python)) {
   if (-not (Winget-Install "Python.Python.3.12")) {
