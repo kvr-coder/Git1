@@ -62,22 +62,43 @@ if (-not $nssm) {
   $nssm = Join-Path $nssmDir "nssm.exe"
   if (-not (Test-Path $nssm)) {
     New-Item -ItemType Directory -Force -Path $nssmDir | Out-Null
+    $arch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
     $zip = $null
+    $foundExe = $null
 
-    # 1. Look for nssm.zip the user dropped locally (preferred — no network).
-    $localCandidates = @(
-      "$env:USERPROFILE\Downloads\nssm-2.24.zip",
-      "$env:USERPROFILE\Downloads\nssm.zip",
-      "C:\Users\Public\Downloads\nssm-2.24.zip",
-      "$PSScriptRoot\nssm-2.24.zip",
-      (Join-Path $AgentDir "nssm-2.24.zip")
+    # 1a. Look for an already-extracted nssm.exe (any drive root, Downloads, etc).
+    $exeCandidates = @(
+      "$env:USERPROFILE\Downloads\nssm-2.24\$arch\nssm.exe",
+      "$env:USERPROFILE\Downloads\nssm.exe",
+      "$PSScriptRoot\nssm.exe"
     )
-    # Also scan all drive roots for nssm-2.24.zip (USB sticks etc).
     foreach ($d in (Get-PSDrive -PSProvider FileSystem)) {
-      $localCandidates += (Join-Path $d.Root "nssm-2.24.zip")
+      $exeCandidates += (Join-Path $d.Root "nssm-2.24\$arch\nssm.exe")
+      $exeCandidates += (Join-Path $d.Root "nssm.exe")
     }
-    foreach ($p in $localCandidates) {
-      if (Test-Path $p) { Write-Host "[svc] using local NSSM: $p"; $zip = $p; break }
+    foreach ($p in $exeCandidates) {
+      if (Test-Path $p) { Write-Host "[svc] using local nssm.exe: $p"; $foundExe = $p; break }
+    }
+    if ($foundExe) {
+      Copy-Item $foundExe $nssm -Force
+      Write-Host "[svc] nssm: $nssm"
+    }
+
+    # 1b. Otherwise look for nssm.zip the user dropped locally.
+    if (-not $foundExe) {
+      $localCandidates = @(
+        "$env:USERPROFILE\Downloads\nssm-2.24.zip",
+        "$env:USERPROFILE\Downloads\nssm.zip",
+        "C:\Users\Public\Downloads\nssm-2.24.zip",
+        "$PSScriptRoot\nssm-2.24.zip",
+        (Join-Path $AgentDir "nssm-2.24.zip")
+      )
+      foreach ($d in (Get-PSDrive -PSProvider FileSystem)) {
+        $localCandidates += (Join-Path $d.Root "nssm-2.24.zip")
+      }
+      foreach ($p in $localCandidates) {
+        if (Test-Path $p) { Write-Host "[svc] using local NSSM zip: $p"; $zip = $p; break }
+      }
     }
 
     # 2. Otherwise, try mirrors with retry.
@@ -109,11 +130,12 @@ if (-not $nssm) {
       }
     }
 
-    $tmp = Join-Path $env:TEMP "nssm-extract"
-    if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
-    Expand-Archive -Force $zip $tmp
-    $arch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
-    Copy-Item (Join-Path $tmp "nssm-2.24\$arch\nssm.exe") $nssm -Force
+    if (-not $foundExe) {
+      $tmp = Join-Path $env:TEMP "nssm-extract"
+      if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+      Expand-Archive -Force $zip $tmp
+      Copy-Item (Join-Path $tmp "nssm-2.24\$arch\nssm.exe") $nssm -Force
+    }
   }
 }
 Write-Host "[svc] nssm: $nssm"
