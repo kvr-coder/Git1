@@ -1,22 +1,30 @@
 @echo off
 setlocal
 REM ============================================================
-REM  Git1 Kid PC installer - SINGLE FILE. Double-click on CHILD PC.
+REM  Git1 Kid PC installer - SINGLE FILE. Double-click on the PC
+REM  you want to control. Enforcement applies to the user who
+REM  runs this (no separate Kiddo account is created).
 REM ============================================================
 set "GIT1_SERVER=https://git1-server.onrender.com"
-set "CHILD_USER=Kiddo"
 set "BRANCH=claude/setup-git1-dev-environment-QeNdU"
+
+REM Capture the actual logged-in user BEFORE elevation (UAC switches us to admin).
+if not defined GIT1_INSTALL_USER set "GIT1_INSTALL_USER=%USERNAME%"
 
 net session >nul 2>&1
 if %errorlevel% NEQ 0 (
-  echo Requesting Administrator rights...
-  powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+  echo Requesting Administrator rights for '%GIT1_INSTALL_USER%'...
+  powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs -ArgumentList '%GIT1_INSTALL_USER%'"
   exit /b
 )
 
+REM After elevation, the original user is passed as the first argument.
+if not "%~1"=="" set "GIT1_INSTALL_USER=%~1"
+set "CHILD_USER=%GIT1_INSTALL_USER%"
+
+echo Enforcement will apply to Windows user: %CHILD_USER%
 echo Extracting embedded installer...
 set "PS1=%TEMP%\Install-Git1-Kid.ps1"
-echo   target: %PS1%
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$lines = Get-Content -LiteralPath '%~f0'; $i = ($lines | Select-String -SimpleMatch '__PS1_BELOW__' | Select-Object -Last 1).LineNumber; $ps = $lines[$i..($lines.Count-1)]; Set-Content -LiteralPath $env:TEMP'\Install-Git1-Kid.ps1' -Value $ps -Encoding UTF8"
 
@@ -175,12 +183,48 @@ Step "Installing Python dependencies"
 python -m pip install --upgrade pip | Out-Null
 python -m pip install -r (Join-Path $InstallDir "agent\requirements.txt")
 
-# --- 4. create the dedicated STANDARD child account ---
-Step "Creating standard account '$ChildUser'"
+# --- 4. Resolve the child account ---
+# If $ChildUser is blank or "auto", enforce on the user who launched the installer
+# (the actual interactive Windows account on this PC). No separate Kiddo account.
+if (-not $ChildUser -or $ChildUser -eq 'auto' -or $ChildUser -eq '') {
+  # The .bat passes us the pre-elevation username via env var.
+  $interactive = $env:GIT1_INSTALL_USER
+  if (-not $interactive) {
+    try { $interactive = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName } catch {}
+    if ($interactive -and $interactive.Contains('\')) { $interactive = $interactive.Split('\')[-1] }
+  }
+  if (-not $interactive) { $interactive = $env:USERNAME }
+  $ChildUser = $interactive
+  Write-Host "  auto-detected enforcement target: '$ChildUser'"
+}
+
+# Clean up the stale "Kiddo" account from earlier installs (unless that's the
+# actual target). It was created back when the installer assumed a separate kid
+# account; we now enforce on whoever runs the installer.
+if ($ChildUser -ne 'Kiddo') {
+  $stale = Get-LocalUser -Name 'Kiddo' -ErrorAction SilentlyContinue
+  if ($stale) {
+    try {
+      Remove-LocalUser -Name 'Kiddo' -ErrorAction Stop
+      Write-Host "  removed stale 'Kiddo' account from earlier install."
+      # Also remove its profile folder so File Explorer/Login screen don't show it.
+      $kiddoProfile = "C:\Users\Kiddo"
+      if (Test-Path $kiddoProfile) {
+        try { Remove-Item -Recurse -Force $kiddoProfile -ErrorAction Stop } catch {}
+      }
+    } catch { Write-Warning "  could not remove 'Kiddo' account: $_" }
+  }
+}
+
+Step "Enforcement target account: '$ChildUser'"
 $existing = Get-LocalUser -Name $ChildUser -ErrorAction SilentlyContinue
 if ($existing) {
-  Write-Host "  account already exists - leaving it as-is."
+  Write-Host "  '$ChildUser' exists. Enforcement will apply to this account."
+  # NOTE: we no longer demote from Administrator. If the install target IS the
+  # parent's own account, demoting them would lock them out of admin. The agent
+  # enforces on whoever owns the SID; admin or not, lock/limits still apply.
 } else {
+  Write-Host "  '$ChildUser' not found - creating as a Standard user."
   if ($ChildPassword) {
     $sec = ConvertTo-SecureString $ChildPassword -AsPlainText -Force
     New-LocalUser -Name $ChildUser -Password $sec -PasswordNeverExpires -FullName "Git1 Kid" | Out-Null
@@ -188,13 +232,7 @@ if ($existing) {
     New-LocalUser -Name $ChildUser -NoPassword -FullName "Git1 Kid" | Out-Null
   }
   Add-LocalGroupMember -Group "Users" -Member $ChildUser -ErrorAction SilentlyContinue
-  Write-Host "  created '$ChildUser' as a Standard user."
 }
-# Safety: make sure the child is NOT a local Administrator (would bypass everything).
-try {
-  Remove-LocalGroupMember -Group "Administrators" -Member $ChildUser -ErrorAction Stop
-  Write-Warning "  '$ChildUser' was an Administrator - demoted to Standard."
-} catch { } # not an admin: expected
 
 # --- 5. install the hardened service (reuses install-service.ps1) ---
 Step "Installing hardened agent service"
