@@ -747,17 +747,15 @@ function sendToAgent(deviceId: string, msg: ServerMessage): boolean {
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: '/agent/ws' });
 
-// Heartbeat ping loop: every 25s ping all connected agents. If a socket missed
-// the previous pong, it's dead — terminate it so the agent reconnects fast.
-// This is what keeps connections alive through Render's idle proxy timeout.
+// Heartbeat ping loop: every 25s ping all connected agents so Render's idle
+// proxy timeout doesn't drop them. We DO NOT terminate on a missed pong — a
+// slow Render free-tier round-trip would otherwise wrongly kill a healthy
+// agent every minute (which is exactly the "seen 45s ago but offline" loop
+// we used to have). The real TCP disconnect handler still fires for genuinely
+// dead sockets, so they're cleaned up there.
 const WS_PING_MS = 25_000;
 setInterval(() => {
   for (const ws of wss.clients) {
-    if ((ws as any).isAlive === false) {
-      ws.terminate();
-      continue;
-    }
-    (ws as any).isAlive = false;
     try { ws.ping(); } catch {}
   }
 }, WS_PING_MS);
