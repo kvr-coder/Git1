@@ -267,26 +267,48 @@ New-Shortcut (Join-Path $childStartup "Git1 Overlay.lnk") $pythonw "`"$overlayPy
 Write-Host "  Desktop + Start Menu shortcut: 'Git1 - My time' (opens dashboard)."
 Write-Host "  Tray icon + corner overlay start automatically when '$ChildUser' logs in."
 
-# --- 6. show the pairing code ---
+# --- 6. fetch pairing code DIRECTLY from server (no waiting on agent.log) ---
 Step "Pairing"
-$log = Join-Path $InstallDir "agent\agent.log"
-Write-Host "Waiting for the agent to print a pairing code..."
-$code = $null
-for ($i = 0; $i -lt 30 -and -not $code; $i++) {
-  Start-Sleep -Seconds 2
-  if (Test-Path $log) {
-    $m = Select-String -Path $log -Pattern "pair.*?(\d{6})" -ErrorAction SilentlyContinue |
-         Select-Object -Last 1
-    if ($m) { $code = $m.Matches[0].Groups[1].Value }
-  }
-}
-Write-Host ""
-if ($code) {
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$code = $null; $agentToken = $null; $deviceId = $null
+try {
+  Write-Host "  requesting pair code from $Server ..."
+  $r = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$Server/agent/pair/start" -TimeoutSec 30
+  $code = $r.code
+  Write-Host ""
   Write-Host "  PAIRING CODE: $code" -ForegroundColor Green
-  Write-Host "  Enter it in the Git1 app (Pair new device)."
-} else {
-  Write-Host "  No code yet. Tail the log to find it:" -ForegroundColor Yellow
-  Write-Host "    Get-Content `"$log`" -Wait"
+  Write-Host "  -> Enter this in the parent dashboard ($Server)" -ForegroundColor Green
+  Write-Host "     Sign in -> '6-digit pair code' field -> Pair"
+  Write-Host ""
+  Write-Host "  Waiting up to 5 minutes for you to enter it..." -ForegroundColor Cyan
+  for ($i = 0; $i -lt 150 -and -not $agentToken; $i++) {
+    Start-Sleep -Seconds 2
+    try {
+      $p = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "$Server/agent/pair/poll?code=$code" -TimeoutSec 10
+      if ($p.status -eq 'paired') {
+        $agentToken = $p.agentToken
+        $deviceId = $p.deviceId
+        Write-Host "  PAIRED!" -ForegroundColor Green
+        break
+      }
+    } catch {}
+  }
+} catch {
+  Write-Warning "  could not reach server to get pair code: $($_.Exception.Message)"
+  Write-Host "  The agent will retry on its own. Check log later:" -ForegroundColor Yellow
+  Write-Host "    Get-Content `"$InstallDir\agent\agent.log`" -Wait"
+}
+
+# Write token into the agent's SYSTEM config so the service picks it up on next start.
+if ($agentToken) {
+  $systemCfgDir = "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1"
+  New-Item -ItemType Directory -Force -Path $systemCfgDir | Out-Null
+  $cfgPath = Join-Path $systemCfgDir "config.json"
+  $cfgObj = @{ agentToken = $agentToken; deviceId = $deviceId; server = $Server }
+  ($cfgObj | ConvertTo-Json -Compress) | Set-Content -LiteralPath $cfgPath -Encoding UTF8 -NoNewline
+  Write-Host "  wrote $cfgPath"
+  Restart-Service Git1Agent -ErrorAction SilentlyContinue
+  Write-Host "  Git1Agent restarted with the new token. Device should appear ONLINE in the dashboard within ~5s." -ForegroundColor Green
 }
 
 Write-Host "`nAll set. The agent will auto-start at boot and self-update on each push." -ForegroundColor Green
