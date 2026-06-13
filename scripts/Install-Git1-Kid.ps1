@@ -135,6 +135,12 @@ if (Test-Path (Join-Path $InstallDir ".git")) {
 # Lock down: only Administrators/SYSTEM can modify (kid can't tamper with code).
 icacls $InstallDir /inheritance:r /grant:r "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Users:(OI)(CI)RX" | Out-Null
 
+# Shared IPC folder for the SYSTEM service <-> in-session tray "clean lock"
+# handshake. Must be writable by BOTH SYSTEM and the standard child user.
+$ipcDir = "C:\Users\Public\Git1"
+New-Item -ItemType Directory -Force -Path $ipcDir | Out-Null
+icacls $ipcDir /grant:r "SYSTEM:(OI)(CI)F" "Users:(OI)(CI)M" | Out-Null
+
 # --- 3. python deps ---
 Step "Installing Python dependencies"
 python -m pip install --upgrade pip | Out-Null

@@ -30,6 +30,41 @@ DASH_PORT = int(os.environ.get("GIT1_DASHBOARD_PORT", "17654"))
 DASH_URL = f"http://127.0.0.1:{DASH_PORT}"
 POLL_SEC = 15
 
+# Shared IPC folder both the SYSTEM service and the user-session tray can
+# read/write (Public profile is writable by all users). The service drops
+# lock.signal here; this tray — running IN the child's session — performs the
+# actual LockWorkStation (a clean Win+L, no Explorer breakage). The tray also
+# touches tray.alive so the service knows the in-session locker is available.
+IPC_DIR = r"C:\Users\Public\Git1"
+LOCK_SIGNAL = os.path.join(IPC_DIR, "lock.signal")
+TRAY_ALIVE = os.path.join(IPC_DIR, "tray.alive")
+
+
+def _lock_watcher() -> None:
+    """Poll for the service's lock signal; lock this session cleanly when set."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    try:
+        os.makedirs(IPC_DIR, exist_ok=True)
+    except Exception:
+        pass
+    while True:
+        try:
+            # Heartbeat so the service knows in-session locking is available.
+            with open(TRAY_ALIVE, "w") as f:
+                f.write(str(int(time.time())))
+        except Exception:
+            pass
+        try:
+            if os.path.exists(LOCK_SIGNAL):
+                os.remove(LOCK_SIGNAL)  # consume first so we don't loop-lock
+                ctypes.windll.user32.LockWorkStation()
+                print("[tray] locked this session (clean Win+L).")
+        except Exception as e:  # noqa: BLE001
+            print(f"[tray] lock watcher error: {e}")
+        time.sleep(2)
+
 
 def _icon_image(color: tuple[int, int, int]) -> "Image.Image":
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
@@ -100,6 +135,7 @@ def main() -> None:
             time.sleep(POLL_SEC)
 
     threading.Thread(target=updater, name="git1-tray-updater", daemon=True).start()
+    threading.Thread(target=_lock_watcher, name="git1-tray-lock", daemon=True).start()
     icon.run()
 
 

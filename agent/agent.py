@@ -127,21 +127,45 @@ def idle_seconds() -> float:
         return 0.0
 
 
+IPC_DIR = r"C:\Users\Public\Git1"
+LOCK_SIGNAL = os.path.join(IPC_DIR, "lock.signal")
+TRAY_ALIVE = os.path.join(IPC_DIR, "tray.alive")
+
+
+def _tray_is_alive(max_age_sec: int = 12) -> bool:
+    """True if the in-session tray locker has heartbeated recently."""
+    try:
+        if not os.path.exists(TRAY_ALIVE):
+            return False
+        return (time.time() - os.path.getmtime(TRAY_ALIVE)) <= max_age_sec
+    except Exception:
+        return False
+
+
 def lock_workstation() -> bool:
-    """Lock the active console session WITHOUT disconnecting it.
+    """Lock the active console session.
 
-    Background: from a LocalSystem service (session 0), user32.LockWorkStation
-    does nothing to the user's session, and WTSDisconnectSession does lock the
-    screen but leaves Explorer's taskbar in a half-broken state (start menu
-    clicks ignored after reconnect — exactly what the user reported).
-
-    The correct way is to impersonate the active user and launch the standard
-    "rundll32 user32.dll,LockWorkStation" inside their session. This is the
-    same code path Win+L uses, so Explorer stays healthy.
+    Preferred path: drop a signal file that the in-session tray app picks up and
+    calls LockWorkStation() from INSIDE the user's session — a clean Win+L with
+    no Explorer/taskbar breakage. If the tray isn't running, fall back to the
+    impersonated launcher, then to WTSDisconnectSession.
     """
     if sys.platform != "win32":
         print("[lock] non-Windows host, skipping")
         return False
+    # 1. In-session tray locker (cleanest).
+    try:
+        os.makedirs(IPC_DIR, exist_ok=True)
+        if _tray_is_alive():
+            with open(LOCK_SIGNAL, "w") as f:
+                f.write(str(int(time.time())))
+            print("[lock] signalled in-session tray to lock (clean).")
+            return True
+        else:
+            print("[lock] tray not alive; using fallback lock method.")
+    except Exception as e:
+        print(f"[lock] signal write failed: {e}; using fallback.")
+    # 2/3. Fallback: impersonated launcher, then disconnect.
     try:
         from ctypes import wintypes
         kernel32 = ctypes.windll.kernel32
