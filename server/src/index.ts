@@ -784,9 +784,17 @@ setInterval(() => {
 }, WS_PING_MS);
 
 function buildSnapshot(d: DeviceRow) {
+  // Schedules normally bind to a device, but re-pairing changes the device id
+  // and would orphan them. If this device has none of its own, fall back to all
+  // of the parent's schedules so a single-PC household never loses them.
+  let scheds = store.schedulesForDevice(d.id);
+  if (!scheds.length) {
+    const all = store.listSchedules(d.userId);
+    if (all.length) scheds = all;
+  }
   return {
     kind: 'snapshot' as const,
-    schedules: store.schedulesForDevice(d.id),
+    schedules: scheds,
     blocklist: d.blocklist,
     internetBlocked: d.internetBlocked,
     selfBorrowEnabled: d.selfBorrowEnabled,

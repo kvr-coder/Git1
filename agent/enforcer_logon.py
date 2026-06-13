@@ -58,8 +58,10 @@ def child_user() -> str | None:
 def _allowed_hours_by_day(schedules: list[dict]) -> dict[int, set[int]] | None:
     """Return {weekday0Mon: {allowed hour ints}} or None if unrestricted.
 
-    Only schedules whose actions include 'lock' constrain logon. Hours are
-    rounded to whole hours (inclusive start hour .. ceil(end)).
+    Only schedules whose actions include 'lock' constrain logon. The schedule
+    window [start,end) is the BLOCK period (lock during it), so allowed hours =
+    the full day MINUS the union of block windows. Overnight windows (start>end,
+    e.g. 21:00-07:00) are handled by splitting into [start,24) and [0,end).
     """
     lock_scheds = [
         s for s in schedules
@@ -73,17 +75,27 @@ def _allowed_hours_by_day(schedules: list[dict]) -> dict[int, set[int]] | None:
         "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
         "friday": 4, "saturday": 5, "sunday": 6,
     }
-    allowed: dict[int, set[int]] = {d: set() for d in range(7)}
+    # Start fully allowed; subtract blocked hours per day.
+    allowed: dict[int, set[int]] = {d: set(range(24)) for d in range(7)}
+    any_block = False
     for s in lock_scheds:
         start_h = max(0, int(s.get("startMinute", 0)) // 60)
-        # round end up so we don't cut the last partial hour of allowance
         end_min = int(s.get("endMinute", 0))
-        end_h = min(24, (end_min + 59) // 60)
-        hours = set(range(start_h, end_h))
+        end_h = min(24, (end_min + 59) // 60)  # round up so partial last hour is blocked
+        if start_h < end_h:
+            blocked_hours = set(range(start_h, end_h))
+        else:
+            # Overnight wrap: block [start,24) and [0,end)
+            blocked_hours = set(range(start_h, 24)) | set(range(0, end_h))
+        if not blocked_hours:
+            continue
+        any_block = True
         for d in (s.get("days") or []):
             idx = day_name_to_idx.get(str(d).strip().lower()[:3])
             if idx is not None:
-                allowed[idx] |= hours
+                allowed[idx] -= blocked_hours
+    if not any_block:
+        return None
     return allowed
 
 
