@@ -238,10 +238,13 @@ async function refresh(){
     ]);
     SCHEDULES = scheds || [];
     renderRequests(reqs); renderChores(chores);
-    // Don't blow away whatever input the user is currently editing.
+    // Skip re-rendering devices while ANY Settings panel is open OR an input
+    // inside the device list is focused. The auto-refresh otherwise wipes
+    // half-built schedules, blocklist edits, chore drafts, day-chip toggles, etc.
     const ae = document.activeElement;
-    const editing = ae && ae.tagName === 'INPUT' && document.getElementById('devices').contains(ae);
-    if (!editing) renderDevices(devices);
+    const inDevices = ae && document.getElementById('devices').contains(ae);
+    const anyPanelOpen = OPEN_PANELS.size > 0;
+    if (!inDevices && !anyPanelOpen) renderDevices(devices);
     renderPhotos(photos); renderCoParents(cop);
   }catch(e){ /* 401 already handled */ }
 }
