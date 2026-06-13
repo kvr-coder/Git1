@@ -128,37 +128,89 @@ def idle_seconds() -> float:
 
 
 def lock_workstation() -> bool:
-    """Lock the active console session.
+    """Lock the active console session WITHOUT disconnecting it.
 
-    user32.LockWorkStation() only locks the CALLER's session. When the agent
-    runs as a LocalSystem service (session 0), that's a no-op for the user's
-    screen — which is exactly the "Lock button does nothing" symptom.
+    Background: from a LocalSystem service (session 0), user32.LockWorkStation
+    does nothing to the user's session, and WTSDisconnectSession does lock the
+    screen but leaves Explorer's taskbar in a half-broken state (start menu
+    clicks ignored after reconnect — exactly what the user reported).
 
-    The correct cross-session way is WTSDisconnectSession on the active console
-    session id. Disconnect leaves the session running but presents the lock
-    screen, just like Win+L would.
+    The correct way is to impersonate the active user and launch the standard
+    "rundll32 user32.dll,LockWorkStation" inside their session. This is the
+    same code path Win+L uses, so Explorer stays healthy.
     """
     if sys.platform != "win32":
         print("[lock] non-Windows host, skipping")
         return False
     try:
-        wtsapi = ctypes.windll.wtsapi32
+        from ctypes import wintypes
         kernel32 = ctypes.windll.kernel32
+        wtsapi = ctypes.windll.wtsapi32
+        advapi32 = ctypes.windll.advapi32
+
         sess = kernel32.WTSGetActiveConsoleSessionId()
         if sess == 0xFFFFFFFF:
-            print("[lock] no active console session — nothing to lock")
+            print("[lock] no active console session")
             return False
-        # WTSDisconnectSession(hServer=NULL, sessionId, bWait=FALSE)
-        ok = wtsapi.WTSDisconnectSession(0, sess, False)
-        if ok:
-            print(f"[lock] disconnected session {sess} (locked).")
-            return True
-        err = ctypes.windll.kernel32.GetLastError()
-        print(f"[lock] WTSDisconnectSession failed: GetLastError={err}; falling back to LockWorkStation")
+
+        # 1. Get the user's primary token for that session.
+        h_user_tok = wintypes.HANDLE()
+        if not wtsapi.WTSQueryUserToken(sess, ctypes.byref(h_user_tok)):
+            err = kernel32.GetLastError()
+            print(f"[lock] WTSQueryUserToken failed: {err}; falling back to LockWorkStation")
+            return bool(ctypes.windll.user32.LockWorkStation())
+
+        # 2. DuplicateTokenEx to a primary token suitable for CreateProcessAsUser.
+        TOKEN_ALL_ACCESS = 0xF01FF
+        SecurityImpersonation = 2
+        TokenPrimary = 1
+        h_dup = wintypes.HANDLE()
+        if not advapi32.DuplicateTokenEx(
+            h_user_tok, TOKEN_ALL_ACCESS, None, SecurityImpersonation, TokenPrimary,
+            ctypes.byref(h_dup),
+        ):
+            kernel32.CloseHandle(h_user_tok)
+            err = kernel32.GetLastError()
+            print(f"[lock] DuplicateTokenEx failed: {err}")
+            return False
+
+        # 3. CreateProcessAsUser running rundll32 -> LockWorkStation in user's session.
+        class STARTUPINFO(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD),("lpReserved", wintypes.LPWSTR),
+                        ("lpDesktop", wintypes.LPWSTR),("lpTitle", wintypes.LPWSTR),
+                        ("dwX", wintypes.DWORD),("dwY", wintypes.DWORD),
+                        ("dwXSize", wintypes.DWORD),("dwYSize", wintypes.DWORD),
+                        ("dwXCountChars", wintypes.DWORD),("dwYCountChars", wintypes.DWORD),
+                        ("dwFillAttribute", wintypes.DWORD),("dwFlags", wintypes.DWORD),
+                        ("wShowWindow", wintypes.WORD),("cbReserved2", wintypes.WORD),
+                        ("lpReserved2", ctypes.c_void_p),
+                        ("hStdInput", wintypes.HANDLE),("hStdOutput", wintypes.HANDLE),
+                        ("hStdError", wintypes.HANDLE)]
+        class PROCESS_INFORMATION(ctypes.Structure):
+            _fields_ = [("hProcess", wintypes.HANDLE),("hThread", wintypes.HANDLE),
+                        ("dwProcessId", wintypes.DWORD),("dwThreadId", wintypes.DWORD)]
+
+        si = STARTUPINFO(); si.cb = ctypes.sizeof(si); si.lpDesktop = "winsta0\\default"
+        pi = PROCESS_INFORMATION()
+        CREATE_UNICODE_ENVIRONMENT = 0x00000400
+        DETACHED_PROCESS = 0x00000008
+        cmdline = ctypes.create_unicode_buffer("rundll32.exe user32.dll,LockWorkStation")
+        ok = advapi32.CreateProcessAsUserW(
+            h_dup, None, cmdline, None, None, False,
+            CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS,
+            None, None, ctypes.byref(si), ctypes.byref(pi),
+        )
+        kernel32.CloseHandle(h_dup); kernel32.CloseHandle(h_user_tok)
+        if not ok:
+            err = kernel32.GetLastError()
+            print(f"[lock] CreateProcessAsUser failed: {err}; falling back to LockWorkStation")
+            return bool(ctypes.windll.user32.LockWorkStation())
+        kernel32.CloseHandle(pi.hThread); kernel32.CloseHandle(pi.hProcess)
+        print(f"[lock] LockWorkStation launched in session {sess} (clean lock).")
+        return True
     except Exception as e:
-        print(f"[lock] WTSDisconnectSession threw {e}; falling back to LockWorkStation")
-    # Fallback (works when the agent is running INSIDE the user session).
-    return bool(ctypes.windll.user32.LockWorkStation())
+        print(f"[lock] impersonated lock failed: {e}; falling back to LockWorkStation")
+        return bool(ctypes.windll.user32.LockWorkStation())
 
 
 def enforce_lock() -> bool:
