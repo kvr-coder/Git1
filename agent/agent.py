@@ -615,11 +615,11 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             except Exception as e:
                 print(f"[stats] app sampling failed: {e}")
 
-        # 2. Kill blocked apps
-        killed = enforcer_apps.kill_blocked()
-        if killed:
-            print(f"[apps] killed: {killed}")
-            await emit_event(ws, "app_blocked", {"apps": killed})
+        # 2. Kill blocked apps — but only WHILE the PC is supposed to be locked.
+        # The Apps blocklist isn't a permanent ban; it's the "what should be
+        # killed when bedtime/limit hits" list, so the kid keeps full access
+        # outside lock windows. The decision is computed a few lines below
+        # (lock_active) and applied as step 2b.
 
         # 3. VPN / Tor adapter check
         if now - last_vpn_check >= VPN_CHECK_INTERVAL_SEC:
@@ -664,11 +664,27 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             SCHEDULE_OVERRIDE["untilMs"] > 0 and
             (time.time() * 1000) < SCHEDULE_OVERRIDE["untilMs"]
         )
-        if "lock" in schedule_actions and not override_active:
+        schedule_locking = "lock" in schedule_actions and not override_active
+        if schedule_locking:
             if now - last_relock >= RELOCK_INTERVAL_SEC:
                 last_relock = now
                 enforce_lock()
                 await emit_event(ws, "schedule_lock")
+
+        # Step 2b (deferred from above): kill blocked apps WHEN the PC is
+        # currently in a locked state (parent locked, over limit, OR a schedule
+        # is locking). Outside lock windows the kid plays freely.
+        lock_active = (
+            LOCKED_BY_PARENT.get("value")
+            or usage.over_limit()
+            or schedule_locking
+            or "block_apps" in schedule_actions
+        )
+        if lock_active:
+            killed = enforcer_apps.kill_blocked()
+            if killed:
+                print(f"[apps] killed (lock active): {killed}")
+                await emit_event(ws, "app_blocked", {"apps": killed})
         # Internet block — reconcile to the DESIRED state every tick (self-heal).
         # Desired = parent wants it blocked OR a schedule blocks it, UNLESS the
         # parent pressed Unlock (override). This guarantees "Internet ON" / Unlock

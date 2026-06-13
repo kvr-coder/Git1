@@ -419,7 +419,8 @@ function renderDevices(list){
 
         <!-- APPS tab -->
         <div class="tab-panel ${at==='apps'?'active':''}" id="apps_${d.id}">
-          <div class="field-label">Blocked apps / games</div>
+          <div class="field-label">Apps / games to kill when locked</div>
+          <div class="mut" style="font-size:12px;margin-bottom:8px">These apps will be killed during bedtime, schedule locks, or when daily limit is reached. They run normally otherwise.</div>
           <div id="bllist_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:30px">
             ${(d.blocklist||[]).map(a=>`<span class="chip">${esc(a)}<span class="x" onclick="removeApp('${d.id}','${esc(a)}')">✕</span></span>`).join('') || '<span class="mut" style="font-size:13px">No blocked apps yet.</span>'}
           </div>
