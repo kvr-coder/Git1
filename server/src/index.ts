@@ -49,7 +49,12 @@ const ADMIN_HTML = (() => {
     return '<h1>Git1</h1><p>dashboard not found</p>';
   }
 })();
-app.get('/', (_req, res) => res.type('html').send(ADMIN_HTML));
+app.get('/', (_req, res) => {
+  // Force browsers to fetch the latest dashboard on every load — otherwise users
+  // see the old UI for hours/days after a redeploy.
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  res.type('html').send(ADMIN_HTML);
+});
 
 // Service worker + PWA manifest — required for Web Push and iOS A2HS.
 const SW_JS = (() => {
@@ -237,6 +242,19 @@ const commandSchema = z.object({
     'rename',
   ]),
   payload: z.record(z.unknown()).optional(),
+});
+
+app.delete('/devices/:id', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  // Close any open agent socket and revoke the token.
+  const ws = agentSockets.get(d.id);
+  if (ws && ws.readyState === ws.OPEN) {
+    try { ws.close(4401, 'unpaired'); } catch {}
+    agentSockets.delete(d.id);
+  }
+  store.deleteDevice(d.id);
+  res.json({ ok: true });
 });
 
 app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {

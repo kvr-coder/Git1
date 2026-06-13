@@ -407,6 +407,16 @@ export const store = {
     const row = db.prepare('SELECT * FROM devices WHERE id = ?').get(deviceId);
     return row ? rowToDevice(row) : undefined;
   },
+  deleteDevice(deviceId: string) {
+    db.prepare('DELETE FROM schedules WHERE deviceId = ?').run(deviceId);
+    db.prepare('DELETE FROM bank_ledger WHERE deviceId = ?').run(deviceId);
+    db.prepare('DELETE FROM device_locations WHERE deviceId = ?').run(deviceId);
+    db.prepare('DELETE FROM geofences WHERE deviceId = ?').run(deviceId);
+    db.prepare('DELETE FROM pair_recovery WHERE deviceId = ?').run(deviceId);
+    db.prepare('UPDATE pair_codes SET deviceId = NULL WHERE deviceId = ?').run(deviceId);
+    db.prepare('DELETE FROM devices WHERE id = ?').run(deviceId);
+  }
+
   updateDevice(deviceId: string, patch: Partial<DeviceRow>) {
     const fields = Object.keys(patch).filter((k) => k !== 'id');
     if (!fields.length) return;

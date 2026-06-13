@@ -359,6 +359,7 @@ function renderDevices(list){
           <button class="sec" onclick="addGeofence('${d.id}')">+ Geofence</button>
           <button class="sec" onclick="renameDevice('${d.id}','${esc(d.name)}')">Rename</button>
           <button class="sec" onclick="recoverDevice('${d.id}')">Recovery code</button>
+          <button class="dng" onclick="deleteDevice('${d.id}','${esc(d.name)}')">Delete device</button>
         </div>
       </details>
     </div>`;
@@ -398,6 +399,11 @@ async function addSchedule(deviceId){
     })});
     toast('Schedule added'); refresh();
   }catch(e){ toast(e.message); }
+}
+async function deleteDevice(id, name){
+  if(!confirm('Delete device "'+name+'"? This wipes all settings, schedules, and history for it. The agent on the kid PC will be unpaired.')) return;
+  try{ await api('/devices/'+id,{method:'DELETE'}); toast('Deleted'); refresh(); }
+  catch(e){ toast(e.message); }
 }
 async function delSchedule(id){
   try{ await api('/schedules/'+id,{method:'DELETE'}); toast('Removed'); refresh(); }catch(e){ toast(e.message); }
