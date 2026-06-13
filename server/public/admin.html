@@ -213,10 +213,12 @@ async function pair(){
 
 async function refresh(){
   try{
-    const [devices, reqs, chores, photos, cop] = await Promise.all([
+    const [devices, reqs, chores, photos, cop, scheds] = await Promise.all([
       api('/devices'), api('/requests?status=pending'), api('/chores?status=pending'),
       api('/photos').catch(()=>[]), api('/co-parents').catch(()=>[]),
+      api('/schedules').catch(()=>[]),
     ]);
+    SCHEDULES = scheds || [];
     renderRequests(reqs); renderChores(chores); renderDevices(devices);
     renderPhotos(photos); renderCoParents(cop);
   }catch(e){ /* 401 already handled */ }
@@ -269,6 +271,11 @@ async function addGeofence(deviceId){
   }, err=>toast(err.message), {enableHighAccuracy:true});
 }
 
+let SCHEDULES = [];
+const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+function hhmm(min){ const h=Math.floor(min/60), m=min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+function toMin(s){ const [h,m]=String(s).split(':').map(Number); return (h||0)*60+(m||0); }
+
 function renderDevices(list){
   const el=document.getElementById('devices');
   if(!list.length){ el.innerHTML='<div class="card mut">No devices yet. Pair one below.</div>'; return; }
@@ -276,6 +283,8 @@ function renderDevices(list){
     const pct = d.dailyLimitMinutes? Math.min(100, 100*d.usedTodayMinutes/d.dailyLimitMinutes):0;
     const online = d.status!=='offline';
     const net = d.internetBlocked;
+    const scheds = SCHEDULES.filter(s=>s.deviceId===d.id);
+    const blocklist = (d.blocklist||[]).join(', ');
     return `<div class="card">
       <div class="row">
         <div class="grow"><span class="name">${esc(d.name)}</span>
@@ -284,17 +293,114 @@ function renderDevices(list){
       </div>
       <div class="bar"><i style="width:${pct}%"></i></div>
       <div class="mut">${fmt(d.usedTodayMinutes)} / ${fmt(d.dailyLimitMinutes)} today · bank ${fmt(d.bankedMinutes)}</div>
+
       <div class="btns">
         <button class="dng" onclick="cmd('${d.id}','lock')">Lock</button>
         <button class="ok"  onclick="cmd('${d.id}','unlock')">Unlock</button>
         <button class="sec" onclick="cmd('${d.id}','grant_minutes',{minutes:15})">+15 min</button>
         <button class="${net?'ok':'warn'}" onclick="cmd('${d.id}','${net?'unblock_internet':'block_internet'}')">
           ${net?'Internet ON':'Internet OFF'}</button>
-        <button class="sec" onclick="addGeofence('${d.id}')">+ Geofence</button>
-        <button class="sec" onclick="recoverDevice('${d.id}')">Recovery code</button>
       </div>
+
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;color:var(--mut);font-size:14px;padding:6px 0">⚙️ Settings &amp; limits</summary>
+
+        <div style="margin-top:12px">
+          <div class="mut" style="margin-bottom:6px">Daily time limit</div>
+          <div class="row">
+            <input id="lim_${d.id}" type="number" min="0" max="1440" value="${d.dailyLimitMinutes||0}" class="grow" style="max-width:120px"/>
+            <span class="mut">minutes/day</span>
+            <button class="sec" onclick="setLimit('${d.id}')">Save</button>
+          </div>
+          <div class="btns" style="margin-top:6px">
+            <button class="sec" onclick="quickLimit('${d.id}',60)">1h</button>
+            <button class="sec" onclick="quickLimit('${d.id}',120)">2h</button>
+            <button class="sec" onclick="quickLimit('${d.id}',180)">3h</button>
+            <button class="sec" onclick="quickLimit('${d.id}',0)">None</button>
+          </div>
+        </div>
+
+        <div style="margin-top:16px">
+          <div class="mut" style="margin-bottom:6px">Blocked apps / games (comma-separated .exe names)</div>
+          <input id="bl_${d.id}" value="${esc(blocklist)}" placeholder="discord.exe, steam.exe, minecraft.exe"/>
+          <button class="sec" style="margin-top:6px" onclick="setBlocklist('${d.id}')">Save blocklist</button>
+        </div>
+
+        <div style="margin-top:16px">
+          <div class="mut" style="margin-bottom:6px">Time bank</div>
+          <div class="row">
+            <input id="bank_${d.id}" type="number" min="0" value="${d.bankedMinutes||0}" class="grow" style="max-width:120px"/>
+            <span class="mut">banked min</span>
+            <button class="sec" onclick="setBank('${d.id}')">Set</button>
+            <button class="sec" onclick="addBank('${d.id}',30)">+30</button>
+          </div>
+        </div>
+
+        <div style="margin-top:16px">
+          <div class="mut" style="margin-bottom:6px">Let kid borrow time (self-service)</div>
+          <div class="row">
+            <label class="row" style="gap:6px"><input type="checkbox" id="sb_${d.id}" ${d.selfBorrowEnabled?'checked':''} style="width:auto"/> enabled</label>
+            <input id="sbcap_${d.id}" type="number" min="0" max="240" value="${d.selfBorrowCapMinutes||30}" style="max-width:90px"/>
+            <span class="mut">cap min</span>
+            <button class="sec" onclick="setBorrow('${d.id}')">Save</button>
+          </div>
+        </div>
+
+        <div style="margin-top:16px">
+          <div class="mut" style="margin-bottom:6px">Schedules / bedtime (auto lock or block)</div>
+          ${scheds.map(s=>`<div class="row" style="margin:4px 0;font-size:14px">
+            <span class="grow">${esc(s.name)} · ${s.days.join(' ')} · ${hhmm(s.startMinute)}–${hhmm(s.endMinute)} · ${(s.actions||['lock']).join('+')}${s.enabled?'':' (off)'}</span>
+            <button class="dng" style="padding:6px 10px" onclick="delSchedule('${s.id}')">✕</button>
+          </div>`).join('') || '<div class="mut" style="font-size:13px">No schedules yet.</div>'}
+          <button class="sec" style="margin-top:8px" onclick="addSchedule('${d.id}')">+ Add schedule</button>
+        </div>
+
+        <div class="btns" style="margin-top:16px">
+          <button class="sec" onclick="addGeofence('${d.id}')">+ Geofence</button>
+          <button class="sec" onclick="renameDevice('${d.id}','${esc(d.name)}')">Rename</button>
+          <button class="sec" onclick="recoverDevice('${d.id}')">Recovery code</button>
+        </div>
+      </details>
     </div>`;
   }).join('');
+}
+
+async function setLimit(id){ const m=+document.getElementById('lim_'+id).value||0; cmd(id,'set_limit',{minutes:m}); }
+async function quickLimit(id,m){ cmd(id,'set_limit',{minutes:m}); }
+async function setBlocklist(id){
+  const apps=document.getElementById('bl_'+id).value.split(',').map(s=>s.trim()).filter(Boolean);
+  cmd(id,'set_blocklist',{apps});
+}
+async function setBank(id){ const m=+document.getElementById('bank_'+id).value||0; cmd(id,'set_bank_minutes',{minutes:m}); }
+async function addBank(id,m){ cmd(id,'add_bank_minutes',{minutes:m}); }
+async function setBorrow(id){
+  const enabled=document.getElementById('sb_'+id).checked;
+  const capMinutes=+document.getElementById('sbcap_'+id).value||0;
+  cmd(id,'set_borrow_settings',{enabled,capMinutes});
+}
+async function renameDevice(id,cur){
+  const name=prompt('New device name:',cur); if(!name) return;
+  cmd(id,'rename',{name});
+}
+async function addSchedule(deviceId){
+  const name=prompt('Schedule name (e.g. "Bedtime", "School hours"):'); if(!name) return;
+  const daysStr=prompt('Days (comma-separated: mon,tue,wed,thu,fri,sat,sun)\nLeave blank for every day:','mon,tue,wed,thu,fri,sat,sun')||'';
+  let days=daysStr.split(',').map(s=>s.trim().toLowerCase()).filter(x=>DAYS.includes(x));
+  if(!days.length) days=DAYS.slice();
+  const start=prompt('Start time (24h, e.g. 21:00):','21:00'); if(!start) return;
+  const end=prompt('End time (24h, e.g. 07:00):','07:00'); if(!end) return;
+  const act=(prompt('Action during this window: lock / block_internet / block_apps','lock')||'lock').trim();
+  const actions=['lock','block_internet','block_apps'].includes(act)?[act]:['lock'];
+  const id='sch_'+Math.random().toString(36).slice(2,10);
+  try{
+    await api('/schedules/'+id,{method:'PUT',body:JSON.stringify({
+      deviceId, name, days, startMinute:toMin(start), endMinute:toMin(end), enabled:true, actions
+    })});
+    toast('Schedule added'); refresh();
+  }catch(e){ toast(e.message); }
+}
+async function delSchedule(id){
+  try{ await api('/schedules/'+id,{method:'DELETE'}); toast('Removed'); refresh(); }catch(e){ toast(e.message); }
 }
 function renderRequests(list){
   const el=document.getElementById('requests');

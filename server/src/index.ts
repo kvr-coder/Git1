@@ -234,6 +234,7 @@ const commandSchema = z.object({
     'set_borrow_settings',
     'add_bank_minutes',
     'set_bank_minutes',
+    'rename',
   ]),
   payload: z.record(z.unknown()).optional(),
 });
@@ -247,6 +248,10 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   // Apply server-side state for commands the parent expects to persist.
   if (p.data.kind === 'block_internet') store.updateDevice(d.id, { internetBlocked: true });
   if (p.data.kind === 'unblock_internet') store.updateDevice(d.id, { internetBlocked: false });
+  if (p.data.kind === 'set_limit') {
+    const m = Math.max(0, Math.min(24 * 60, Number(p.data.payload?.minutes ?? 0) | 0));
+    store.updateDevice(d.id, { dailyLimitMinutes: m });
+  }
   if (p.data.kind === 'lock') store.updateDevice(d.id, { lockedByParent: true });
   if (p.data.kind === 'unlock') store.updateDevice(d.id, { lockedByParent: false });
   if (p.data.kind === 'set_blocklist') {
@@ -271,6 +276,11 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     store.updateDevice(d.id, { bankedMinutes: m });
     if (delta !== 0)
       store.appendBankLedger(req.userId!, d.id, delta, m, 'parent_set', null);
+  }
+
+  if (p.data.kind === 'rename') {
+    const name = String(p.data.payload?.name ?? '').trim().slice(0, 40);
+    if (name) store.updateDevice(d.id, { name });
   }
 
   const cmd: Command = {
