@@ -234,17 +234,46 @@ class Usage:
 
 # ---------- Pairing ----------
 def pair() -> str:
-    # Retry the initial pair/start until the server responds. The Cloudflare
-    # quick tunnel can take 10-30s after launch before DNS resolves.
+    # Retry /agent/pair/start until the server answers. Free-tier hosts (Render)
+    # or a Cloudflare quick tunnel can take 30-60s to wake on a cold start, so we
+    # retry indefinitely with a capped backoff. Crucially we log *why* each try
+    # failed and the exact GIT1_SERVER we're hitting, so a misconfigured URL or a
+    # sleeping/not-deployed server is obvious in agent.log instead of a vague
+    # "unreachable".
     code: str | None = None
+    attempt = 0
+    started = time.time()
+    delay = 5
     while code is None:
+        attempt += 1
+        reason: str
         try:
             r = requests.post(f"{SERVER_HTTP}/agent/pair/start", timeout=10)
             r.raise_for_status()
             code = r.json()["code"]
         except requests.RequestException as e:
-            print(f"[pair] server unreachable at {SERVER_HTTP} ({e.__class__.__name__}); retrying in 5s...")
-            time.sleep(5)
+            reason = f"unreachable ({e.__class__.__name__}: {e})"
+        except (ValueError, KeyError) as e:
+            # Got an HTTP reply, but not the JSON we expected — usually means
+            # GIT1_SERVER points at the wrong host (a parked page / proxy)
+            # rather than the Git1 server.
+            reason = (f"server answered but with no pairing code "
+                      f"({e.__class__.__name__}) — is GIT1_SERVER correct?")
+        else:
+            break  # success: code is set
+        waited = int(time.time() - started)
+        print(f"[pair] attempt {attempt} failed: {reason}")
+        print(f"[pair] target GIT1_SERVER={SERVER_HTTP}; retrying in {delay}s "
+              f"(trying for {waited}s so far)")
+        if attempt == 3:
+            print("[pair] still no luck after 3 tries. Most common causes:\n"
+                  "  * GIT1_SERVER is wrong — check the EXACT Render URL incl. any\n"
+                  "    suffix, e.g. https://git1-server-xxxx.onrender.com\n"
+                  f"  * the server is asleep/not deployed — open {SERVER_HTTP}/health\n"
+                  "    in a browser; it should return {\"ok\":true}\n"
+                  "  * this PC has no internet yet")
+        time.sleep(delay)
+        delay = min(delay * 2, 30)
     # Write the code to a side-file so launchers (.bat) can auto-claim it.
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -252,19 +281,28 @@ def pair() -> str:
     except Exception:
         pass
     print(f"\n*** Pairing code: {code} ***\nEnter this in the Git1 mobile app.\n")
+    polls = 0
     while True:
         time.sleep(3)
+        polls += 1
         try:
             poll = requests.get(
                 f"{SERVER_HTTP}/agent/pair/poll", params={"code": code}, timeout=10
             )
-        except requests.RequestException:
+        except requests.RequestException as e:
+            if polls % 10 == 0:
+                print(f"[pair] still waiting; poll error ({e.__class__.__name__}). "
+                      f"Code is {code}")
             continue
         if poll.status_code != 200:
+            if polls % 10 == 0:
+                print(f"[pair] poll returned HTTP {poll.status_code}. Code is {code}")
             continue
         body = poll.json()
         if body.get("status") == "paired":
             return body["agentToken"]
+        if polls % 10 == 0:
+            print(f"[pair] waiting for the parent to enter code {code} in the app...")
 
 
 # ---------- Outgoing event helper (thread-safe) ----------
