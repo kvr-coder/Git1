@@ -35,6 +35,13 @@ const REPO_COMMIT: string =
 const app = express();
 app.use(express.json());
 
+// Force no caching on every response — otherwise the browser's disk cache can
+// keep showing deleted/edited items until a hard refresh.
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  next();
+});
+
 // Public health endpoint for Render / uptime monitors.
 app.get('/health', (_req, res) => {
   res.json({ ok: true });

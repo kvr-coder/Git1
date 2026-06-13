@@ -128,7 +128,10 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
 async function api(path, opts={}){
   const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
   if (TOKEN) headers.Authorization = 'Bearer '+TOKEN;
-  const res = await fetch(API+path, Object.assign({}, opts, {headers}));
+  // Never let the browser cache our state — otherwise deletes/edits stay visible
+  // until a hard refresh because GET responses come back from the disk cache.
+  const final = Object.assign({}, opts, {headers, cache: 'no-store'});
+  const res = await fetch(API+path, final);
   if (res.status === 401){ logout(); throw new Error('Session expired'); }
   if (!res.ok){ let e; try{e=(await res.json()).error}catch{}; throw new Error(e||('HTTP '+res.status)); }
   return res.status===204 ? null : res.json();
@@ -650,9 +653,13 @@ async function pushBlocklist(deviceId, fn){
     const devs = await api('/devices');
     const d = devs.find(x=>x.id===deviceId); if(!d) return;
     const next = fn(d.blocklist||[]);
+    // Optimistic local update so the chip disappears immediately on Remove.
+    d.blocklist = next;
+    renderDevices(devs);
     await api('/devices/'+deviceId+'/command',{method:'POST',body:JSON.stringify({kind:'set_blocklist',payload:{apps:next}})});
-    toast('Blocklist updated'); forceRefresh();
-  } catch(e){ toast(e.message); }
+    toast('Blocklist updated');
+    await forceRefresh();
+  } catch(e){ toast(e.message); await forceRefresh(); }
 }
 
 async function addChoreTemplate(deviceId){
@@ -668,7 +675,8 @@ async function addChoreTemplate(deviceId){
 async function delChoreTemplate(deviceId, templateId){
   try{
     await api('/devices/'+deviceId+'/chore-templates/'+templateId,{method:'DELETE'});
-    toast('Removed'); forceRefresh();
+    toast('Removed');
+    await forceRefresh();
   } catch(e){ toast(e.message); }
 }
 
@@ -754,7 +762,13 @@ async function confirmDelete(id){
 // Keep legacy fn name in case anything calls it.
 async function deleteDevice(id, name){ armDelete(id, name); }
 async function delSchedule(id){
-  try{ await api('/schedules/'+id,{method:'DELETE'}); toast('Removed'); forceRefresh(); }catch(e){ toast(e.message); }
+  // Optimistic update first so the UI changes instantly, then sync server + re-fetch.
+  SCHEDULES = SCHEDULES.filter(s=>s.id!==id);
+  try{
+    await api('/schedules/'+id,{method:'DELETE'});
+    toast('Removed');
+    await forceRefresh();
+  }catch(e){ toast(e.message); await forceRefresh(); }
 }
 function renderRequests(list){
   const el=document.getElementById('requests');
