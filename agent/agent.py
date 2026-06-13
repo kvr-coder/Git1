@@ -203,14 +203,35 @@ def lock_workstation() -> bool:
         kernel32.CloseHandle(h_dup); kernel32.CloseHandle(h_user_tok)
         if not ok:
             err = kernel32.GetLastError()
-            print(f"[lock] CreateProcessAsUser failed: {err}; falling back to LockWorkStation")
-            return bool(ctypes.windll.user32.LockWorkStation())
+            print(f"[lock] CreateProcessAsUser failed: {err}; falling back to WTSDisconnectSession")
+            return _disconnect_session(sess)
         kernel32.CloseHandle(pi.hThread); kernel32.CloseHandle(pi.hProcess)
         print(f"[lock] LockWorkStation launched in session {sess} (clean lock).")
         return True
     except Exception as e:
-        print(f"[lock] impersonated lock failed: {e}; falling back to LockWorkStation")
+        print(f"[lock] impersonated lock failed: {e}; falling back to WTSDisconnectSession")
+        try:
+            sess = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
+            if sess != 0xFFFFFFFF:
+                return _disconnect_session(sess)
+        except Exception:
+            pass
         return bool(ctypes.windll.user32.LockWorkStation())
+
+
+def _disconnect_session(sess: int) -> bool:
+    """Lock by disconnecting the console session. Works from session 0 but
+    leaves Explorer slightly unhappy after reconnect — only used as a fallback
+    when the clean impersonated LockWorkStation path fails."""
+    try:
+        ok = ctypes.windll.wtsapi32.WTSDisconnectSession(0, int(sess), False)
+        if ok:
+            print(f"[lock] disconnected session {sess} (fallback lock).")
+            return True
+        print(f"[lock] WTSDisconnectSession failed: {ctypes.windll.kernel32.GetLastError()}")
+    except Exception as e:
+        print(f"[lock] WTSDisconnectSession threw {e}")
+    return False
 
 
 def enforce_lock() -> bool:

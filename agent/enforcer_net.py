@@ -120,9 +120,20 @@ def heal_legacy_block() -> None:
     _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={LEGACY_RULE_ALLOW}"])
 
 
+def _ps(script: str) -> tuple[int, str]:
+    """Run a PowerShell snippet (used for the NetSecurity firewall cmdlets,
+    which support per-user scoping reliably, unlike `netsh ... localuser=`
+    which some Windows builds reject with 'not a valid argument')."""
+    if sys.platform != "win32":
+        return 0, "(noop)"
+    return _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
+
+
 def is_blocked() -> bool:
-    code, out = _run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={RULE_BLOCK_CHILD}"])
-    return code == 0 and "No rules match" not in out
+    code, out = _ps(
+        f"if (Get-NetFirewallRule -DisplayName '{RULE_BLOCK_CHILD}' -ErrorAction SilentlyContinue) {{'YES'}} else {{'NO'}}"
+    )
+    return code == 0 and "YES" in out
 
 
 def block_internet() -> bool:
@@ -133,36 +144,34 @@ def block_internet() -> bool:
     if is_blocked():
         print("[net] already blocked (child SID).")
         return True
-    code, out = _run(
-        [
-            "netsh",
-            "advfirewall",
-            "firewall",
-            "add",
-            "rule",
-            f"name={RULE_BLOCK_CHILD}",
-            "dir=out",
-            "action=block",
-            "enable=yes",
-            "profile=any",
-            f"localuser={_sddl(sid)}",
-        ],
+    # Modern, reliable per-user block via New-NetFirewallRule -LocalUser (SDDL).
+    # Scoped to the child's SID, so the LocalSystem agent keeps connectivity.
+    sddl = _sddl(sid)
+    code, out = _ps(
+        "New-NetFirewallRule "
+        f"-DisplayName '{RULE_BLOCK_CHILD}' "
+        "-Direction Outbound -Action Block -Profile Any -Enabled True "
+        f"-LocalUser \"{sddl}\" | Out-Null"
     )
     if code != 0:
-        print(f"[net] BLOCK FAILED: {out}")
-        if "elevation" in out.lower() or "administrator" in out.lower():
-            print("[net] *** Agent must run as Administrator/LocalSystem to add firewall rules. ***")
-        return False
+        print(f"[net] BLOCK FAILED (New-NetFirewallRule): {out}")
+        # Fallback to legacy netsh localuser syntax for older builds.
+        code2, out2 = _run([
+            "netsh", "advfirewall", "firewall", "add", "rule",
+            f"name={RULE_BLOCK_CHILD}", "dir=out", "action=block",
+            "enable=yes", "profile=any", f"localuser={sddl}",
+        ])
+        if code2 != 0:
+            print(f"[net] netsh fallback also failed: {out2}")
+            return False
     print(f"[net] block rule added for child SID {sid}.")
     return True
 
 
 def unblock_internet() -> bool:
-    code, out = _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK_CHILD}"])
-    # Also clear any legacy rules, in case this agent is healing an old block.
+    _ps(f"Remove-NetFirewallRule -DisplayName '{RULE_BLOCK_CHILD}' -ErrorAction SilentlyContinue")
+    # Also clear via netsh + any legacy rules, belt and braces.
+    _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK_CHILD}"])
     heal_legacy_block()
-    if code != 0 and "No rules match" not in out:
-        print(f"[net] UNBLOCK FAILED: {out}")
-        return False
     print("[net] block rule removed.")
     return True
