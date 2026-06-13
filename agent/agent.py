@@ -225,6 +225,7 @@ class Usage:
         self.date: str = data["date"]
         self.minutes: float = float(data.get("minutes", 0))
         self.limit_minutes: int = int(data.get("limitMinutes", 120))
+        self.app_seconds: dict[str, float] = dict(data.get("appSeconds") or {})
         self.save()
 
     def save(self) -> None:
@@ -236,6 +237,7 @@ class Usage:
                 "limitMinutes": self.limit_minutes,
                 "futureAdjustments": self.future_adjustments,
                 "bankedMinutes": self.banked_minutes,
+                "appSeconds": self.app_seconds,
             },
         )
 
@@ -246,7 +248,15 @@ class Usage:
             self.date = new_date
             self.minutes = 0
             self.limit_minutes = max(0, self.limit_minutes + adjustment)
+            # New day: clear per-app counters so today shows clean stats.
+            self.app_seconds = {}
             self.save()
+
+    def add_app_seconds(self, name: str, sec: float) -> None:
+        if not name:
+            return
+        n = name.lower()
+        self.app_seconds[n] = float(self.app_seconds.get(n, 0.0)) + max(0.0, sec)
 
     def borrow_from(self, date_iso: str, minutes: int) -> None:
         self.limit_minutes += minutes
@@ -515,12 +525,24 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         usage.roll_if_new_day()
         now = time.time()
 
-        # 1. Track active session time
+        # 1. Track active session time + per-app seconds (for the Stats page).
+        # All user apps running in the active console session get credited with
+        # the elapsed sample interval — this gives a clear picture of "what the
+        # PC was doing today", not just the foreground app, without needing
+        # cross-session window-focus tracking (which session 0 can't do).
         active = idle_seconds() < IDLE_THRESHOLD_SEC
         elapsed = now - last_sample
         last_sample = now
         if active:
             usage.add_seconds(elapsed)
+            try:
+                if sys.platform == "win32":
+                    sess = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
+                    if sess != 0xFFFFFFFF:
+                        for name in enforcer_apps.running_user_apps_by_session(int(sess)):
+                            usage.add_app_seconds(name, elapsed)
+            except Exception as e:
+                print(f"[stats] app sampling failed: {e}")
 
         # 2. Kill blocked apps
         killed = enforcer_apps.kill_blocked()
@@ -614,6 +636,13 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         if now - last_heartbeat >= HEARTBEAT_INTERVAL_SEC:
             last_heartbeat = now
             try:
+                # Per-app minutes (Stats page). Keep payload small by sending
+                # only the top 30 apps for the current day.
+                app_minutes = sorted(
+                    ((name, sec / 60.0) for name, sec in usage.app_seconds.items()),
+                    key=lambda x: x[1], reverse=True,
+                )[:30]
+                app_usage = {name: round(mins, 1) for name, mins in app_minutes}
                 await ws.send(
                     json.dumps(
                         {
@@ -624,6 +653,9 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
                             # grows when bank/grant is spent).
                             "bankedMinutes": int(usage.banked_minutes),
                             "limitMinutes": int(usage.limit_minutes),
+                            # Daily stats rollup.
+                            "date": usage.date,
+                            "appUsage": app_usage,
                         },
                     )
                 )

@@ -267,6 +267,18 @@ CREATE TABLE IF NOT EXISTS pair_recovery (
   usedAt INTEGER
 );
 CREATE INDEX IF NOT EXISTS pair_recovery_device ON pair_recovery(deviceId);
+
+-- Daily usage rollups + per-app minutes. Agent reports cumulative numbers each
+-- heartbeat; we store the latest for today (date = local YYYY-MM-DD) and keep
+-- history forever (rows are tiny: ~50 bytes + per-app JSON).
+CREATE TABLE IF NOT EXISTS usage_daily (
+  deviceId TEXT NOT NULL,
+  date TEXT NOT NULL,
+  totalMinutes INTEGER NOT NULL DEFAULT 0,
+  appUsage TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (deviceId, date)
+);
+CREATE INDEX IF NOT EXISTS usage_daily_device ON usage_daily(deviceId, date DESC);
 `);
 
 for (const stmt of [
@@ -953,6 +965,22 @@ export const store = {
   // ── Pair-code recovery ──
   // Issues a fresh pair code for an already-paired device so the kid can re-pair
   // after wiping the app, without the parent losing settings/history.
+  upsertUsageDaily(deviceId: string, date: string, totalMinutes: number, appUsage: Record<string, number>) {
+    db.prepare(
+      `INSERT INTO usage_daily (deviceId, date, totalMinutes, appUsage)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(deviceId, date) DO UPDATE SET
+         totalMinutes = MAX(usage_daily.totalMinutes, excluded.totalMinutes),
+         appUsage = excluded.appUsage`,
+    ).run(deviceId, date, Math.max(0, totalMinutes | 0), JSON.stringify(appUsage || {}));
+  },
+  listUsageDaily(deviceId: string, days = 14): Array<{date: string; totalMinutes: number; appUsage: Record<string, number>}> {
+    const rows = db
+      .prepare('SELECT date, totalMinutes, appUsage FROM usage_daily WHERE deviceId = ? ORDER BY date DESC LIMIT ?')
+      .all(deviceId, days) as Array<{date: string; totalMinutes: number; appUsage: string}>;
+    return rows.map((r) => ({ date: r.date, totalMinutes: r.totalMinutes, appUsage: JSON.parse(r.appUsage || '{}') }));
+  },
+
   createRecoveryCode(userId: string, deviceId: string): string {
     const code = String(Math.floor(100000 + Math.random() * 900000));
     db.prepare(

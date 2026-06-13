@@ -414,6 +414,13 @@ app.get('/devices/:id/bank-ledger', auth, (req: AuthedRequest, res) => {
 });
 
 // ---------- Chore templates ----------
+app.get('/devices/:id/stats', auth, (req: AuthedRequest, res) => {
+  const d = store.getDevice(req.userId!, req.params.id);
+  if (!d) return res.status(404).json({ error: 'device not found' });
+  const days = Math.min(60, Math.max(1, Number(req.query.days ?? 14) | 0));
+  res.json({ daily: store.listUsageDaily(d.id, days) });
+});
+
 app.get('/devices/:id/chore-templates', auth, (req: AuthedRequest, res) => {
   const d = store.getDevice(req.userId!, req.params.id);
   if (!d) return res.status(404).json({ error: 'device not found' });
@@ -865,6 +872,11 @@ wss.on('connection', (ws, req) => {
       if (typeof (msg as any).bankedMinutes === 'number')
         patch.bankedMinutes = (msg as any).bankedMinutes;
       store.updateDevice(device.id, patch);
+      // Roll up today's usage + per-app minutes for the Stats tab.
+      const m = msg as any;
+      if (m.date && typeof m.usedTodayMinutes === 'number') {
+        store.upsertUsageDaily(device.id, m.date, m.usedTodayMinutes | 0, m.appUsage || {});
+      }
     } else if (msg.kind === 'event') {
       console.log(`[event] ${device.id} ${msg.name}`, msg.payload ?? {});
       let message = `${device.name}: ${msg.name.replace(/_/g, ' ')}`;

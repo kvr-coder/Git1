@@ -372,6 +372,7 @@ function renderDevices(list){
           <button class="tab ${at==='apps'?'active':''}" data-tab="apps_${d.id}" onclick="selectTab(this,'${d.id}')">🚫 Apps</button>
           <button class="tab ${at==='sched'?'active':''}" data-tab="sched_${d.id}" onclick="selectTab(this,'${d.id}')">📅 Schedule</button>
           <button class="tab ${at==='chores'?'active':''}" data-tab="chores_${d.id}" onclick="selectTab(this,'${d.id}')">⭐ Chores</button>
+          <button class="tab ${at==='stats'?'active':''}" data-tab="stats_${d.id}" onclick="selectTab(this,'${d.id}');loadStats('${d.id}')">📊 Stats</button>
           <button class="tab ${at==='more'?'active':''}" data-tab="more_${d.id}" onclick="selectTab(this,'${d.id}')">⋯ More</button>
         </div>
 
@@ -507,6 +508,19 @@ function renderDevices(list){
         </div>
 
         <!-- MORE tab -->
+        <!-- STATS tab -->
+        <div class="tab-panel ${at==='stats'?'active':''}" id="stats_${d.id}">
+          <div class="field-label">Last 14 days — total online time</div>
+          <div id="stats_chart_${d.id}" style="display:flex;align-items:flex-end;gap:4px;height:120px;background:#0e1626;padding:10px;border-radius:10px;margin-bottom:14px">
+            <div class="mut" style="font-size:13px;align-self:center;margin:auto">Loading…</div>
+          </div>
+          <div class="field-label">Top apps today</div>
+          <div id="stats_apps_${d.id}" style="background:#0e1626;padding:10px;border-radius:10px">
+            <div class="mut" style="font-size:13px">Loading…</div>
+          </div>
+        </div>
+
+        <!-- MORE tab -->
         <div class="tab-panel ${at==='more'?'active':''}" id="more_${d.id}">
           <div class="field-label">Device name</div>
           <div class="row" style="gap:8px;margin-bottom:14px">
@@ -564,6 +578,48 @@ async function renameDeviceInline(id){
 async function renameDevice(id,cur){
   cmd(id,'rename',{name:cur||'New PC'});
 }
+async function loadStats(deviceId){
+  const chart = document.getElementById('stats_chart_'+deviceId);
+  const apps = document.getElementById('stats_apps_'+deviceId);
+  if (!chart || !apps) return;
+  try {
+    const r = await api('/devices/'+deviceId+'/stats?days=14');
+    const days = (r.daily || []).slice().reverse();           // oldest -> newest
+    if (!days.length) {
+      chart.innerHTML = '<div class="mut" style="font-size:13px;align-self:center;margin:auto">No data yet — usage starts being tracked once the agent runs for a few minutes.</div>';
+      apps.innerHTML = '<div class="mut" style="font-size:13px">No app data yet.</div>';
+      return;
+    }
+    const max = Math.max(60, ...days.map(d=>d.totalMinutes));
+    chart.innerHTML = days.map(d=>{
+      const h = Math.max(2, Math.round((d.totalMinutes/max)*100));
+      const lbl = d.date.slice(5);   // MM-DD
+      return `<div title="${esc(d.date)}: ${fmt(d.totalMinutes)}" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
+        <div style="width:100%;height:${h}%;background:var(--accent);border-radius:4px 4px 0 0"></div>
+        <div class="mut" style="font-size:10px;margin-top:4px">${esc(lbl)}</div>
+        <div class="mut" style="font-size:10px">${fmt(d.totalMinutes)}</div>
+      </div>`;
+    }).join('');
+    const today = days[days.length-1];
+    const entries = Object.entries(today.appUsage || {}).sort((a,b)=>b[1]-a[1]);
+    if (!entries.length) {
+      apps.innerHTML = '<div class="mut" style="font-size:13px">No app activity captured today yet.</div>';
+    } else {
+      const topMax = Math.max(1, entries[0][1]);
+      apps.innerHTML = entries.slice(0,15).map(([name,mins])=>`
+        <div style="margin:6px 0">
+          <div class="row" style="gap:8px;margin-bottom:2px;font-size:13px">
+            <span class="grow">${esc(name)}</span>
+            <span class="mut">${fmt(Math.round(mins))}</span>
+          </div>
+          <div class="bar" style="height:6px;margin:0"><i style="width:${Math.round(mins/topMax*100)}%"></i></div>
+        </div>`).join('');
+    }
+  } catch(e){
+    chart.innerHTML = '<div class="mut" style="font-size:13px;align-self:center;margin:auto">Could not load stats: '+esc(e.message)+'</div>';
+  }
+}
+
 function selectTab(btn, deviceId){
   const tabs = btn.parentNode.querySelectorAll('.tab');
   tabs.forEach(t=>t.classList.remove('active'));
