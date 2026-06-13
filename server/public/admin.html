@@ -219,7 +219,11 @@ async function refresh(){
       api('/schedules').catch(()=>[]),
     ]);
     SCHEDULES = scheds || [];
-    renderRequests(reqs); renderChores(chores); renderDevices(devices);
+    renderRequests(reqs); renderChores(chores);
+    // Don't blow away whatever input the user is currently editing.
+    const ae = document.activeElement;
+    const editing = ae && ae.tagName === 'INPUT' && document.getElementById('devices').contains(ae);
+    if (!editing) renderDevices(devices);
     renderPhotos(photos); renderCoParents(cop);
   }catch(e){ /* 401 already handled */ }
 }
@@ -272,6 +276,8 @@ async function addGeofence(deviceId){
 }
 
 let SCHEDULES = [];
+let OPEN_PANELS = new Set();        // device IDs whose Settings panel is open
+let EDITING_FIELDS = new Set();     // input IDs the user is currently typing in
 const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
 function hhmm(min){ const h=Math.floor(min/60), m=min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 function toMin(s){ const [h,m]=String(s).split(':').map(Number); return (h||0)*60+(m||0); }
@@ -302,7 +308,7 @@ function renderDevices(list){
           ${net?'Internet ON':'Internet OFF'}</button>
       </div>
 
-      <details style="margin-top:12px">
+      <details ${OPEN_PANELS.has(d.id)?'open':''} style="margin-top:12px" ontoggle="this.open?OPEN_PANELS.add('${d.id}'):OPEN_PANELS.delete('${d.id}')">
         <summary style="cursor:pointer;color:var(--mut);font-size:14px;padding:6px 0">⚙️ Settings &amp; limits</summary>
 
         <div style="margin-top:12px">
