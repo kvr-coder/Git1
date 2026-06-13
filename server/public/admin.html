@@ -238,13 +238,18 @@ async function refresh(){
     ]);
     SCHEDULES = scheds || [];
     renderRequests(reqs); renderChores(chores);
-    // Skip re-rendering devices while ANY Settings panel is open OR an input
-    // inside the device list is focused. The auto-refresh otherwise wipes
-    // half-built schedules, blocklist edits, chore drafts, day-chip toggles, etc.
+    // Strategy: full re-render only when safe (no open panel, no focused input).
+    // Otherwise update LIVE STATS in place (status pill, used/limit, bar,
+    // last seen, online/offline) without touching the Settings panel HTML —
+    // so day-chip selections, half-typed values, etc. survive the 5s tick.
     const ae = document.activeElement;
     const inDevices = ae && document.getElementById('devices').contains(ae);
     const anyPanelOpen = OPEN_PANELS.size > 0;
-    if (!inDevices && !anyPanelOpen) renderDevices(devices);
+    if (!inDevices && !anyPanelOpen) {
+      renderDevices(devices);
+    } else {
+      updateDeviceStatsInPlace(devices);
+    }
     renderPhotos(photos); renderCoParents(cop);
   }catch(e){ /* 401 already handled */ }
 }
@@ -315,6 +320,23 @@ const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
 function hhmm(min){ const h=Math.floor(min/60), m=min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 function toMin(s){ const [h,m]=String(s).split(':').map(Number); return (h||0)*60+(m||0); }
 
+function updateDeviceStatsInPlace(list){
+  for (const d of list){
+    const card = document.querySelector(`#devices .card[data-device="${d.id}"]`);
+    if (!card) continue; // not rendered yet — wait for the next safe re-render
+    const online = d.status!=='offline';
+    const pct = d.dailyLimitMinutes ? Math.min(100, 100*d.usedTodayMinutes/d.dailyLimitMinutes) : 0;
+    const pill = card.querySelector('[data-role="pill"]');
+    if (pill){ pill.textContent = online?'online':'offline'; pill.className = 'pill '+(online?'on':'off'); pill.dataset.role='pill'; }
+    const seen = card.querySelector('[data-role="seen"]');
+    if (seen) seen.textContent = d.status + (d.lastSeen?(' · seen '+ago(d.lastSeen)):'');
+    const bar = card.querySelector('[data-role="bar"]');
+    if (bar) bar.style.width = pct+'%';
+    const stats = card.querySelector('[data-role="stats"]');
+    if (stats) stats.textContent = fmt(d.usedTodayMinutes)+' / '+fmt(d.dailyLimitMinutes)+' today · bank '+fmt(d.bankedMinutes);
+  }
+}
+
 function renderDevices(list){
   const el=document.getElementById('devices');
   if(!list.length){ el.innerHTML='<div class="card mut">No devices yet. Pair one below.</div>'; return; }
@@ -325,14 +347,14 @@ function renderDevices(list){
     const scheds = SCHEDULES.filter(s=>s.deviceId===d.id);
     const blocklist = (d.blocklist||[]).join(', ');
     const at = ACTIVE_TAB.get(d.id) || 'time';   // which settings tab is active
-    return `<div class="card">
+    return `<div class="card" data-device="${d.id}">
       <div class="row">
         <div class="grow"><span class="name">${esc(d.name)}</span>
-          <div class="mut">${d.status}${d.lastSeen?(' · seen '+ago(d.lastSeen)):''}</div></div>
-        <span class="pill ${online?'on':'off'}">${online?'online':'offline'}</span>
+          <div class="mut" data-role="seen">${d.status}${d.lastSeen?(' · seen '+ago(d.lastSeen)):''}</div></div>
+        <span class="pill ${online?'on':'off'}" data-role="pill">${online?'online':'offline'}</span>
       </div>
-      <div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="mut">${fmt(d.usedTodayMinutes)} / ${fmt(d.dailyLimitMinutes)} today · bank ${fmt(d.bankedMinutes)}</div>
+      <div class="bar"><i data-role="bar" style="width:${pct}%"></i></div>
+      <div class="mut" data-role="stats">${fmt(d.usedTodayMinutes)} / ${fmt(d.dailyLimitMinutes)} today · bank ${fmt(d.bankedMinutes)}</div>
 
       <div class="btns">
         <button class="dng" onclick="cmd('${d.id}','lock')">Lock</button>
