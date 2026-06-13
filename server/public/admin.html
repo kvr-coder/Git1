@@ -122,8 +122,13 @@ async function login(){
   const invite=document.getElementById('invite').value.trim();
   try{
     let r;
-    try { r = await api('/auth/login',{method:'POST',body:JSON.stringify({email,password})}); }
-    catch(e){ // fall through to register if account doesn't exist
+    try {
+      r = await api('/auth/login',{method:'POST',body:JSON.stringify({email,password})});
+    } catch(e){
+      // Only attempt to register if the user actively provided an invite code.
+      // Otherwise show the real login error (was masked as "invalid invite code"
+      // because the old code blindly fell through to register on any login error).
+      if (!invite) throw e;
       r = await api('/auth/register',{method:'POST',body:JSON.stringify({email,password,invite})});
     }
     TOKEN=r.token; localStorage.setItem('git1_token',TOKEN);
