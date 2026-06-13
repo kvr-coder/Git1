@@ -689,35 +689,45 @@ def main() -> None:
 
     last_connected = time.time()
     backoff = 2
+    unauthorized_streak = 0   # consecutive 4401s; re-pair only after sustained failure
     while True:
         try:
             asyncio.run(run(token, usage, dash))
             last_connected = time.time()
             backoff = 2
+            unauthorized_streak = 0
         except Exception as e:
             offline_for = time.time() - last_connected
             err_str = str(e)
             print(f"[ws] disconnected: {e}; offline {int(offline_for)}s; retrying in {backoff}s")
-            # Recovery: parent rotated the agent token (e.g. issued a recovery
-            # code). The server closes the WS with 4401 unauthorized. Try the
-            # recovery hint file before falling back to backoff.
-            if "4401" in err_str or "unauthorized" in err_str.lower():
+            is_unauth = "4401" in err_str or "unauthorized" in err_str.lower()
+            if is_unauth:
+                # A recovery code waiting? Use it immediately.
                 new_token = try_recovery()
                 if new_token:
                     token = new_token
                     cfg["agentToken"] = token
                     save_json(CONFIG_PATH, cfg)
                     backoff = 2
+                    unauthorized_streak = 0
                     continue
-                # No recovery code waiting -> server doesn't know this token
-                # (DB wipe, manual unpair, etc). Auto-clear and re-pair so the
-                # kid PC doesn't get stuck. A fresh pair code prints on next loop.
-                print("[ws] token rejected and no recovery code -> clearing token and re-pairing")
-                cfg.pop("agentToken", None)
-                cfg.pop("deviceId", None)
-                save_json(CONFIG_PATH, cfg)
-                # Re-exec so the new pairing flow runs cleanly.
-                os.execv(sys.executable, [sys.executable] + sys.argv)
+                # Otherwise: a single 4401 can be transient (server cold-start on
+                # Render free tier rejects briefly while waking). Do NOT nuke the
+                # token on the first one — keep retrying. Only after the token is
+                # rejected persistently (server's DB really lost it) do we re-pair,
+                # and we do it INLINE (pair() blocks on a fresh code) instead of
+                # the old execv loop that spammed new codes every cycle.
+                unauthorized_streak += 1
+                if unauthorized_streak >= 5:
+                    print("[ws] token persistently rejected -> re-pairing (server lost our device).")
+                    token = pair()  # prints a code, blocks until the parent claims it
+                    cfg["agentToken"] = token
+                    save_json(CONFIG_PATH, cfg)
+                    backoff = 2
+                    unauthorized_streak = 0
+                    continue
+            else:
+                unauthorized_streak = 0
             # Deadman: if internet is firewall-blocked AND we've been offline
             # too long, auto-unblock so parent can recover.
             if enforcer_net.is_blocked() and offline_for > NET_DEADMAN_SEC:

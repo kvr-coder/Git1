@@ -722,6 +722,21 @@ function sendToAgent(deviceId: string, msg: ServerMessage): boolean {
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: '/agent/ws' });
 
+// Heartbeat ping loop: every 25s ping all connected agents. If a socket missed
+// the previous pong, it's dead — terminate it so the agent reconnects fast.
+// This is what keeps connections alive through Render's idle proxy timeout.
+const WS_PING_MS = 25_000;
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if ((ws as any).isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    (ws as any).isAlive = false;
+    try { ws.ping(); } catch {}
+  }
+}, WS_PING_MS);
+
 function buildSnapshot(d: DeviceRow) {
   return {
     kind: 'snapshot' as const,
@@ -762,6 +777,11 @@ wss.on('connection', (ws, req) => {
     ws.close(4401, 'unauthorized');
     return;
   }
+  // Keepalive: mark alive on every pong. The interval below pings all clients
+  // every 25s so Render's proxy never sees an idle connection and silently
+  // drops it ("no close frame" on the agent). Dead sockets get terminated.
+  (ws as any).isAlive = true;
+  ws.on('pong', () => { (ws as any).isAlive = true; });
   agentSockets.set(device.id, ws);
   // If this device was previously flagged offline (tamper), notify recovery.
   if (offlineAlerted.delete(device.id)) {
