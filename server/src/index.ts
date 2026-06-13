@@ -923,6 +923,7 @@ function toPublicDevice(d: DeviceRow) {
     selfBorrowEnabled: d.selfBorrowEnabled,
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
     bankedMinutes: d.bankedMinutes,
+    choreTemplates: store.listChoreTemplates(d.userId, d.id),
   };
 }
 

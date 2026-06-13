@@ -48,6 +48,24 @@
            opacity:0; transition:.2s; pointer-events:none; max-width:90%; }
   .toast.show { opacity:1; }
   .hidden { display:none; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:14px -14px 12px; padding:0 12px; overflow-x:auto; }
+  .tab { padding:10px 12px; font-size:13px; color:var(--mut); border:0; background:transparent; cursor:pointer;
+         border-bottom:2px solid transparent; border-radius:0; }
+  .tab.active { color:var(--fg); border-bottom-color:var(--accent); }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+          background:#1a2438; font-size:13px; cursor:default; }
+  .chip .x { cursor:pointer; opacity:.6; padding:0 2px; }
+  .chip .x:hover { opacity:1; color:var(--danger); }
+  .field-label { font-size:12px; color:var(--mut); margin-bottom:4px; }
+  .schday-btn { background:#1a2438; padding:8px 12px; border-radius:8px; cursor:pointer;
+                font-size:13px; user-select:none; transition:.1s; }
+  .schday-btn.on { background:var(--accent); color:#fff; }
+  select { padding:11px; border-radius:10px; background:#0e1626; color:var(--fg);
+           border:1px solid var(--line); font-size:15px; width:100%; }
+  .quickrow { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .quickrow button { padding:10px 6px; font-size:13px; }
 </style>
 </head>
 <body>
@@ -311,82 +329,124 @@ function renderDevices(list){
       <details ${OPEN_PANELS.has(d.id)?'open':''} style="margin-top:12px" ontoggle="this.open?OPEN_PANELS.add('${d.id}'):OPEN_PANELS.delete('${d.id}')">
         <summary style="cursor:pointer;color:var(--mut);font-size:14px;padding:6px 0">⚙️ Settings &amp; limits</summary>
 
-        <div style="margin-top:12px">
-          <div class="mut" style="margin-bottom:6px">Daily time limit</div>
-          <div class="row">
-            <input id="lim_${d.id}" type="number" min="0" max="1440" value="${d.dailyLimitMinutes||0}" class="grow" style="max-width:120px"/>
-            <span class="mut">minutes/day</span>
-            <button class="sec" onclick="setLimit('${d.id}')">Save</button>
-          </div>
-          <div class="btns" style="margin-top:6px">
+        <div class="tabs">
+          <button class="tab active" data-tab="time_${d.id}" onclick="selectTab(this,'${d.id}')">⏱ Time</button>
+          <button class="tab" data-tab="apps_${d.id}" onclick="selectTab(this,'${d.id}')">🚫 Apps</button>
+          <button class="tab" data-tab="sched_${d.id}" onclick="selectTab(this,'${d.id}')">📅 Schedule</button>
+          <button class="tab" data-tab="chores_${d.id}" onclick="selectTab(this,'${d.id}')">⭐ Chores</button>
+          <button class="tab" data-tab="more_${d.id}" onclick="selectTab(this,'${d.id}')">⋯ More</button>
+        </div>
+
+        <!-- TIME tab -->
+        <div class="tab-panel active" id="time_${d.id}">
+          <div class="field-label">Daily time limit</div>
+          <div class="quickrow">
             <button class="sec" onclick="quickLimit('${d.id}',60)">1h</button>
             <button class="sec" onclick="quickLimit('${d.id}',120)">2h</button>
             <button class="sec" onclick="quickLimit('${d.id}',180)">3h</button>
-            <button class="sec" onclick="quickLimit('${d.id}',0)">None</button>
+            <button class="sec" onclick="quickLimit('${d.id}',0)">No limit</button>
           </div>
-        </div>
+          <div class="row" style="margin-top:10px;gap:8px">
+            <input id="lim_${d.id}" type="number" min="0" max="1440" value="${d.dailyLimitMinutes||0}" class="grow" style="max-width:120px"/>
+            <span class="mut">min/day</span>
+            <button class="sec" onclick="setLimit('${d.id}')">Save</button>
+          </div>
 
-        <div style="margin-top:16px">
-          <div class="mut" style="margin-bottom:6px">Blocked apps / games (comma-separated .exe names)</div>
-          <input id="bl_${d.id}" value="${esc(blocklist)}" placeholder="discord.exe, steam.exe, minecraft.exe"/>
-          <button class="sec" style="margin-top:6px" onclick="setBlocklist('${d.id}')">Save blocklist</button>
-        </div>
-
-        <div style="margin-top:16px">
-          <div class="mut" style="margin-bottom:6px">Time bank</div>
-          <div class="row">
+          <div class="field-label" style="margin-top:18px">Time bank (extra minutes)</div>
+          <div class="row" style="gap:8px">
             <input id="bank_${d.id}" type="number" min="0" value="${d.bankedMinutes||0}" class="grow" style="max-width:120px"/>
-            <span class="mut">banked min</span>
-            <button class="sec" onclick="setBank('${d.id}')">Set</button>
+            <span class="mut">min</span>
+            <button class="sec" onclick="addBank('${d.id}',15)">+15</button>
             <button class="sec" onclick="addBank('${d.id}',30)">+30</button>
+            <button class="sec" onclick="setBank('${d.id}')">Set</button>
           </div>
-        </div>
 
-        <div style="margin-top:16px">
-          <div class="mut" style="margin-bottom:6px">Let kid borrow time (self-service)</div>
-          <div class="row">
-            <label class="row" style="gap:6px"><input type="checkbox" id="sb_${d.id}" ${d.selfBorrowEnabled?'checked':''} style="width:auto"/> enabled</label>
-            <input id="sbcap_${d.id}" type="number" min="0" max="240" value="${d.selfBorrowCapMinutes||30}" style="max-width:90px"/>
+          <div class="field-label" style="margin-top:18px">Let kid self-borrow time</div>
+          <label class="row" style="gap:8px;cursor:pointer">
+            <input type="checkbox" id="sb_${d.id}" ${d.selfBorrowEnabled?'checked':''} style="width:auto" onchange="setBorrow('${d.id}')"/>
+            <span class="grow">Enabled</span>
+            <input id="sbcap_${d.id}" type="number" min="0" max="240" value="${d.selfBorrowCapMinutes||30}" style="max-width:90px" onblur="setBorrow('${d.id}')"/>
             <span class="mut">cap min</span>
-            <button class="sec" onclick="setBorrow('${d.id}')">Save</button>
+          </label>
+        </div>
+
+        <!-- APPS tab -->
+        <div class="tab-panel" id="apps_${d.id}">
+          <div class="field-label">Blocked apps / games</div>
+          <div id="bllist_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:30px">
+            ${(d.blocklist||[]).map(a=>`<span class="chip">${esc(a)}<span class="x" onclick="removeApp('${d.id}','${esc(a)}')">✕</span></span>`).join('') || '<span class="mut" style="font-size:13px">No blocked apps yet.</span>'}
+          </div>
+          <div class="row" style="gap:8px">
+            <input id="ba_${d.id}" placeholder="e.g. discord.exe" class="grow" onkeydown="if(event.key==='Enter')addApp('${d.id}')"/>
+            <button class="sec" onclick="addApp('${d.id}')">+ Add</button>
+          </div>
+          <div class="field-label" style="margin-top:10px">Common ones (tap to add):</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${['discord.exe','steam.exe','minecraft.exe','roblox.exe','epicgameslauncher.exe','fortnite.exe','spotify.exe','chrome.exe','msedge.exe'].map(a=>`<button class="sec" style="padding:6px 10px;font-size:12px" onclick="addAppDirect('${d.id}','${a}')">${a}</button>`).join('')}
           </div>
         </div>
 
-        <div style="margin-top:16px">
-          <div class="mut" style="margin-bottom:6px">Schedules / bedtime (auto lock or block)</div>
-          ${scheds.map(s=>`<div class="row" style="margin:4px 0;font-size:14px;background:#0e1626;padding:8px 10px;border-radius:8px">
-            <span class="grow">${esc(s.name)} · ${s.days.join(' ')} · ${hhmm(s.startMinute)}–${hhmm(s.endMinute)} · ${(s.actions||['lock']).join('+')}${s.enabled?'':' (off)'}</span>
+        <!-- SCHEDULE tab -->
+        <div class="tab-panel" id="sched_${d.id}">
+          ${scheds.map(s=>`<div class="row" style="margin:4px 0;font-size:14px;background:#0e1626;padding:10px;border-radius:10px">
+            <div class="grow">
+              <div style="font-weight:600">${esc(s.name)}</div>
+              <div class="mut" style="font-size:12px">${s.days.join(' ')} · ${hhmm(s.startMinute)}–${hhmm(s.endMinute)} · ${(s.actions||['lock']).join('+')}${s.enabled?'':' (off)'}</div>
+            </div>
             <button class="dng" style="padding:6px 10px" onclick="delSchedule('${s.id}')">✕</button>
-          </div>`).join('')}
-          <div style="background:#0e1626;border:1px dashed var(--line);border-radius:10px;padding:10px;margin-top:8px">
-            <input id="sn_${d.id}" placeholder="Name (e.g. Bedtime)" style="margin-bottom:8px"/>
-            <div class="mut" style="font-size:12px;margin-bottom:4px">Days</div>
-            <div id="sd_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-              ${DAYS.map(day=>`<label class="schday" style="background:#1a2438;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:13px">
-                <input type="checkbox" value="${day}" checked style="display:none" onchange="this.parentNode.style.background=this.checked?'var(--accent)':'#1a2438'"/>${day}
-              </label>`).join('')}
+          </div>`).join('') || '<div class="mut" style="font-size:13px;margin-bottom:10px">No schedules yet. Add one below.</div>'}
+          <div style="background:#0e1626;border:1px dashed var(--line);border-radius:10px;padding:12px;margin-top:10px">
+            <div class="field-label">Name</div>
+            <input id="sn_${d.id}" placeholder="e.g. Bedtime" style="margin-bottom:10px"/>
+            <div class="field-label">Days</div>
+            <div id="sd_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+              ${DAYS.map(day=>`<div class="schday-btn on" onclick="this.classList.toggle('on')" data-day="${day}">${day}</div>`).join('')}
             </div>
-            <div class="row" style="gap:8px;margin-bottom:10px">
-              <div class="grow"><div class="mut" style="font-size:12px">Start</div><input id="ss_${d.id}" type="time" value="21:00"/></div>
-              <div class="grow"><div class="mut" style="font-size:12px">End</div><input id="se_${d.id}" type="time" value="07:00"/></div>
+            <div class="row" style="gap:10px;margin-bottom:12px">
+              <div class="grow"><div class="field-label">Start</div><input id="ss_${d.id}" type="time" value="21:00"/></div>
+              <div class="grow"><div class="field-label">End</div><input id="se_${d.id}" type="time" value="07:00"/></div>
             </div>
-            <div class="row" style="gap:8px">
-              <select id="sa_${d.id}" class="grow" style="padding:11px;border-radius:10px;background:#0e1626;color:var(--fg);border:1px solid var(--line);font-size:15px">
-                <option value="lock">Lock screen</option>
-                <option value="block_internet">Block internet</option>
-                <option value="block_apps">Block apps</option>
-              </select>
-              <button onclick="saveSchedule('${d.id}')">+ Add schedule</button>
-            </div>
+            <div class="field-label">Action during window</div>
+            <select id="sa_${d.id}" style="margin-bottom:10px">
+              <option value="lock">Lock screen</option>
+              <option value="block_internet">Block internet</option>
+              <option value="block_apps">Block apps</option>
+            </select>
+            <button onclick="saveSchedule('${d.id}')" style="width:100%">+ Add schedule</button>
           </div>
         </div>
-        <style>.schday input:checked + *,.schday:has(input:checked){background:var(--accent)}</style>
 
-        <div class="btns" style="margin-top:16px">
-          <button class="sec" onclick="addGeofence('${d.id}')">+ Geofence</button>
-          <button class="sec" onclick="renameDevice('${d.id}','${esc(d.name)}')">Rename</button>
-          <button class="sec" onclick="recoverDevice('${d.id}')">Recovery code</button>
-          <button class="dng" onclick="deleteDevice('${d.id}','${esc(d.name)}')">Delete device</button>
+        <!-- CHORES tab -->
+        <div class="tab-panel" id="chores_${d.id}">
+          <div class="field-label">Chore templates the kid can claim for time</div>
+          <div id="ct_${d.id}">${(d.choreTemplates||[]).map(t=>`<div class="row" style="margin:4px 0;background:#0e1626;padding:10px;border-radius:10px">
+            <div class="grow">
+              <div style="font-weight:600">${esc(t.description)}</div>
+              <div class="mut" style="font-size:12px">+${t.minutes} min</div>
+            </div>
+            <button class="dng" style="padding:6px 10px" onclick="delChoreTemplate('${d.id}','${t.id}')">✕</button>
+          </div>`).join('') || '<div class="mut" style="font-size:13px;margin-bottom:10px">No chores yet. Add one below.</div>'}</div>
+          <div style="background:#0e1626;border:1px dashed var(--line);border-radius:10px;padding:12px;margin-top:10px">
+            <div class="field-label">Chore</div>
+            <input id="ctd_${d.id}" placeholder="e.g. Make your bed" style="margin-bottom:10px"/>
+            <div class="field-label">Reward (minutes)</div>
+            <div class="quickrow" style="margin-bottom:10px">
+              <button class="sec" onclick="document.getElementById('ctm_${d.id}').value=10">10</button>
+              <button class="sec" onclick="document.getElementById('ctm_${d.id}').value=15">15</button>
+              <button class="sec" onclick="document.getElementById('ctm_${d.id}').value=30">30</button>
+              <button class="sec" onclick="document.getElementById('ctm_${d.id}').value=60">60</button>
+            </div>
+            <input id="ctm_${d.id}" type="number" min="1" max="480" value="15" style="margin-bottom:10px"/>
+            <button onclick="addChoreTemplate('${d.id}')" style="width:100%">+ Add chore</button>
+          </div>
+        </div>
+
+        <!-- MORE tab -->
+        <div class="tab-panel" id="more_${d.id}">
+          <button class="sec" onclick="renameDevice('${d.id}','${esc(d.name)}')" style="width:100%;margin-bottom:8px">✎ Rename device</button>
+          <button class="sec" onclick="addGeofence('${d.id}')" style="width:100%;margin-bottom:8px">📍 Add geofence</button>
+          <button class="sec" onclick="recoverDevice('${d.id}')" style="width:100%;margin-bottom:8px">🔑 New recovery code</button>
+          <button class="dng" onclick="deleteDevice('${d.id}','${esc(d.name)}')" style="width:100%;margin-top:16px">🗑 Delete device</button>
         </div>
       </details>
     </div>`;
@@ -410,9 +470,58 @@ async function renameDevice(id,cur){
   const name=prompt('New device name:',cur); if(!name) return;
   cmd(id,'rename',{name});
 }
+function selectTab(btn, deviceId){
+  const tabs = btn.parentNode.querySelectorAll('.tab');
+  tabs.forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  const targetId = btn.dataset.tab;
+  const panels = btn.parentNode.parentNode.querySelectorAll('.tab-panel');
+  panels.forEach(p=>p.classList.toggle('active', p.id===targetId));
+}
+
+async function addApp(deviceId){
+  const el = document.getElementById('ba_'+deviceId);
+  const name = el.value.trim().toLowerCase();
+  if(!name) return;
+  await pushBlocklist(deviceId, prev=>[...new Set([...(prev||[]), name])]);
+  el.value='';
+}
+async function addAppDirect(deviceId, name){
+  await pushBlocklist(deviceId, prev=>[...new Set([...(prev||[]), name])]);
+}
+async function removeApp(deviceId, name){
+  await pushBlocklist(deviceId, prev=>(prev||[]).filter(a=>a!==name));
+}
+async function pushBlocklist(deviceId, fn){
+  try{
+    const devs = await api('/devices');
+    const d = devs.find(x=>x.id===deviceId); if(!d) return;
+    const next = fn(d.blocklist||[]);
+    await api('/devices/'+deviceId+'/command',{method:'POST',body:JSON.stringify({kind:'set_blocklist',payload:{apps:next}})});
+    toast('Blocklist updated'); refresh();
+  } catch(e){ toast(e.message); }
+}
+
+async function addChoreTemplate(deviceId){
+  const description = (document.getElementById('ctd_'+deviceId).value||'').trim();
+  const minutes = +document.getElementById('ctm_'+deviceId).value || 15;
+  if(!description) return toast('Enter a chore description');
+  try{
+    await api('/devices/'+deviceId+'/chore-templates',{method:'POST',body:JSON.stringify({description, minutes})});
+    document.getElementById('ctd_'+deviceId).value='';
+    toast('Chore added'); refresh();
+  } catch(e){ toast(e.message); }
+}
+async function delChoreTemplate(deviceId, templateId){
+  try{
+    await api('/devices/'+deviceId+'/chore-templates/'+templateId,{method:'DELETE'});
+    toast('Removed'); refresh();
+  } catch(e){ toast(e.message); }
+}
+
 async function saveSchedule(deviceId){
   const name=(document.getElementById('sn_'+deviceId).value||'').trim() || 'Schedule';
-  const days=[...document.querySelectorAll('#sd_'+deviceId+' input:checked')].map(i=>i.value);
+  const days=[...document.querySelectorAll('#sd_'+deviceId+' .schday-btn.on')].map(b=>b.dataset.day);
   if(!days.length) return toast('Pick at least one day');
   const start=document.getElementById('ss_'+deviceId).value;
   const end=document.getElementById('se_'+deviceId).value;
