@@ -165,82 +165,19 @@ def lock_workstation() -> bool:
             print("[lock] tray not alive; using fallback lock method.")
     except Exception as e:
         print(f"[lock] signal write failed: {e}; using fallback.")
-    # 2/3. Fallback: impersonated launcher, then disconnect.
+    # 2. Fallback when the tray isn't running: disconnect the console session.
+    # This reliably shows the lock screen from session 0 (the impersonated
+    # CreateProcessAsUser path was dropped — it could "succeed" without actually
+    # locking, leaving the PC wide open).
     try:
-        from ctypes import wintypes
-        kernel32 = ctypes.windll.kernel32
-        wtsapi = ctypes.windll.wtsapi32
-        advapi32 = ctypes.windll.advapi32
-
-        sess = kernel32.WTSGetActiveConsoleSessionId()
+        sess = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
         if sess == 0xFFFFFFFF:
             print("[lock] no active console session")
             return False
-
-        # 1. Get the user's primary token for that session.
-        h_user_tok = wintypes.HANDLE()
-        if not wtsapi.WTSQueryUserToken(sess, ctypes.byref(h_user_tok)):
-            err = kernel32.GetLastError()
-            print(f"[lock] WTSQueryUserToken failed: {err}; falling back to LockWorkStation")
-            return bool(ctypes.windll.user32.LockWorkStation())
-
-        # 2. DuplicateTokenEx to a primary token suitable for CreateProcessAsUser.
-        TOKEN_ALL_ACCESS = 0xF01FF
-        SecurityImpersonation = 2
-        TokenPrimary = 1
-        h_dup = wintypes.HANDLE()
-        if not advapi32.DuplicateTokenEx(
-            h_user_tok, TOKEN_ALL_ACCESS, None, SecurityImpersonation, TokenPrimary,
-            ctypes.byref(h_dup),
-        ):
-            kernel32.CloseHandle(h_user_tok)
-            err = kernel32.GetLastError()
-            print(f"[lock] DuplicateTokenEx failed: {err}")
-            return False
-
-        # 3. CreateProcessAsUser running rundll32 -> LockWorkStation in user's session.
-        class STARTUPINFO(ctypes.Structure):
-            _fields_ = [("cb", wintypes.DWORD),("lpReserved", wintypes.LPWSTR),
-                        ("lpDesktop", wintypes.LPWSTR),("lpTitle", wintypes.LPWSTR),
-                        ("dwX", wintypes.DWORD),("dwY", wintypes.DWORD),
-                        ("dwXSize", wintypes.DWORD),("dwYSize", wintypes.DWORD),
-                        ("dwXCountChars", wintypes.DWORD),("dwYCountChars", wintypes.DWORD),
-                        ("dwFillAttribute", wintypes.DWORD),("dwFlags", wintypes.DWORD),
-                        ("wShowWindow", wintypes.WORD),("cbReserved2", wintypes.WORD),
-                        ("lpReserved2", ctypes.c_void_p),
-                        ("hStdInput", wintypes.HANDLE),("hStdOutput", wintypes.HANDLE),
-                        ("hStdError", wintypes.HANDLE)]
-        class PROCESS_INFORMATION(ctypes.Structure):
-            _fields_ = [("hProcess", wintypes.HANDLE),("hThread", wintypes.HANDLE),
-                        ("dwProcessId", wintypes.DWORD),("dwThreadId", wintypes.DWORD)]
-
-        si = STARTUPINFO(); si.cb = ctypes.sizeof(si); si.lpDesktop = "winsta0\\default"
-        pi = PROCESS_INFORMATION()
-        CREATE_UNICODE_ENVIRONMENT = 0x00000400
-        DETACHED_PROCESS = 0x00000008
-        cmdline = ctypes.create_unicode_buffer("rundll32.exe user32.dll,LockWorkStation")
-        ok = advapi32.CreateProcessAsUserW(
-            h_dup, None, cmdline, None, None, False,
-            CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS,
-            None, None, ctypes.byref(si), ctypes.byref(pi),
-        )
-        kernel32.CloseHandle(h_dup); kernel32.CloseHandle(h_user_tok)
-        if not ok:
-            err = kernel32.GetLastError()
-            print(f"[lock] CreateProcessAsUser failed: {err}; falling back to WTSDisconnectSession")
-            return _disconnect_session(sess)
-        kernel32.CloseHandle(pi.hThread); kernel32.CloseHandle(pi.hProcess)
-        print(f"[lock] LockWorkStation launched in session {sess} (clean lock).")
-        return True
+        return _disconnect_session(sess)
     except Exception as e:
-        print(f"[lock] impersonated lock failed: {e}; falling back to WTSDisconnectSession")
-        try:
-            sess = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
-            if sess != 0xFFFFFFFF:
-                return _disconnect_session(sess)
-        except Exception:
-            pass
-        return bool(ctypes.windll.user32.LockWorkStation())
+        print(f"[lock] disconnect lock failed: {e}")
+        return False
 
 
 def _disconnect_session(sess: int) -> bool:
