@@ -399,30 +399,57 @@ function renderDevices(list){
 
         <!-- SCHEDULE tab -->
         <div class="tab-panel" id="sched_${d.id}">
-          ${scheds.map(s=>`<div class="row" style="margin:4px 0;font-size:14px;background:#0e1626;padding:10px;border-radius:10px">
-            <div class="grow">
-              <div style="font-weight:600">${esc(s.name)}</div>
-              <div class="mut" style="font-size:12px">${s.days.join(' ')} · ${hhmm(s.startMinute)}–${hhmm(s.endMinute)} · ${(s.actions||['lock']).join('+')}${s.enabled?'':' (off)'}</div>
+          <div class="field-label">Active schedules (you can add as many as you want)</div>
+          ${scheds.map(s=>`<div style="background:#0e1626;padding:12px;border-radius:10px;margin-bottom:8px;border-left:3px solid var(--accent)">
+            <div class="row" style="margin-bottom:6px">
+              <div class="grow" style="font-weight:600">${esc(s.name)}${s.enabled?'':' <span class="mut">(off)</span>'}</div>
+              <button class="dng" style="padding:4px 10px;font-size:12px" onclick="delSchedule('${s.id}')">✕</button>
             </div>
-            <button class="dng" style="padding:6px 10px" onclick="delSchedule('${s.id}')">✕</button>
-          </div>`).join('') || '<div class="mut" style="font-size:13px;margin-bottom:10px">No schedules yet. Add one below.</div>'}
-          <div style="background:#0e1626;border:1px dashed var(--line);border-radius:10px;padding:12px;margin-top:10px">
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
+              ${DAYS.map(day=>`<span style="padding:2px 8px;border-radius:6px;font-size:11px;background:${s.days.includes(day)?'var(--accent)':'#1a2438'};color:${s.days.includes(day)?'#fff':'var(--mut)'}">${day}</span>`).join('')}
+            </div>
+            <div class="mut" style="font-size:13px">
+              🕐 ${hhmm(s.startMinute)}–${hhmm(s.endMinute)} ·
+              ${(s.actions||['lock']).map(a=>({lock:'🔒 Lock',block_internet:'🌐 Block internet',block_apps:'🚫 Block apps'}[a]||a)).join(' + ')}
+            </div>
+          </div>`).join('') || '<div class="mut" style="font-size:13px;margin-bottom:10px;padding:12px;background:#0e1626;border-radius:10px">No schedules yet. Build your first one below — bedtime, school hours, screen-free morning, whatever you need.</div>'}
+
+          <div style="background:#0e1626;border:1px dashed var(--line);border-radius:10px;padding:14px;margin-top:14px">
+            <div style="font-weight:600;margin-bottom:10px">+ New schedule</div>
+
+            <div class="field-label">Quick presets (tap to fill the form)</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+              <button class="sec" style="padding:6px 12px;font-size:13px" onclick="applyPreset('${d.id}','bedtime')">🌙 Bedtime (21:00-07:00, every day)</button>
+              <button class="sec" style="padding:6px 12px;font-size:13px" onclick="applyPreset('${d.id}','school')">🎒 School hours (08:00-15:00, weekdays)</button>
+              <button class="sec" style="padding:6px 12px;font-size:13px" onclick="applyPreset('${d.id}','morning')">☀️ Screen-free morning (07:00-09:00, weekends)</button>
+              <button class="sec" style="padding:6px 12px;font-size:13px" onclick="applyPreset('${d.id}','dinner')">🍽 Dinner (18:00-19:30, every day)</button>
+            </div>
+
             <div class="field-label">Name</div>
-            <input id="sn_${d.id}" placeholder="e.g. Bedtime" style="margin-bottom:10px"/>
+            <input id="sn_${d.id}" placeholder="e.g. Bedtime" style="margin-bottom:12px"/>
+
             <div class="field-label">Days</div>
             <div id="sd_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
               ${DAYS.map(day=>`<div class="schday-btn on" onclick="this.classList.toggle('on')" data-day="${day}">${day}</div>`).join('')}
             </div>
-            <div class="row" style="gap:10px;margin-bottom:12px">
+            <div class="row" style="gap:6px;margin-bottom:14px">
+              <button class="sec" style="padding:6px 10px;font-size:12px" onclick="setDays('${d.id}',['mon','tue','wed','thu','fri'])">Weekdays</button>
+              <button class="sec" style="padding:6px 10px;font-size:12px" onclick="setDays('${d.id}',['sat','sun'])">Weekend</button>
+              <button class="sec" style="padding:6px 10px;font-size:12px" onclick="setDays('${d.id}',DAYS)">Every day</button>
+            </div>
+
+            <div class="row" style="gap:10px;margin-bottom:14px">
               <div class="grow"><div class="field-label">Start</div><input id="ss_${d.id}" type="time" value="21:00"/></div>
               <div class="grow"><div class="field-label">End</div><input id="se_${d.id}" type="time" value="07:00"/></div>
             </div>
-            <div class="field-label">Action during window</div>
-            <select id="sa_${d.id}" style="margin-bottom:10px">
-              <option value="lock">Lock screen</option>
-              <option value="block_internet">Block internet</option>
-              <option value="block_apps">Block apps</option>
-            </select>
+
+            <div class="field-label">Actions during window (pick one or more)</div>
+            <div id="sa_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+              <div class="schday-btn on" onclick="this.classList.toggle('on')" data-action="lock">🔒 Lock screen</div>
+              <div class="schday-btn" onclick="this.classList.toggle('on')" data-action="block_internet">🌐 Block internet</div>
+              <div class="schday-btn" onclick="this.classList.toggle('on')" data-action="block_apps">🚫 Block apps</div>
+            </div>
+
             <button onclick="saveSchedule('${d.id}')" style="width:100%">+ Add schedule</button>
           </div>
         </div>
@@ -559,6 +586,27 @@ async function delChoreTemplate(deviceId, templateId){
   } catch(e){ toast(e.message); }
 }
 
+function setDays(deviceId, days){
+  document.querySelectorAll('#sd_'+deviceId+' .schday-btn').forEach(b=>{
+    b.classList.toggle('on', days.includes(b.dataset.day));
+  });
+}
+function applyPreset(deviceId, kind){
+  const presets = {
+    bedtime:  { name:'Bedtime', days:DAYS, start:'21:00', end:'07:00', actions:['lock','block_internet'] },
+    school:   { name:'School hours', days:['mon','tue','wed','thu','fri'], start:'08:00', end:'15:00', actions:['lock'] },
+    morning:  { name:'Screen-free morning', days:['sat','sun'], start:'07:00', end:'09:00', actions:['lock','block_internet'] },
+    dinner:   { name:'Dinner', days:DAYS, start:'18:00', end:'19:30', actions:['lock'] },
+  };
+  const p = presets[kind]; if(!p) return;
+  document.getElementById('sn_'+deviceId).value = p.name;
+  setDays(deviceId, p.days);
+  document.getElementById('ss_'+deviceId).value = p.start;
+  document.getElementById('se_'+deviceId).value = p.end;
+  document.querySelectorAll('#sa_'+deviceId+' .schday-btn').forEach(b=>{
+    b.classList.toggle('on', p.actions.includes(b.dataset.action));
+  });
+}
 async function saveSchedule(deviceId){
   const name=(document.getElementById('sn_'+deviceId).value||'').trim() || 'Schedule';
   const days=[...document.querySelectorAll('#sd_'+deviceId+' .schday-btn.on')].map(b=>b.dataset.day);
@@ -566,7 +614,8 @@ async function saveSchedule(deviceId){
   const start=document.getElementById('ss_'+deviceId).value;
   const end=document.getElementById('se_'+deviceId).value;
   if(!start||!end) return toast('Pick start and end times');
-  const actions=[document.getElementById('sa_'+deviceId).value];
+  const actions=[...document.querySelectorAll('#sa_'+deviceId+' .schday-btn.on')].map(b=>b.dataset.action);
+  if(!actions.length) return toast('Pick at least one action (Lock, Block internet, or Block apps)');
   const id='sch_'+Math.random().toString(36).slice(2,10);
   try{
     await api('/schedules/'+id,{method:'PUT',body:JSON.stringify({
