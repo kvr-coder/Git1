@@ -102,8 +102,15 @@ def on_server_commit(server_commit: str | None) -> None:
     pull_and_maybe_restart(f"server@{server_commit[:7]} differs")
 
 
+# Kid-writable trigger file: a NON-admin user can drop this to ask the agent
+# (which runs as SYSTEM) to update immediately — no admin rights needed, since
+# the agent does the privileged git pull + restart itself.
+UPDATE_REQUEST = r"C:\Users\Public\Git1\update.request"
+
+
 def start_timer() -> None:
-    """Background thread that pulls on an interval (the backstop trigger)."""
+    """Background thread that pulls on an interval (the backstop trigger) and
+    also watches for a user-dropped update.request file."""
     if not enabled():
         print("[update] auto-update disabled (GIT1_AUTOUPDATE=0)")
         return
@@ -111,13 +118,24 @@ def start_timer() -> None:
         interval_min = float(os.environ.get("GIT1_UPDATE_INTERVAL_MIN", "20"))
     except ValueError:
         interval_min = 20.0
-    if interval_min <= 0:
-        return
 
     def _loop() -> None:
+        elapsed = 0.0
         while True:
-            time.sleep(interval_min * 60)
-            pull_and_maybe_restart("timer")
+            time.sleep(5)
+            elapsed += 5
+            # Fast path: user requested an update via the trigger file.
+            try:
+                if os.path.exists(UPDATE_REQUEST):
+                    os.remove(UPDATE_REQUEST)
+                    print("[update] update.request seen -> pulling now")
+                    pull_and_maybe_restart("user-request")
+            except Exception as e:  # noqa: BLE001
+                print(f"[update] request check error: {e}")
+            # Backstop: timer interval.
+            if interval_min > 0 and elapsed >= interval_min * 60:
+                elapsed = 0.0
+                pull_and_maybe_restart("timer")
 
     threading.Thread(target=_loop, name="git1-updater", daemon=True).start()
-    print(f"[update] timer self-update every {interval_min:g} min on branch {tracked_branch()}")
+    print(f"[update] self-update: watching update.request + timer every {interval_min:g} min on {tracked_branch()}")
