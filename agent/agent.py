@@ -88,14 +88,43 @@ class LASTINPUTINFO(ctypes.Structure):
 
 
 def idle_seconds() -> float:
+    """Seconds since last user input in the ACTIVE console session.
+
+    Calling GetLastInputInfo directly from a LocalSystem service (session 0)
+    returns the kernel's tick count for session 0, which has no input — so the
+    user always looks "idle" and time is never counted.
+
+    The correct way is to query session state cross-session: if the active
+    console session reports WTSActive (user at the screen, not locked, not
+    disconnected) we treat that as "using the PC" (~0 idle). When the screen is
+    locked or no user is at the console we report a large idle so time stops.
+    """
     if sys.platform != "win32":
         return 0.0
-    lii = LASTINPUTINFO()
-    lii.cbSize = ctypes.sizeof(lii)
-    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
+    try:
+        wtsapi = ctypes.windll.wtsapi32
+        kernel32 = ctypes.windll.kernel32
+        sess = kernel32.WTSGetActiveConsoleSessionId()
+        if sess == 0xFFFFFFFF:
+            return 9999.0  # nobody at the console -> idle
+        # WTSQuerySessionInformation(hServer, sessionId, WTSConnectState, &buf, &bytes)
+        buf = ctypes.c_void_p()
+        size = ctypes.c_ulong(0)
+        WTSConnectState = 8
+        if not wtsapi.WTSQuerySessionInformationW(
+            0, sess, WTSConnectState, ctypes.byref(buf), ctypes.byref(size)
+        ):
+            return 9999.0
+        try:
+            state = ctypes.cast(buf, ctypes.POINTER(ctypes.c_int))[0]
+        finally:
+            wtsapi.WTSFreeMemory(buf)
+        # WTSActive=0 (using the PC), others (locked/disconnected/etc.) -> idle.
+        return 0.0 if state == 0 else 9999.0
+    except Exception as e:
+        # Fail "active" so we don't silently stop accounting if the API fails.
+        print(f"[idle] WTS query failed: {e}; assuming active")
         return 0.0
-    millis = ctypes.windll.kernel32.GetTickCount() - lii.dwTime
-    return millis / 1000.0
 
 
 def lock_workstation() -> bool:
