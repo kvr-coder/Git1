@@ -415,7 +415,7 @@ export const store = {
     db.prepare('DELETE FROM pair_recovery WHERE deviceId = ?').run(deviceId);
     db.prepare('UPDATE pair_codes SET deviceId = NULL WHERE deviceId = ?').run(deviceId);
     db.prepare('DELETE FROM devices WHERE id = ?').run(deviceId);
-  }
+  },
 
   updateDevice(deviceId: string, patch: Partial<DeviceRow>) {
     const fields = Object.keys(patch).filter((k) => k !== 'id');
