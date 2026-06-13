@@ -213,7 +213,9 @@ if ($ChildUser)    { $envPairs += "GIT1_CHILD_USER=$ChildUser" }
 if ($ChildSid)     { $envPairs += "GIT1_CHILD_SID=$ChildSid" }
 if ($UpdateBranch) { $envPairs += "GIT1_UPDATE_BRANCH=$UpdateBranch" }
 if ($envPairs.Count -gt 0) {
-  & $nssm set $ServiceName AppEnvironmentExtra ($envPairs -join "`n")
+  # NSSM expects each KEY=VALUE as a separate argument. Joining with `n into one
+  # string silently corrupts the value (PowerShell -> native arg marshalling).
+  & $nssm set $ServiceName AppEnvironmentExtra @envPairs
 }
 
 # --- robust recovery: restart on crash OR kill, forever ---
