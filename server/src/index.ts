@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -300,13 +300,26 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     pushSnapshotToAgent(d.id); // so the agent learns override=0 immediately
   }
   if (p.data.kind === 'unlock') {
-    // Override any currently-active lock schedule until the END of that
-    // schedule's window. Next schedule cycle re-engages automatically.
+    // Unlock = clear ALL active restrictions: stop locking, lift internet block,
+    // and suppress the schedule until its current window ends. (Parent's
+    // explicit "let them back on now" button.)
     const overrideUntil = computeScheduleEndForDevice(d.id, Date.now());
-    store.updateDevice(d.id, { lockedByParent: false, scheduleOverrideUntil: overrideUntil });
-    // Push a fresh snapshot NOW so the agent suppresses the schedule lock
-    // immediately — otherwise it re-locks on the next 5s tick before the
-    // override timestamp arrives on a later snapshot.
+    store.updateDevice(d.id, {
+      lockedByParent: false,
+      internetBlocked: false,
+      scheduleOverrideUntil: overrideUntil,
+    });
+    // Tell the agent to lift the firewall block right now (don't wait for the
+    // snapshot), then push the snapshot so the schedule override applies too.
+    sendToAgent(d.id, {
+      kind: 'command',
+      command: {
+        id: randomBytes(6).toString('hex'),
+        deviceId: d.id,
+        kind: 'unblock_internet',
+        createdAt: Date.now(),
+      },
+    });
     pushSnapshotToAgent(d.id);
   }
   if (p.data.kind === 'set_blocklist') {
@@ -763,7 +776,7 @@ const agentSockets = new Map<string, WebSocket>();
 // uninstall, network cut) is a tamper signal. We alert the parent ONCE per
 // offline transition. Tracks deviceIds we've already alerted so we don't spam.
 const offlineAlerted = new Set<string>();
-const OFFLINE_THRESHOLD_MS = 3 * 60 * 1000; // ~3 missed 60s heartbeats
+const OFFLINE_THRESHOLD_MS = 90 * 1000; // ~3 missed 30s heartbeats -> tamper caught in ~90s
 
 function sendToAgent(deviceId: string, msg: ServerMessage): boolean {
   const ws = agentSockets.get(deviceId);
@@ -890,6 +903,11 @@ wss.on('connection', (ws, req) => {
   const prev = agentSockets.get(device.id);
   if (prev && prev !== ws) { try { prev.terminate(); } catch {} }
   agentSockets.set(device.id, ws);
+  // Anti-replay: track the highest heartbeat sequence we've accepted on this
+  // connection. The agent signs each seq with its token; a replayed or spoofed
+  // beat fails the signature or doesn't advance the counter.
+  let lastSeq = 0;
+  const agentTok = t;
   // If this device was previously flagged offline (tamper), notify recovery.
   if (offlineAlerted.delete(device.id)) {
     notifyUser(device.userId,'Device back online', `${device.name} reconnected`, {
@@ -939,6 +957,19 @@ wss.on('connection', (ws, req) => {
       return;
     }
     if (msg.kind === 'heartbeat') {
+      // Verify the rotating nonce: signature must match, and the sequence must
+      // advance. A spoofed/replayed heartbeat fails this and is ignored (so it
+      // can't keep a tampered device looking "alive").
+      const seq = Number((msg as any).seq ?? 0);
+      const sig = String((msg as any).sig ?? '');
+      if (seq && sig) {
+        const expect = createHmac('sha256', agentTok).update(String(seq)).digest('hex').slice(0, 32);
+        if (sig !== expect || seq <= lastSeq) {
+          console.warn(`[tamper] ${device.id} bad/stale heartbeat nonce (seq=${seq})`);
+          return; // do not refresh lastSeen — let the offline sweep catch it
+        }
+        lastSeq = seq;
+      }
       // The agent is authoritative on the bank balance; trust its heartbeat so
       // the parent dashboard reflects spends/credits in real time (and the
       // snapshot no longer fights the agent over the bank value).
@@ -1067,12 +1098,20 @@ function toPublicDevice(d: DeviceRow) {
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
     bankedMinutes: d.bankedMinutes,
     choreTemplates: store.listChoreTemplates(d.userId, d.id),
+    // Tamper hint for the dashboard: offline but seen within the last 10 min =
+    // the agent went silent recently (killed / network-cut), not a PC that's
+    // been off all day. The dashboard shows a red banner for these.
+    tamperSuspected:
+      d.status === 'offline' &&
+      !!d.lastSeen &&
+      Date.now() - d.lastSeen < 10 * 60 * 1000,
+    lastSeen: d.lastSeen,
   };
 }
 
 // Tamper sweep: every minute, alert the parent about devices that have gone
 // silent (agent killed/uninstalled/offline) and weren't already flagged.
-const TAMPER_SWEEP_MS = 60 * 1000;
+const TAMPER_SWEEP_MS = 20 * 1000;
 setInterval(() => {
   const now = Date.now();
   for (const d of store.allDevices()) {

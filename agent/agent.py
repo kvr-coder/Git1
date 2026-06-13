@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import datetime as dt
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -57,7 +59,7 @@ RECOVERY_HINT_PATH = CONFIG_DIR / "recovery.txt"
 
 IDLE_THRESHOLD_SEC = 60
 SAMPLE_INTERVAL_SEC = 15
-HEARTBEAT_INTERVAL_SEC = 60
+HEARTBEAT_INTERVAL_SEC = 30   # faster so tampering (kill/block) is caught within ~90s
 RELOCK_INTERVAL_SEC = 5
 VPN_CHECK_INTERVAL_SEC = 30
 CLOCK_CHECK_INTERVAL_SEC = 600
@@ -130,6 +132,16 @@ def idle_seconds() -> float:
 IPC_DIR = r"C:\Users\Public\Git1"
 LOCK_SIGNAL = os.path.join(IPC_DIR, "lock.signal")
 TRAY_ALIVE = os.path.join(IPC_DIR, "tray.alive")
+
+# Set once the token is loaded; used to sign heartbeat nonces.
+AGENT_TOKEN = ""
+
+
+def _hb_sign(token: str, seq: int) -> str:
+    """HMAC-SHA256 of the heartbeat sequence, keyed by the agent token, so the
+    server can prove a heartbeat is fresh and from the real agent (not replayed
+    or spoofed)."""
+    return hmac.new(token.encode(), str(seq).encode(), hashlib.sha256).hexdigest()[:32]
 
 
 def _tray_is_alive(max_age_sec: int = 12) -> bool:
@@ -463,10 +475,12 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         await emit_event(ws, "set_limit", {"limit": usage.limit_minutes})
 
     elif kind == "block_internet":
+        PARENT_NET_BLOCK["value"] = True   # keep reconcile loop in agreement
         ok = enforcer_net.block_internet()
         await emit_event(ws, "block_internet", {"ok": ok})
 
     elif kind == "unblock_internet":
+        PARENT_NET_BLOCK["value"] = False  # reconcile loop will keep it unblocked
         ok = enforcer_net.unblock_internet()
         await emit_event(ws, "unblock_internet", {"ok": ok})
 
@@ -506,6 +520,7 @@ CHORE_TEMPLATES: list[dict[str, Any]] = []
 NOTIFICATIONS: list[dict[str, Any]] = []  # recent parent->kid toasts
 LOCKED_BY_PARENT: dict[str, bool] = {"value": False}
 SCHEDULE_OVERRIDE: dict[str, int] = {"untilMs": 0}  # ms-epoch; parent Unlock suppresses schedule lock until this
+PARENT_NET_BLOCK: dict[str, bool] = {"value": False}  # parent's desired internet-block state (from snapshot)
 
 
 def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
@@ -532,6 +547,8 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     CHORE_TEMPLATES.extend(msg.get("choreTemplates") or [])
     LOCKED_BY_PARENT["value"] = bool(msg.get("lockedByParent", False))
     SCHEDULE_OVERRIDE["untilMs"] = int(msg.get("scheduleOverrideUntil") or 0)
+    if "internetBlocked" in msg:
+        PARENT_NET_BLOCK["value"] = bool(msg.get("internetBlocked", False))
     if persist:
         try:
             save_json(POLICY_PATH, {
@@ -563,6 +580,11 @@ def push_notification(text: str, kind: str = "info") -> None:
 async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
     last_sample = time.time()
     last_heartbeat = 0.0
+    # Rotating heartbeat nonce: a monotonically increasing counter, signed with
+    # the agent token. The server rejects/flags any heartbeat that doesn't
+    # advance the counter (replay) or whose signature is wrong — so a recorded
+    # "I'm alive and compliant" beat can't be replayed to fake liveness.
+    hb_seq = int(time.time())
     last_relock = 0.0
     last_vpn_check = 0.0
     last_clock_check = 0.0
@@ -647,21 +669,21 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
                 last_relock = now
                 enforce_lock()
                 await emit_event(ws, "schedule_lock")
-        # Internet block (idempotent; only flip when state changes)
-        want_net_block = ("block_internet" in schedule_actions) and not override_active
-        if want_net_block and not enforcer_net.is_blocked():
+        # Internet block — reconcile to the DESIRED state every tick (self-heal).
+        # Desired = parent wants it blocked OR a schedule blocks it, UNLESS the
+        # parent pressed Unlock (override). This guarantees "Internet ON" / Unlock
+        # always restores connectivity even if a prior block somehow lingered,
+        # and a stuck firewall rule can never strand the kid offline.
+        schedule_wants_block = "block_internet" in schedule_actions
+        desired_block = (PARENT_NET_BLOCK["value"] or schedule_wants_block) and not override_active
+        currently_blocked = enforcer_net.is_blocked()
+        if desired_block and not currently_blocked:
             enforcer_net.block_internet()
-            await emit_event(ws, "schedule_internet_block")
-        elif (
-            not want_net_block
-            and not schedule_actions  # no schedule requesting block
-            and was_schedule_blocking_net
-            and enforcer_net.is_blocked()
-        ):
-            # Only lift the firewall block if *we* (schedule) put it there.
+            await emit_event(ws, "internet_block")
+        elif not desired_block and currently_blocked:
             enforcer_net.unblock_internet()
-            await emit_event(ws, "schedule_internet_unblock")
-        was_schedule_blocking_net = want_net_block
+            await emit_event(ws, "internet_unblock")
+        was_schedule_blocking_net = schedule_wants_block
         # block_apps action — kill loop already runs every tick (#2 above).
         # Future: we could maintain a separate per-schedule app list.
 
@@ -699,6 +721,8 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
                     key=lambda x: x[1], reverse=True,
                 )[:30]
                 app_usage = {name: round(mins, 1) for name, mins in app_minutes}
+                hb_seq += 1
+                hb_sig = _hb_sign(AGENT_TOKEN, hb_seq)
                 await ws.send(
                     json.dumps(
                         {
@@ -712,6 +736,9 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
                             # Daily stats rollup.
                             "date": usage.date,
                             "appUsage": app_usage,
+                            # Anti-replay nonce + signature.
+                            "seq": hb_seq,
+                            "sig": hb_sig,
                         },
                     )
                 )
@@ -848,6 +875,8 @@ def main() -> None:
     unauthorized_streak = 0   # consecutive 4401s; re-pair only after sustained failure
     while True:
         try:
+            global AGENT_TOKEN
+            AGENT_TOKEN = token   # keep the heartbeat signer in sync with the live token
             asyncio.run(run(token, usage, dash))
             last_connected = time.time()
             backoff = 2

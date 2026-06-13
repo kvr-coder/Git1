@@ -169,9 +169,17 @@ def block_internet() -> bool:
 
 
 def unblock_internet() -> bool:
-    _ps(f"Remove-NetFirewallRule -DisplayName '{RULE_BLOCK_CHILD}' -ErrorAction SilentlyContinue")
-    # Also clear via netsh + any legacy rules, belt and braces.
-    _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK_CHILD}"])
+    # Remove the rule by EVERY method (Remove-NetFirewallRule by name, netsh by
+    # name) and repeat until it's actually gone — a lingering block rule would
+    # strand the kid offline. Then clear any legacy global rules too.
+    for _ in range(3):
+        _ps(f"Get-NetFirewallRule -DisplayName '{RULE_BLOCK_CHILD}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue")
+        _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={RULE_BLOCK_CHILD}"])
+        if not is_blocked():
+            break
     heal_legacy_block()
-    print("[net] block rule removed.")
+    if is_blocked():
+        print("[net] UNBLOCK WARNING: rule still present after retries.")
+        return False
+    print("[net] block rule removed; internet restored.")
     return True
