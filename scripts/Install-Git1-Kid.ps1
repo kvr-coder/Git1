@@ -192,25 +192,93 @@ if ($existing) {
 }
 
 # --- 5. install the hardened service (reuses install-service.ps1) ---
-Step "Installing hardened agent service"
+Step "Stopping any previous Git1Agent + wiping stale token"
 
-# Wipe any stale agent token from previous install. Otherwise the agent
-# reconnects with an invalid token (server doesn't know it), no pair code
-# is ever generated, and the installer waits forever.
+# Kill any leftover state from previous failed installs so no two agents race.
+Get-Service Git1Agent -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
+Get-Process python, pythonw -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -and $_.Path -like "*Git1*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+
 foreach ($cfg in @(
   "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\agent.json",
-  (Join-Path $env:APPDATA "Git1\agent.json")
+  "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\config.json",
+  (Join-Path $env:APPDATA "Git1\agent.json"),
+  (Join-Path $env:APPDATA "Git1\config.json")
 )) {
   if (Test-Path $cfg) {
-    try {
-      Remove-Item $cfg -Force -ErrorAction Stop
-      Write-Host "  cleared stale token: $cfg"
-    } catch { Write-Warning "  could not delete $cfg : $_" }
+    try { Remove-Item $cfg -Force -ErrorAction Stop; Write-Host "  cleared $cfg" } catch {}
   }
 }
 
+# --- 6. PAIR BEFORE installing the service. Otherwise the service-started agent
+#     and the installer would each generate a pair code and race against your
+#     dashboard click. By owning the pair flow here, only ONE code is active.
+Step "Pairing (get code from server, wait for you to claim it in the dashboard)"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$code = $null; $agentToken = $null; $deviceId = $null
+try {
+  Write-Host "  requesting pair code from $Server ..."
+  $r = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$Server/agent/pair/start" -TimeoutSec 30
+  $code = $r.code
+  Write-Host ""
+  Write-Host ("  >>> PAIRING CODE: " + $code + " <<<") -ForegroundColor Green
+  Write-Host ("  Open " + $Server + " on your phone/PC -> sign in -> enter this code -> Pair") -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "  Waiting up to 5 minutes for you to claim it..." -ForegroundColor Cyan
+  for ($i = 0; $i -lt 150 -and -not $agentToken; $i++) {
+    Start-Sleep -Seconds 2
+    try {
+      $p = Invoke-RestMethod -UseBasicParsing -Method Get -Uri ($Server + "/agent/pair/poll?code=" + $code) -TimeoutSec 10
+      if ($p.status -eq 'paired') {
+        $agentToken = $p.agentToken
+        $deviceId = $p.deviceId
+        Write-Host "  PAIRED! token signed=$(if ($agentToken -match '\.') { 'yes' } else { 'no' })" -ForegroundColor Green
+        break
+      }
+    } catch {}
+  }
+} catch {
+  Write-Warning "  could not reach server to get pair code: $($_.Exception.Message)"
+}
+
+if (-not $agentToken) {
+  throw "Pairing did not complete. Re-run the installer when you're ready to claim the code in the dashboard."
+}
+
+# Write token to disk in UTF-8 WITHOUT BOM (Python json.load chokes on BOM).
+$systemCfgDir = "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1"
+New-Item -ItemType Directory -Force -Path $systemCfgDir | Out-Null
+$cfgPath = Join-Path $systemCfgDir "agent.json"
+$cfgJson = (@{ agentToken = $agentToken; deviceId = $deviceId; server = $Server } | ConvertTo-Json -Compress)
+[IO.File]::WriteAllText($cfgPath, $cfgJson, (New-Object Text.UTF8Encoding $false))
+Write-Host "  wrote $cfgPath (UTF-8 no BOM)"
+
+# --- 7. NOW install the service. Agent starts with the token already on disk,
+#     skips its own pair flow, connects immediately, dashboard goes online.
+Step "Installing hardened agent service"
 & (Join-Path $InstallDir "scripts\install-service.ps1") `
     -Server $Server -ChildUser $ChildUser -UpdateBranch $Branch
+
+# Wait for the agent to actually connect, so we can report success clearly.
+Step "Verifying agent is online"
+$log = Join-Path $InstallDir "agent\agent.log"
+$connected = $false
+for ($i = 0; $i -lt 20 -and -not $connected; $i++) {
+  Start-Sleep -Seconds 2
+  if (Test-Path $log) {
+    $tail = Get-Content $log -Tail 10 -ErrorAction SilentlyContinue
+    if ($tail -match '\[ws\] connected') { $connected = $true; break }
+    if ($tail -match 'unauthorized|4401') {
+      Write-Warning "  Server rejected the token. Run the installer again after waiting 60s for the server deploy to land."
+      break
+    }
+  }
+}
+if ($connected) {
+  Write-Host "  AGENT ONLINE. Dashboard should show this device as green within 5s." -ForegroundColor Green
+} else {
+  Write-Warning "  Agent did not report [ws] connected within 40s. Check $log."
+}
 
 # --- 5b. kid-facing app: tray icon + shortcuts + autorun at kid login ---
 Step "Setting up the kid's 'Git1 - My time' app"
@@ -261,50 +329,6 @@ New-Shortcut (Join-Path $childStartup "Git1 Overlay.lnk") $pythonw "`"$overlayPy
 
 Write-Host "  Desktop + Start Menu shortcut: 'Git1 - My time' (opens dashboard)."
 Write-Host "  Tray icon + corner overlay start automatically when '$ChildUser' logs in."
-
-# --- 6. fetch pairing code DIRECTLY from server (no waiting on agent.log) ---
-Step "Pairing"
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$code = $null; $agentToken = $null; $deviceId = $null
-try {
-  Write-Host "  requesting pair code from $Server ..."
-  $r = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$Server/agent/pair/start" -TimeoutSec 30
-  $code = $r.code
-  Write-Host ""
-  Write-Host "  PAIRING CODE: $code" -ForegroundColor Green
-  Write-Host "  -> Enter this in the parent dashboard ($Server)" -ForegroundColor Green
-  Write-Host "     Sign in -> '6-digit pair code' field -> Pair"
-  Write-Host ""
-  Write-Host "  Waiting up to 5 minutes for you to enter it..." -ForegroundColor Cyan
-  for ($i = 0; $i -lt 150 -and -not $agentToken; $i++) {
-    Start-Sleep -Seconds 2
-    try {
-      $p = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "$Server/agent/pair/poll?code=$code" -TimeoutSec 10
-      if ($p.status -eq 'paired') {
-        $agentToken = $p.agentToken
-        $deviceId = $p.deviceId
-        Write-Host "  PAIRED!" -ForegroundColor Green
-        break
-      }
-    } catch {}
-  }
-} catch {
-  Write-Warning "  could not reach server to get pair code: $($_.Exception.Message)"
-  Write-Host "  The agent will retry on its own. Check log later:" -ForegroundColor Yellow
-  Write-Host "    Get-Content `"$InstallDir\agent\agent.log`" -Wait"
-}
-
-# Write token into the agent's SYSTEM config so the service picks it up on next start.
-if ($agentToken) {
-  $systemCfgDir = "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1"
-  New-Item -ItemType Directory -Force -Path $systemCfgDir | Out-Null
-  $cfgPath = Join-Path $systemCfgDir "agent.json"
-  $cfgObj = @{ agentToken = $agentToken; deviceId = $deviceId; server = $Server }
-  ($cfgObj | ConvertTo-Json -Compress) | Set-Content -LiteralPath $cfgPath -Encoding UTF8 -NoNewline
-  Write-Host "  wrote $cfgPath"
-  Restart-Service Git1Agent -ErrorAction SilentlyContinue
-  Write-Host "  Git1Agent restarted with the new token. Device should appear ONLINE in the dashboard within ~5s." -ForegroundColor Green
-}
 
 Write-Host "`nAll set. The agent will auto-start at boot and self-update on each push." -ForegroundColor Green
 Write-Host "Have the child log in to the '$ChildUser' account to use the PC."
