@@ -880,6 +880,10 @@ wss.on('connection', (ws, req) => {
   // drops it ("no close frame" on the agent). Dead sockets get terminated.
   (ws as any).isAlive = true;
   ws.on('pong', () => { (ws as any).isAlive = true; });
+  // If an older socket for this device lingers, retire it first so its delayed
+  // close handler can't later clobber this fresh connection.
+  const prev = agentSockets.get(device.id);
+  if (prev && prev !== ws) { try { prev.terminate(); } catch {} }
   agentSockets.set(device.id, ws);
   // If this device was previously flagged offline (tamper), notify recovery.
   if (offlineAlerted.delete(device.id)) {
@@ -1034,8 +1038,13 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    agentSockets.delete(device.id);
-    store.updateDevice(device.id, { status: 'offline' });
+    // Only mark offline if THIS socket is still the registered one. On reconnect
+    // (e.g. after the agent restarts) a new socket registers first; the old
+    // socket's delayed close must not delete the new entry or flag offline.
+    if (agentSockets.get(device.id) === ws) {
+      agentSockets.delete(device.id);
+      store.updateDevice(device.id, { status: 'offline' });
+    }
   });
 });
 
