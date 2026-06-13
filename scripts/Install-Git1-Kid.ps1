@@ -202,9 +202,25 @@ Step "Enforcement target account: '$ChildUser'"
 $existing = Get-LocalUser -Name $ChildUser -ErrorAction SilentlyContinue
 if ($existing) {
   Write-Host "  '$ChildUser' exists. Enforcement will apply to this account."
-  # NOTE: we no longer demote from Administrator. If the install target IS the
-  # parent's own account, demoting them would lock them out of admin. The agent
-  # enforces on whoever owns the SID; admin or not, lock/limits still apply.
+  # Security check: if the enforced account is an Administrator, the kid can
+  # delete the agent, stop the service, and run Recover. Warn LOUDLY. We don't
+  # auto-demote (that could lock a parent out of their own admin account).
+  $isAdmin = $false
+  try {
+    $admins = Get-LocalGroupMember -Group "Administrators" -ErrorAction Stop
+    foreach ($m in $admins) { if ($m.Name -match "\\$ChildUser$" -or $m.Name -eq $ChildUser) { $isAdmin = $true } }
+  } catch {}
+  if ($isAdmin) {
+    Write-Host ""
+    Write-Warning "  *** '$ChildUser' is a LOCAL ADMINISTRATOR. ***"
+    Write-Warning "  An admin kid can delete the agent, stop the service, and bypass everything."
+    Write-Warning "  For real enforcement, make '$ChildUser' a STANDARD user and use a SEPARATE"
+    Write-Warning "  admin account for yourself. To demote now, run in an admin PowerShell:"
+    Write-Warning "      Remove-LocalGroupMember -Group Administrators -Member '$ChildUser'"
+    Write-Host ""
+  } else {
+    Write-Host "  '$ChildUser' is a Standard user — good. Files + service are tamper-protected."
+  }
 } else {
   Write-Host "  '$ChildUser' not found - creating as a Standard user."
   if ($ChildPassword) {
