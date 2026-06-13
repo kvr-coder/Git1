@@ -219,6 +219,47 @@ async function cmd(id, kind, payload){
        toast(kind.replace(/_/g,' ')); setTimeout(refresh,400); }
   catch(e){ toast(e.message); }
 }
+// Lock + Internet are now stateful toggles. Optimistically update the card so
+// the button label/colour flips the moment you click, then sync with the
+// server. If the server rejects, /devices will correct it on the next refresh.
+async function toggleLock(id, wantLocked){
+  paintLockBtn(id, wantLocked);
+  try{
+    await api('/devices/'+id+'/command',{method:'POST',body:JSON.stringify({kind: wantLocked?'lock':'unlock'})});
+    toast(wantLocked?'Locked':'Unlocked');
+    await forceRefresh();
+  }catch(e){ toast(e.message); await forceRefresh(); }
+}
+async function toggleNet(id, wantOn){
+  paintNetBtn(id, !wantOn);  // !wantOn => internetBlocked
+  try{
+    await api('/devices/'+id+'/command',{method:'POST',body:JSON.stringify({kind: wantOn?'unblock_internet':'block_internet'})});
+    toast(wantOn?'Internet ON':'Internet OFF');
+    await forceRefresh();
+  }catch(e){ toast(e.message); await forceRefresh(); }
+}
+function paintLockBtn(id, locked){
+  const card = document.querySelector('#devices .card[data-device="'+id+'"]'); if(!card) return;
+  const b = card.querySelector('[data-role="lockBtn"]'); if(!b) return;
+  b.textContent = locked ? '🔓 Unlock' : '🔒 Lock';
+  b.className = locked ? 'ok' : 'dng';
+  b.setAttribute('onclick', `toggleLock('${id}',${!locked})`);
+  const s = card.querySelector('[data-role="stateLine"]'); if(!s) return;
+  const net = card.querySelector('[data-role="netBtn"]')?.textContent || '';
+  const netPart = net.includes('OFF') ? '🚫 Internet blocked' : '🌐 Internet allowed';
+  s.innerHTML = (locked?'🔒 Locked by parent':'🔓 Unlocked') + ' · ' + netPart;
+}
+function paintNetBtn(id, blocked){
+  const card = document.querySelector('#devices .card[data-device="'+id+'"]'); if(!card) return;
+  const b = card.querySelector('[data-role="netBtn"]'); if(!b) return;
+  b.textContent = blocked ? '🚫 Internet OFF' : '🌐 Internet ON';
+  b.className = blocked ? 'warn' : 'ok';
+  b.setAttribute('onclick', `toggleNet('${id}',${blocked?true:false})`);
+  const s = card.querySelector('[data-role="stateLine"]'); if(!s) return;
+  const lockBtn = card.querySelector('[data-role="lockBtn"]')?.textContent || '';
+  const lockPart = lockBtn.includes('Unlock') ? '🔒 Locked by parent' : '🔓 Unlocked';
+  s.innerHTML = lockPart + ' · ' + (blocked?'🚫 Internet blocked':'🌐 Internet allowed');
+}
 async function resolve(kind, id, status, minutes){
   const body = minutes!=null ? {status,minutes} : {status};
   try{ await api('/'+kind+'/'+id+'/resolve',{method:'POST',body:JSON.stringify(body)});
@@ -339,6 +380,10 @@ function updateDeviceStatsInPlace(list){
     if (stats) stats.textContent = fmt(d.usedTodayMinutes)+' / '+fmt(d.dailyLimitMinutes)+' today · bank '+fmt(d.bankedMinutes);
     const tamper = card.querySelector('[data-role="tamper"]');
     if (tamper) tamper.style.display = d.tamperSuspected ? '' : 'none';
+    // Reflect authoritative state on the toggles, so the button label/colour
+    // matches reality even if the agent rejected/applied the command.
+    paintLockBtn(d.id, !!d.lockedByParent);
+    paintNetBtn(d.id, !!d.internetBlocked);
   }
 }
 
@@ -365,11 +410,16 @@ function renderDevices(list){
       <div class="mut" data-role="stats">${fmt(d.usedTodayMinutes)} / ${fmt(d.dailyLimitMinutes)} today · bank ${fmt(d.bankedMinutes)}</div>
 
       <div class="btns">
-        <button class="dng" onclick="cmd('${d.id}','lock')">Lock</button>
-        <button class="ok"  onclick="cmd('${d.id}','unlock')">Unlock</button>
+        <button data-role="lockBtn" class="${d.lockedByParent?'ok':'dng'}" onclick="toggleLock('${d.id}',${!d.lockedByParent})">
+          ${d.lockedByParent?'🔓 Unlock':'🔒 Lock'}
+        </button>
         <button class="sec" onclick="cmd('${d.id}','grant_minutes',{minutes:15})">+15 min</button>
-        <button class="${net?'ok':'warn'}" onclick="cmd('${d.id}','${net?'unblock_internet':'block_internet'}')">
-          ${net?'Internet ON':'Internet OFF'}</button>
+        <button data-role="netBtn" class="${net?'warn':'ok'}" onclick="toggleNet('${d.id}',${net?false:true})">
+          ${net?'🚫 Internet OFF':'🌐 Internet ON'}
+        </button>
+      </div>
+      <div class="mut" data-role="stateLine" style="font-size:12px;margin-top:6px">
+        ${d.lockedByParent ? '🔒 Locked by parent' : (d.tamperSuspected ? '' : '🔓 Unlocked')} · ${net ? '🚫 Internet blocked' : '🌐 Internet allowed'}
       </div>
 
       <details ${OPEN_PANELS.has(d.id)?'open':''} style="margin-top:12px" ontoggle="this.open?OPEN_PANELS.add('${d.id}'):OPEN_PANELS.delete('${d.id}')">
