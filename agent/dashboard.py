@@ -65,6 +65,15 @@ PAGE = """<!doctype html>
 <h1>Git1 — My time</h1>
 <p class="muted">Your screen time, schedules, and chores — all in one place.</p>
 
+<div class="card" id="pairing-banner" style="display: none; border-color: var(--primary);">
+  <strong style="color: var(--primary);">🔗 Waiting to connect…</strong>
+  <p class="muted" style="margin: 8px 0 0;">
+    This PC isn't paired to a parent yet, or it can't reach the Git1 server right
+    now. Everything below fills in automatically once it connects — you don't
+    need to do anything.
+  </p>
+</div>
+
 <div class="card" id="autospend-banner" style="display: none; border-color: var(--danger);">
   <strong style="color: var(--danger);">⏰ Out of time today</strong>
   <p class="muted" style="margin: 8px 0;">
@@ -185,6 +194,8 @@ async function refresh() {
   try {
     const r = await fetch('/status');
     const s = await r.json();
+    document.getElementById('pairing-banner').style.display =
+      s.paired ? 'none' : 'block';
     const pct = Math.min(1, s.usedTodayMinutes / Math.max(1, s.limitMinutes));
     const fill = document.getElementById('fill');
     fill.style.width = `${pct * 100}%`;
@@ -383,6 +394,7 @@ class Dashboard:
     def __init__(self, port: int = DEFAULT_PORT) -> None:
         self.port = port
         self.status: dict[str, Any] = {
+            "paired": False,
             "usedTodayMinutes": 0,
             "limitMinutes": 120,
             "internetBlocked": False,

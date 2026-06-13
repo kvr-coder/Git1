@@ -5,7 +5,9 @@
     1. ensures Python 3 + Git are installed (via winget if missing)
     2. clones the repo to a protected location the kid can't edit
     3. installs the agent's Python dependencies
-    4. creates a dedicated STANDARD (non-admin) account for the child
+    4. lets you pick an EXISTING standard account to manage, or create a new one
+       (defaults to managing an account that already exists — it will NOT
+        silently create a second "Git1 Kid" account)
     5. installs the hardened LocalSystem service + watchdog (install-service.ps1)
     6. starts it and shows the pairing code to enter in the parent app
 
@@ -18,7 +20,10 @@
 #>
 param(
   [string]$Server      = "https://git1-server.onrender.com",
-  [string]$ChildUser   = "Kiddo",
+  # Account to manage. Leave blank to get an interactive picker that lists the
+  # PC's existing standard accounts (the safe default). Pass a name to manage it
+  # directly; if no such account exists you'll be asked before one is created.
+  [string]$ChildUser   = "",
   [string]$ChildPassword = "",                 # blank = passwordless kid login
   [string]$Branch      = "claude/setup-git1-dev-environment-QeNdU",
   [string]$RepoUrl     = "https://github.com/kvr-coder/git1.git",
@@ -27,6 +32,71 @@ param(
 
 $ErrorActionPreference = "Stop"
 function Step($m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
+
+# Local accounts that are real, enabled, and NOT administrators — i.e. the ones
+# you'd actually want to manage as "the kid". Excludes built-in/system accounts.
+function Get-LocalNonAdminUsers {
+  $adminMembers = @()
+  try {
+    $adminMembers = @(Get-LocalGroupMember -Group "Administrators" -ErrorAction Stop |
+                      ForEach-Object { ($_.Name -split '\\')[-1] })
+  } catch {}
+  $builtin = @('Administrator','DefaultAccount','Guest','WDAGUtilityAccount')
+  Get-LocalUser -ErrorAction SilentlyContinue | Where-Object {
+    $_.Enabled -and
+    ($builtin -notcontains $_.Name) -and
+    ($adminMembers -notcontains $_.Name)
+  }
+}
+
+# Decide which account Git1 will manage. Defaults to MANAGE EXISTING: lists the
+# non-admin accounts already on the PC and lets the parent choose, so re-running
+# the installer never quietly spawns a duplicate child account. Returns a
+# hashtable @{ Name = <string>; Create = <bool> }.
+function Select-ChildAccount {
+  param([string]$Preset)
+
+  # Non-interactive path: a name was passed on the command line.
+  if ($Preset) {
+    if (Get-LocalUser -Name $Preset -ErrorAction SilentlyContinue) {
+      return @{ Name = $Preset; Create = $false }
+    }
+    Write-Warning "No local account named '$Preset' exists on this PC."
+    $yn = Read-Host "Create a NEW standard account '$Preset'? (y/N)"
+    if ($yn -match '^[Yy]') { return @{ Name = $Preset; Create = $true } }
+    throw "No account selected. Re-run with -ChildUser <existing account>, or pick from the list (run with no -ChildUser)."
+  }
+
+  $candidates = @(Get-LocalNonAdminUsers)
+  Write-Host ""
+  Write-Host "Which account should Git1 manage as the child?" -ForegroundColor Cyan
+  if ($candidates.Count -gt 0) {
+    Write-Host "Existing standard (non-admin) accounts on this PC:"
+    for ($i = 0; $i -lt $candidates.Count; $i++) {
+      $full = if ($candidates[$i].FullName) { " ($($candidates[$i].FullName))" } else { "" }
+      Write-Host ("  [{0}] {1}{2}" -f ($i + 1), $candidates[$i].Name, $full)
+    }
+  } else {
+    Write-Host "  (no existing standard accounts found on this PC)"
+  }
+  Write-Host "  [N] Create a NEW standard account for the child"
+  Write-Host ""
+
+  while ($true) {
+    $choice = Read-Host "Choose a number to MANAGE THAT EXISTING account, or N to create new"
+    if ($choice -match '^[Nn]$') {
+      $name = (Read-Host "  New account name (e.g. the child's first name)").Trim()
+      if ($name) { return @{ Name = $name; Create = $true } }
+      Write-Host "  name can't be empty." -ForegroundColor Yellow
+      continue
+    }
+    $n = 0
+    if ([int]::TryParse($choice, [ref]$n) -and $n -ge 1 -and $n -le $candidates.Count) {
+      return @{ Name = $candidates[$n - 1].Name; Create = $false }
+    }
+    Write-Host "  invalid choice — enter a listed number or N." -ForegroundColor Yellow
+  }
+}
 
 # --- 0. must be admin (the .bat elevates; double-check here) ---
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
@@ -70,12 +140,15 @@ Step "Installing Python dependencies"
 python -m pip install --upgrade pip | Out-Null
 python -m pip install -r (Join-Path $InstallDir "agent\requirements.txt")
 
-# --- 4. create the dedicated STANDARD child account ---
-Step "Creating standard account '$ChildUser'"
-$existing = Get-LocalUser -Name $ChildUser -ErrorAction SilentlyContinue
-if ($existing) {
-  Write-Host "  account already exists — leaving it as-is."
+# --- 4. choose (or create) the child account ---
+Step "Selecting the child account"
+$sel       = Select-ChildAccount -Preset $ChildUser
+$ChildUser = $sel.Name
+
+if (-not $sel.Create) {
+  Write-Host "  Managing EXISTING account '$ChildUser' — no new account created." -ForegroundColor Green
 } else {
+  Write-Host "  Creating new standard account '$ChildUser'..."
   if ($ChildPassword) {
     $sec = ConvertTo-SecureString $ChildPassword -AsPlainText -Force
     New-LocalUser -Name $ChildUser -Password $sec -PasswordNeverExpires -FullName "Git1 Kid" | Out-Null

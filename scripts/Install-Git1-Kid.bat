@@ -8,8 +8,14 @@ REM  Optional: edit the values below before running.
 REM ============================================================
 
 set "GIT1_SERVER=https://git1-server.onrender.com"
-set "CHILD_USER=Kiddo"
-set "BRANCH=claude/setup-git1-dev-environment-QeNdU"
+REM  Leave CHILD_USER blank to PICK an existing account when the installer runs
+REM  (recommended — avoids creating a duplicate "Git1 Kid" account). Or set it
+REM  to an existing account name to manage that account directly.
+set "CHILD_USER="
+REM  Branch the kid PC installs from AND self-updates against. Tracks the repo's
+REM  default branch, which holds the fixes (dashboard-before-pairing, account
+REM  picker, clearer pairing logs). The agent keeps pulling new commits from it.
+set "BRANCH=claude/test-hub-web-launch-tAo7u"
 
 REM --- self-elevate ---
 net session >nul 2>&1
