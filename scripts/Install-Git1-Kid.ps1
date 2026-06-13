@@ -163,6 +163,22 @@ try {
 
 # --- 5. install the hardened service (reuses install-service.ps1) ---
 Step "Installing hardened agent service"
+
+# Wipe any stale agent token from previous install. Otherwise the agent
+# reconnects with an invalid token (server doesn't know it), no pair code
+# is ever generated, and the installer waits forever.
+foreach ($cfg in @(
+  "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\config.json",
+  (Join-Path $env:APPDATA "Git1\config.json")
+)) {
+  if (Test-Path $cfg) {
+    try {
+      Remove-Item $cfg -Force -ErrorAction Stop
+      Write-Host "  cleared stale token: $cfg"
+    } catch { Write-Warning "  could not delete $cfg : $_" }
+  }
+}
+
 & (Join-Path $InstallDir "scripts\install-service.ps1") `
     -Server $Server -ChildUser $ChildUser -UpdateBranch $Branch
 
