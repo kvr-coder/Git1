@@ -13,9 +13,8 @@ if %errorlevel% NEQ 0 (
   exit /b
 )
 if not "%~1"=="" set "GIT1_INSTALL_USER=%~1"
-set "CHILD_USER=%GIT1_INSTALL_USER%"
+set "CHILD_USER=auto"
 
-echo Enforcement will apply to Windows user: %CHILD_USER%
 echo Extracting embedded installer...
 set "PS1=%TEMP%\Install-Git1-Kid.ps1"
 
@@ -173,18 +172,37 @@ python -m pip install --upgrade pip | Out-Null
 python -m pip install -r (Join-Path $InstallDir "agent\requirements.txt")
 
 # --- 4. Resolve the child account ---
-# If $ChildUser is blank or "auto", enforce on the user who launched the installer
-# (the actual interactive Windows account on this PC). No separate Kiddo account.
-if (-not $ChildUser -or $ChildUser -eq 'auto' -or $ChildUser -eq '') {
-  # The .bat passes us the pre-elevation username via env var.
-  $interactive = $env:GIT1_INSTALL_USER
-  if (-not $interactive) {
-    try { $interactive = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName } catch {}
-    if ($interactive -and $interactive.Contains('\')) { $interactive = $interactive.Split('\')[-1] }
+# Detect the ACTUAL person at the physical console (the screen+keyboard user).
+# Never trust %USERNAME% — UAC "Run as administrator" makes that the admin's name,
+# not the logged-in user. Always query Windows for the active console session.
+function Get-ActiveConsoleUser {
+  try {
+    # Use quser.exe (built into Windows) — robust against UAC switch.
+    $rows = quser 2>$null
+    foreach ($r in $rows) {
+      # The active session line has '>' in front of the username and STATE='Active'.
+      if ($r -match '^\s*>\s*(\S+)\s+\S+\s+\d+\s+Active') { return $matches[1] }
+    }
+  } catch {}
+  # Fallback: WMI ComputerSystem.UserName (interactive logon owner).
+  try {
+    $u = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName
+    if ($u) { if ($u.Contains('\')) { return $u.Split('\')[-1] } else { return $u } }
+  } catch {}
+  return $null
+}
+
+$consoleUser = Get-ActiveConsoleUser
+if ($consoleUser) {
+  Write-Host "  active console user (the person physically using this PC): '$consoleUser'"
+  if ($ChildUser -and $ChildUser -ne $consoleUser -and $ChildUser -ne 'auto') {
+    Write-Warning "  installer was told to target '$ChildUser', but the actual user is '$consoleUser'."
+    Write-Warning "  Overriding -> enforcing on '$consoleUser' so Lock works on the right screen."
   }
-  if (-not $interactive) { $interactive = $env:USERNAME }
-  $ChildUser = $interactive
-  Write-Host "  auto-detected enforcement target: '$ChildUser'"
+  $ChildUser = $consoleUser
+} elseif (-not $ChildUser -or $ChildUser -eq 'auto') {
+  $ChildUser = $env:USERNAME
+  Write-Warning "  could not detect console user; falling back to '$ChildUser'"
 }
 
 # Clean up the stale "Kiddo" account from earlier installs (unless that's the
