@@ -709,6 +709,15 @@ def main() -> None:
                     save_json(CONFIG_PATH, cfg)
                     backoff = 2
                     continue
+                # No recovery code waiting -> server doesn't know this token
+                # (DB wipe, manual unpair, etc). Auto-clear and re-pair so the
+                # kid PC doesn't get stuck. A fresh pair code prints on next loop.
+                print("[ws] token rejected and no recovery code -> clearing token and re-pairing")
+                cfg.pop("agentToken", None)
+                cfg.pop("deviceId", None)
+                save_json(CONFIG_PATH, cfg)
+                # Re-exec so the new pairing flow runs cleanly.
+                os.execv(sys.executable, [sys.executable] + sys.argv)
             # Deadman: if internet is firewall-blocked AND we've been offline
             # too long, auto-unblock so parent can recover.
             if enforcer_net.is_blocked() and offline_for > NET_DEADMAN_SEC:
