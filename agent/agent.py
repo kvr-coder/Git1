@@ -153,10 +153,23 @@ def lock_workstation() -> bool:
     if sys.platform != "win32":
         print("[lock] non-Windows host, skipping")
         return False
-    # 1. In-session tray locker (cleanest).
+    # 1. In-session tray locker (cleanest) — BUT verified. A tampering kid could
+    # read the code, kill the real tray, and keep faking tray.alive so the
+    # service trusts a locker that never locks. Guard against that: if the
+    # PREVIOUS signal we dropped is still sitting unconsumed after a few seconds,
+    # the "tray" is fake/dead — fall through to the reliable disconnect lock.
     try:
         os.makedirs(IPC_DIR, exist_ok=True)
-        if _tray_is_alive():
+        if os.path.exists(LOCK_SIGNAL):
+            age = time.time() - os.path.getmtime(LOCK_SIGNAL)
+            if age > 4:
+                print(f"[lock] prior signal unconsumed {age:.0f}s -> tray not really "
+                      f"locking; using disconnect.")
+                # fall through to disconnect below (don't trust the heartbeat)
+            else:
+                # A real tray is mid-consume; let it finish.
+                return True
+        elif _tray_is_alive():
             with open(LOCK_SIGNAL, "w") as f:
                 f.write(str(int(time.time())))
             print("[lock] signalled in-session tray to lock (clean).")
