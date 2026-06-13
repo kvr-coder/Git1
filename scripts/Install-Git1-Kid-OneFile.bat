@@ -110,14 +110,45 @@ foreach ($stub in @("python.exe","python3.exe","python3.12.exe")) {
     try { Remove-Item $p -Force -ErrorAction Stop; Write-Host "  removed Store alias: $stub" } catch {}
   }
 }
+# Resolve latest Git-for-Windows release URL via GitHub API. Falls back to a
+# known-good version if the API is unreachable.
+function Get-LatestGitUrl {
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $r = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest" -TimeoutSec 15
+    $asset = $r.assets | Where-Object { $_.name -match '^Git-.*-64-bit\.exe$' } | Select-Object -First 1
+    if ($asset) { Write-Host "  latest Git: $($asset.name)"; return $asset.browser_download_url }
+  } catch { Write-Host "  github API failed, using fallback Git version" }
+  return "https://github.com/git-for-windows/git/releases/download/v2.47.0.windows.1/Git-2.47.0-64-bit.exe"
+}
+
+# Resolve latest stable Python 3 by scraping python.org. Falls back to a known-good URL.
+function Get-LatestPythonUrl {
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $html = (Invoke-WebRequest -UseBasicParsing -Uri "https://www.python.org/downloads/windows/" -TimeoutSec 15).Content
+    # Find first "Latest Python 3 Release - Python 3.X.Y"
+    if ($html -match 'Latest Python 3 Release\s*-\s*Python\s*(\d+\.\d+\.\d+)') {
+      $ver = $matches[1]
+      $url = "https://www.python.org/ftp/python/$ver/python-$ver-amd64.exe"
+      Write-Host "  latest Python: $ver"
+      return $url
+    }
+  } catch { Write-Host "  python.org scrape failed, using fallback Python version" }
+  return "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
+}
+
 if (-not (Have python)) {
-  if (-not (Winget-Install "Python.Python.3.12")) {
-    Download-And-Install "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe" "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0"
+  # winget Python.Python.3 floats to whatever the current major is.
+  if (-not (Winget-Install "Python.Python.3")) {
+    if (-not (Winget-Install "Python.Python.3.12")) {
+      Download-And-Install (Get-LatestPythonUrl) "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0"
+    }
   }
 }
 if (-not (Have git)) {
   if (-not (Winget-Install "Git.Git")) {
-    Download-And-Install "https://github.com/git-for-windows/git/releases/download/v2.47.0.windows.1/Git-2.47.0-64-bit.exe" "/VERYSILENT /NORESTART /NOCANCEL /SP- /SUPPRESSMSGBOXES"
+    Download-And-Install (Get-LatestGitUrl) "/VERYSILENT /NORESTART /NOCANCEL /SP- /SUPPRESSMSGBOXES"
   }
 }
 # refresh PATH for this session so the just-installed tools are visible

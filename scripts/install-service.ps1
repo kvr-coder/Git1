@@ -101,28 +101,49 @@ if (-not $nssm) {
       }
     }
 
-    # 2. Otherwise, try mirrors with retry.
+    # 2. Otherwise, try mirrors with retry. NSSM 2.24 has been the latest stable
+    # since 2014 (no 2.25 exists), so version is safe to hardcode. Multiple mirrors
+    # so a 503 on nssm.cc (frequent) doesn't kill the install.
     if (-not $zip) {
+      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
       $zip = Join-Path $env:TEMP "nssm.zip"
       $mirrors = @(
+        # Primary
         "https://nssm.cc/release/nssm-2.24.zip",
+        # GitHub mirrors (multiple forks have it as a release artifact)
+        "https://github.com/kirillkovalenko/nssm/releases/download/v2.24/nssm-2.24.zip",
+        # Chocolatey CDN (nupkg is a zip with nssm.exe inside)
+        "https://packages.chocolatey.org/NSSM.2.24.101.20180116.nupkg",
+        # Our own repo's vendored copy (added once we commit it)
+        "https://github.com/kvr-coder/git1/raw/$($env:GIT1_UPDATE_BRANCH)/scripts/vendor/nssm-2.24.zip",
+        "https://github.com/kvr-coder/git1/raw/main/scripts/vendor/nssm-2.24.zip",
+        # Wayback Machine - last resort
         "https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip"
       )
       $ok = $false
       foreach ($url in $mirrors) {
-        for ($i=1; $i -le 3; $i++) {
+        for ($i=1; $i -le 2; $i++) {
           try {
             Write-Host "[svc] trying $url (attempt $i)"
-            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30
-            if ((Get-Item $zip).Length -gt 100000) { $ok = $true; break }
-          } catch { Write-Host "[svc]   failed: $_" }
+            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30 -UserAgent "Git1Installer/1.0"
+            $sz = (Get-Item $zip).Length
+            if ($sz -gt 100000) {
+              Write-Host "[svc]   downloaded $sz bytes"
+              $ok = $true; break
+            } else {
+              Write-Host "[svc]   too small ($sz bytes), discarding"
+              Remove-Item $zip -Force -ErrorAction SilentlyContinue
+            }
+          } catch {
+            Write-Host "[svc]   failed: $($_.Exception.Message)"
+          }
           Start-Sleep -Seconds ($i * 2)
         }
         if ($ok) { break }
       }
       if (-not $ok) {
         Write-Host ""
-        Write-Host "Could not download NSSM. Easy fix:" -ForegroundColor Yellow
+        Write-Host "Could not download NSSM from any mirror. Easy fix:" -ForegroundColor Yellow
         Write-Host "  1. On any PC with internet, download: https://nssm.cc/release/nssm-2.24.zip"
         Write-Host "  2. Put nssm-2.24.zip in this PC's Downloads folder (or anywhere)"
         Write-Host "  3. Re-run the installer"
@@ -133,8 +154,20 @@ if (-not $nssm) {
     if (-not $foundExe) {
       $tmp = Join-Path $env:TEMP "nssm-extract"
       if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
-      Expand-Archive -Force $zip $tmp
-      Copy-Item (Join-Path $tmp "nssm-2.24\$arch\nssm.exe") $nssm -Force
+      # Both .zip and .nupkg are zip files - Expand-Archive needs a .zip extension.
+      $extractSrc = $zip
+      if ($zip -notmatch '\.zip$') {
+        $extractSrc = Join-Path $env:TEMP "nssm-renamed.zip"
+        Copy-Item $zip $extractSrc -Force
+      }
+      Expand-Archive -Force $extractSrc $tmp
+      # Search the extracted tree for nssm.exe of the right arch (handles all
+      # mirror layouts: nssm-2.24/win64/, tools/, etc).
+      $candidates = Get-ChildItem -Path $tmp -Recurse -Filter "nssm.exe" -ErrorAction SilentlyContinue
+      $picked = $candidates | Where-Object { $_.FullName -match "\\$arch\\" } | Select-Object -First 1
+      if (-not $picked) { $picked = $candidates | Select-Object -First 1 }
+      if (-not $picked) { throw "nssm.exe not found inside downloaded archive." }
+      Copy-Item $picked.FullName $nssm -Force
     }
   }
 }
