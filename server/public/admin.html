@@ -264,9 +264,11 @@ function renderCoParents(list){
 }
 
 async function inviteCoParent(){
-  try{ const r = await api('/co-parents/invite',{method:'POST'});
-       prompt('Share this 6-digit code with the other parent (expires in 24h):', r.code); }
-  catch(e){ toast(e.message); }
+  try{
+    const r = await api('/co-parents/invite',{method:'POST'});
+    const el = document.getElementById('coStatus');
+    if(el) el.innerHTML = `Code for other parent: <b style="font-size:18px;letter-spacing:2px;color:var(--ok)">${r.code}</b> <button class="sec" style="padding:6px 10px" onclick="navigator.clipboard.writeText('${r.code}');toast('Copied!')">Copy</button> <span class="mut">(expires in 24h)</span>`;
+  } catch(e){ toast(e.message); }
 }
 async function claimCoParent(){
   const code = document.getElementById('coCode').value.trim();
@@ -275,23 +277,32 @@ async function claimCoParent(){
        document.getElementById('coCode').value=''; toast('Linked!'); refresh(); }
   catch(e){ toast(e.message); }
 }
-async function recoverDevice(id){
-  try{ const r = await api('/devices/'+id+'/recovery-code',{method:'POST'});
-       prompt('New recovery pair code (enter on kid device, expires 10 min):', r.code); }
-  catch(e){ toast(e.message); }
+async function recoverDevice(id){ return showRecoveryCode(id); }
+async function showRecoveryCode(id){
+  try{
+    const r = await api('/devices/'+id+'/recovery-code',{method:'POST'});
+    const el = document.getElementById('rc_'+id);
+    if(el) el.innerHTML = `Recovery code: <b style="font-size:18px;letter-spacing:2px;color:var(--ok)">${r.code}</b> <button class="sec" style="padding:6px 10px" onclick="navigator.clipboard.writeText('${r.code}');toast('Copied!')">Copy</button><br><span class="mut">Enter on the kid PC via Repair-Pair-Git1.bat (expires 10 min)</span>`;
+  } catch(e){ toast(e.message); }
 }
-async function addGeofence(deviceId){
-  const name = prompt('Name (e.g. "School", "Home"):'); if(!name) return;
+async function addGeofenceInline(deviceId){
+  const name = (document.getElementById('gn_'+deviceId).value||'').trim();
+  if(!name) return toast('Enter a geofence name');
+  const radius = +document.getElementById('gr_'+deviceId).value || 150;
   if(!navigator.geolocation) return toast('Geolocation not supported');
-  toast('Capturing current location…');
+  toast('Capturing your current location…');
   navigator.geolocation.getCurrentPosition(async pos=>{
-    const radius = +prompt('Radius in meters (e.g. 150):', '150') || 150;
-    try{ await api('/geofences',{method:'POST',body:JSON.stringify({
-      deviceId, name, lat:pos.coords.latitude, lng:pos.coords.longitude,
-      radiusMeters:radius, notifyOnEnter:true, notifyOnExit:true,
-    })}); toast('Geofence added'); }catch(e){ toast(e.message); }
-  }, err=>toast(err.message), {enableHighAccuracy:true});
+    try{
+      await api('/geofences',{method:'POST',body:JSON.stringify({
+        deviceId, name, lat:pos.coords.latitude, lng:pos.coords.longitude,
+        radiusMeters:radius, notifyOnEnter:true, notifyOnExit:true,
+      })});
+      document.getElementById('gn_'+deviceId).value='';
+      toast('Geofence added');
+    }catch(e){ toast(e.message); }
+  }, err=>toast('Location error: '+err.message), {enableHighAccuracy:true});
 }
+async function addGeofence(deviceId){ /* legacy no-op; the More tab now has the form */ }
 
 let SCHEDULES = [];
 let OPEN_PANELS = new Set();        // device IDs whose Settings panel is open
@@ -443,10 +454,33 @@ function renderDevices(list){
 
         <!-- MORE tab -->
         <div class="tab-panel" id="more_${d.id}">
-          <button class="sec" onclick="renameDevice('${d.id}','${esc(d.name)}')" style="width:100%;margin-bottom:8px">✎ Rename device</button>
-          <button class="sec" onclick="addGeofence('${d.id}')" style="width:100%;margin-bottom:8px">📍 Add geofence</button>
-          <button class="sec" onclick="recoverDevice('${d.id}')" style="width:100%;margin-bottom:8px">🔑 New recovery code</button>
-          <button class="dng" onclick="deleteDevice('${d.id}','${esc(d.name)}')" style="width:100%;margin-top:16px">🗑 Delete device</button>
+          <div class="field-label">Device name</div>
+          <div class="row" style="gap:8px;margin-bottom:14px">
+            <input id="rn_${d.id}" value="${esc(d.name)}" class="grow"/>
+            <button class="sec" onclick="renameDeviceInline('${d.id}')">Save</button>
+          </div>
+
+          <div class="field-label">Add geofence (use your phone's current location)</div>
+          <div style="background:#0e1626;border:1px dashed var(--line);border-radius:10px;padding:12px;margin-bottom:14px">
+            <input id="gn_${d.id}" placeholder="Name (e.g. School, Home)" style="margin-bottom:10px"/>
+            <div class="field-label">Radius</div>
+            <div class="quickrow" style="margin-bottom:10px">
+              <button class="sec" onclick="document.getElementById('gr_${d.id}').value=100">100m</button>
+              <button class="sec" onclick="document.getElementById('gr_${d.id}').value=250">250m</button>
+              <button class="sec" onclick="document.getElementById('gr_${d.id}').value=500">500m</button>
+              <button class="sec" onclick="document.getElementById('gr_${d.id}').value=1000">1km</button>
+            </div>
+            <div class="row" style="gap:8px;margin-bottom:10px">
+              <input id="gr_${d.id}" type="number" min="20" max="20000" value="150" class="grow" style="max-width:120px"/>
+              <span class="mut">meters</span>
+            </div>
+            <button onclick="addGeofenceInline('${d.id}')" style="width:100%">📍 Use my location now</button>
+          </div>
+
+          <button class="sec" onclick="showRecoveryCode('${d.id}')" style="width:100%;margin-bottom:8px">🔑 Generate recovery code</button>
+          <div id="rc_${d.id}" class="mut" style="font-size:13px;margin-bottom:14px"></div>
+
+          <button class="dng" onclick="deleteDevice('${d.id}','${esc(d.name)}')" style="width:100%;margin-top:8px">🗑 Delete device</button>
         </div>
       </details>
     </div>`;
@@ -466,9 +500,13 @@ async function setBorrow(id){
   const capMinutes=+document.getElementById('sbcap_'+id).value||0;
   cmd(id,'set_borrow_settings',{enabled,capMinutes});
 }
-async function renameDevice(id,cur){
-  const name=prompt('New device name:',cur); if(!name) return;
+async function renameDeviceInline(id){
+  const name = document.getElementById('rn_'+id).value.trim();
+  if(!name) return toast('Enter a name');
   cmd(id,'rename',{name});
+}
+async function renameDevice(id,cur){
+  cmd(id,'rename',{name:cur||'New PC'});
 }
 function selectTab(btn, deviceId){
   const tabs = btn.parentNode.querySelectorAll('.tab');
