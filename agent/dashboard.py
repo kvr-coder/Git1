@@ -192,7 +192,8 @@ async function refresh() {
     document.getElementById('usage-text').textContent =
       `${fmt(s.usedTodayMinutes)} of ${fmt(s.limitMinutes)} used`;
     const b = document.getElementById('status-badge');
-    if (!s.scheduleAllowed) { b.textContent = 'Outside schedule'; b.className = 'badge bad'; }
+    // scheduleAllowed=false means a schedule's BLOCK window is active right now.
+    if (!s.scheduleAllowed) { b.textContent = 'Locked by schedule'; b.className = 'badge bad'; }
     else if (s.usedTodayMinutes >= s.limitMinutes) { b.textContent = 'Over limit'; b.className = 'badge bad'; }
     else { b.textContent = 'OK'; b.className = 'badge ok'; }
     document.getElementById('net-text').textContent =
