@@ -480,7 +480,9 @@ function renderDevices(list){
           <button class="sec" onclick="showRecoveryCode('${d.id}')" style="width:100%;margin-bottom:8px">🔑 Generate recovery code</button>
           <div id="rc_${d.id}" class="mut" style="font-size:13px;margin-bottom:14px"></div>
 
-          <button class="dng" onclick="deleteDevice('${d.id}','${esc(d.name)}')" style="width:100%;margin-top:8px">🗑 Delete device</button>
+          <div id="del_${d.id}">
+            <button class="dng" onclick="armDelete('${d.id}','${esc(d.name)}')" style="width:100%;margin-top:8px">🗑 Delete device</button>
+          </div>
         </div>
       </details>
     </div>`;
@@ -573,11 +575,29 @@ async function saveSchedule(deviceId){
     toast('Schedule added'); refresh();
   }catch(e){ toast(e.message); }
 }
-async function deleteDevice(id, name){
-  if(!confirm('Delete device "'+name+'"? This wipes all settings, schedules, and history for it. The agent on the kid PC will be unpaired.')) return;
+function armDelete(id, name){
+  const host = document.getElementById('del_'+id);
+  if(!host) return;
+  host.innerHTML = `
+    <div style="background:#1a0e0e;border:1px solid var(--danger);border-radius:10px;padding:12px;margin-top:8px">
+      <div style="margin-bottom:8px"><b>Delete "${esc(name)}"?</b></div>
+      <div class="mut" style="font-size:13px;margin-bottom:10px">This wipes all settings, schedules, history, and unpairs the agent. The kid PC will need to be re-paired to be controlled again.</div>
+      <div class="row" style="gap:8px">
+        <button class="sec grow" onclick="cancelDelete('${id}','${esc(name)}')">Cancel</button>
+        <button class="dng grow" onclick="confirmDelete('${id}')">Yes, delete</button>
+      </div>
+    </div>`;
+}
+function cancelDelete(id, name){
+  const host = document.getElementById('del_'+id);
+  if(host) host.innerHTML = `<button class="dng" onclick="armDelete('${id}','${name}')" style="width:100%;margin-top:8px">🗑 Delete device</button>`;
+}
+async function confirmDelete(id){
   try{ await api('/devices/'+id,{method:'DELETE'}); toast('Deleted'); refresh(); }
   catch(e){ toast(e.message); }
 }
+// Keep legacy fn name in case anything calls it.
+async function deleteDevice(id, name){ armDelete(id, name); }
 async function delSchedule(id){
   try{ await api('/schedules/'+id,{method:'DELETE'}); toast('Removed'); refresh(); }catch(e){ toast(e.message); }
 }
