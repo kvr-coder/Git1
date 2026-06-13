@@ -99,9 +99,36 @@ def idle_seconds() -> float:
 
 
 def lock_workstation() -> bool:
+    """Lock the active console session.
+
+    user32.LockWorkStation() only locks the CALLER's session. When the agent
+    runs as a LocalSystem service (session 0), that's a no-op for the user's
+    screen — which is exactly the "Lock button does nothing" symptom.
+
+    The correct cross-session way is WTSDisconnectSession on the active console
+    session id. Disconnect leaves the session running but presents the lock
+    screen, just like Win+L would.
+    """
     if sys.platform != "win32":
-        print("[lock] non-Windows host, skipping LockWorkStation")
+        print("[lock] non-Windows host, skipping")
         return False
+    try:
+        wtsapi = ctypes.windll.wtsapi32
+        kernel32 = ctypes.windll.kernel32
+        sess = kernel32.WTSGetActiveConsoleSessionId()
+        if sess == 0xFFFFFFFF:
+            print("[lock] no active console session — nothing to lock")
+            return False
+        # WTSDisconnectSession(hServer=NULL, sessionId, bWait=FALSE)
+        ok = wtsapi.WTSDisconnectSession(0, sess, False)
+        if ok:
+            print(f"[lock] disconnected session {sess} (locked).")
+            return True
+        err = ctypes.windll.kernel32.GetLastError()
+        print(f"[lock] WTSDisconnectSession failed: GetLastError={err}; falling back to LockWorkStation")
+    except Exception as e:
+        print(f"[lock] WTSDisconnectSession threw {e}; falling back to LockWorkStation")
+    # Fallback (works when the agent is running INSIDE the user session).
     return bool(ctypes.windll.user32.LockWorkStation())
 
 
