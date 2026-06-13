@@ -1,5 +1,47 @@
 import Database from 'better-sqlite3';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHmac, createHash } from 'node:crypto';
+
+// Stable signing secret. Survives Render restarts WITHOUT any external service:
+// RENDER_SERVICE_ID is auto-injected by Render and is constant for the life of
+// the service. Falling back to a fixed salt for local dev. This lets us issue
+// self-validating agent tokens so a wiped DB doesn't force re-pairing.
+const SECRET =
+  process.env.GIT1_SECRET ||
+  (process.env.RENDER_SERVICE_ID ? 'rsid:' + process.env.RENDER_SERVICE_ID : '') ||
+  'git1-local-dev-secret-v1';
+
+// Deterministic user id derived from email so a re-login after a DB wipe yields
+// the SAME id — keeping devices linked to their parent across restarts.
+export function deterministicUserId(email: string): string {
+  return 'u_' + createHash('sha256').update(email.trim().toLowerCase()).digest('hex').slice(0, 24);
+}
+
+function b64url(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function hmac(data: string): string {
+  return b64url(createHmac('sha256', SECRET).update(data).digest());
+}
+// A self-validating agent token: base64(payload).hmac. The server can rebuild a
+// device row from it even if the DB was wiped — no re-pairing needed, ever.
+export function signAgentToken(payload: { deviceId: string; email: string; name: string }): string {
+  const body = b64url(Buffer.from(JSON.stringify(payload)));
+  return body + '.' + hmac(body);
+}
+export function verifyAgentToken(
+  tok: string,
+): { deviceId: string; email: string; name: string } | null {
+  const dot = tok.lastIndexOf('.');
+  if (dot < 0) return null;
+  const body = tok.slice(0, dot);
+  const sig = tok.slice(dot + 1);
+  if (hmac(body) !== sig) return null;
+  try {
+    const p = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+    if (p && p.deviceId && p.email) return p;
+  } catch {}
+  return null;
+}
 
 export interface User {
   id: string;
@@ -274,8 +316,10 @@ const rowToSchedule = (r: any): ScheduleRow => ({
 
 export const store = {
   createUser(email: string, passwordHash: string): User {
-    const u: User = { id: id(), email, passwordHash };
-    db.prepare('INSERT INTO users (id, email, passwordHash) VALUES (?, ?, ?)').run(
+    // Deterministic id from email so a re-register after a DB wipe re-links
+    // existing devices (whose signed tokens carry the email) to this account.
+    const u: User = { id: deterministicUserId(email), email, passwordHash };
+    db.prepare('INSERT OR REPLACE INTO users (id, email, passwordHash) VALUES (?, ?, ?)').run(
       u.id,
       u.email,
       u.passwordHash,
@@ -284,6 +328,9 @@ export const store = {
   },
   findUserByEmail(email: string): User | undefined {
     return db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
+  },
+  setPassword(userId: string, passwordHash: string) {
+    db.prepare('UPDATE users SET passwordHash = ? WHERE id = ?').run(passwordHash, userId);
   },
   issueToken(userId: string): string {
     const t = token();
@@ -338,11 +385,21 @@ export const store = {
     const pc = db.prepare('SELECT * FROM pair_codes WHERE code = ?').get(code) as any;
     if (!pc || pc.claimedByUserId) return null;
     if (Date.now() - pc.createdAt > 24 * 60 * 60 * 1000) return null;
+    const deviceId = id();
+    // Issue a self-validating token tied to this device + the parent's email.
+    // If the DB is ever wiped, the agent reconnects with this token and the
+    // server rebuilds the device row from it — no re-pairing needed.
+    const userRow = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as
+      | { email: string }
+      | undefined;
+    const signedToken = userRow
+      ? signAgentToken({ deviceId, email: userRow.email, name })
+      : pc.agentToken;
     const d: DeviceRow = {
-      id: id(),
+      id: deviceId,
       userId,
       name,
-      agentToken: pc.agentToken,
+      agentToken: signedToken,
       pairedAt: Date.now(),
       lastSeen: null,
       status: 'offline',
@@ -369,11 +426,11 @@ export const store = {
       d.dailyLimitMinutes,
       d.usedTodayMinutes,
     );
-    db.prepare('UPDATE pair_codes SET claimedByUserId = ?, deviceId = ? WHERE code = ?').run(
-      userId,
-      d.id,
-      code,
-    );
+    // Store the SIGNED token on the pair_codes row too, so the agent's poll()
+    // receives the self-validating token (not the original random placeholder).
+    db.prepare(
+      'UPDATE pair_codes SET claimedByUserId = ?, deviceId = ?, agentToken = ? WHERE code = ?',
+    ).run(userId, d.id, d.agentToken, code);
     return d;
   },
   pollPairing(code: string) {
@@ -383,7 +440,29 @@ export const store = {
   },
   deviceByAgentToken(t: string): DeviceRow | undefined {
     const row = db.prepare('SELECT * FROM devices WHERE agentToken = ?').get(t);
-    return row ? rowToDevice(row) : undefined;
+    if (row) return rowToDevice(row);
+    // Self-heal: DB may have been wiped (Render free-tier restart). If the token
+    // is a valid signed token, rebuild the device row from it so the agent stays
+    // paired and comes back online automatically — no re-pairing required.
+    const payload = verifyAgentToken(t);
+    if (!payload) return undefined;
+    const userId = deterministicUserId(payload.email);
+    // Ensure a user row exists (so foreign keys + dashboard listing work). The
+    // parent re-logs in normally; this just keeps the linkage stable.
+    const existingUser = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    if (!existingUser) {
+      db.prepare('INSERT OR IGNORE INTO users (id, email, passwordHash) VALUES (?, ?, ?)').run(
+        userId,
+        payload.email,
+        '', // placeholder; real hash restored when the parent logs in again
+      );
+    }
+    db.prepare(
+      `INSERT OR IGNORE INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes, lockedByParent)
+       VALUES (?, ?, ?, ?, ?, NULL, 'offline', 120, 0, 0, '[]', 0, 30, 0, 0)`,
+    ).run(payload.deviceId, userId, payload.name, t, Date.now());
+    const rebuilt = db.prepare('SELECT * FROM devices WHERE id = ?').get(payload.deviceId);
+    return rebuilt ? rowToDevice(rebuilt) : undefined;
   },
   listDevices(userId: string): DeviceRow[] {
     const ids = this.parentUserIdsFor(userId);

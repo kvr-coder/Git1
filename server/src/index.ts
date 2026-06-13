@@ -150,8 +150,16 @@ app.post('/auth/register', (req, res) => {
   if (!p.success) return res.status(400).json(p.error);
   if (!INVITE_CODE) return res.status(403).json({ error: 'registration disabled' });
   if (p.data.invite !== INVITE_CODE) return res.status(403).json({ error: 'invalid invite code' });
-  if (store.findUserByEmail(p.data.email))
+  const existing = store.findUserByEmail(p.data.email);
+  if (existing) {
+    // If it's a placeholder account recreated by device self-heal, let this
+    // registration claim it (sets the password). Otherwise it's truly taken.
+    if (existing.passwordHash === '') {
+      store.setPassword(existing.id, sha(p.data.password));
+      return res.json({ token: store.issueToken(existing.id) });
+    }
     return res.status(409).json({ error: 'email taken' });
+  }
   const u = store.createUser(p.data.email, sha(p.data.password));
   res.json({ token: store.issueToken(u.id) });
 });
@@ -160,7 +168,15 @@ app.post('/auth/login', (req, res) => {
   const p = credSchema.safeParse(req.body);
   if (!p.success) return res.status(400).json(p.error);
   const u = store.findUserByEmail(p.data.email);
-  if (!u || u.passwordHash !== sha(p.data.password))
+  if (!u) return res.status(401).json({ error: 'bad credentials' });
+  // Reclaim path: after a DB wipe the agent's self-heal recreated this account
+  // with an empty placeholder hash. The first correct-format login sets the
+  // real password, so the parent logs straight back in (no re-registration).
+  if (u.passwordHash === '') {
+    store.setPassword(u.id, sha(p.data.password));
+    return res.json({ token: store.issueToken(u.id) });
+  }
+  if (u.passwordHash !== sha(p.data.password))
     return res.status(401).json({ error: 'bad credentials' });
   res.json({ token: store.issueToken(u.id) });
 });
