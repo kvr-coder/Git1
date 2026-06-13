@@ -195,7 +195,10 @@ $ErrorActionPreference = "Continue"
 & cmd /c "`"$nssm`" remove $ServiceName confirm" 2>$null | Out-Null
 $ErrorActionPreference = $eapPrev
 
-& $nssm install $ServiceName $python $AgentPy
+# -u: unbuffered stdout/stderr. Without this, Python buffers heavily when redirected
+# to a file, so the pairing code (and any error) never reaches agent.log until the
+# process exits. With -u, output is flushed immediately.
+& $nssm install $ServiceName $python "-u" $AgentPy
 & $nssm set $ServiceName AppDirectory $AgentDir
 & $nssm set $ServiceName AppStdout $LogFile
 & $nssm set $ServiceName AppStderr $LogFile
@@ -204,7 +207,8 @@ $ErrorActionPreference = $eapPrev
 & $nssm set $ServiceName ObjectName LocalSystem
 
 # Environment for the agent (server URL + child identity for SID-scoped block).
-$envPairs = @()
+# PYTHONUNBUFFERED=1 belt-and-braces alongside the -u flag.
+$envPairs = @("PYTHONUNBUFFERED=1")
 if (-not $UpdateBranch) {
   try { $UpdateBranch = (git -C $AgentDir rev-parse --abbrev-ref HEAD).Trim() } catch {}
 }
