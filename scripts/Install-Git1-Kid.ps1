@@ -198,8 +198,8 @@ Step "Installing hardened agent service"
 # reconnects with an invalid token (server doesn't know it), no pair code
 # is ever generated, and the installer waits forever.
 foreach ($cfg in @(
-  "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\config.json",
-  (Join-Path $env:APPDATA "Git1\config.json")
+  "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\agent.json",
+  (Join-Path $env:APPDATA "Git1\agent.json")
 )) {
   if (Test-Path $cfg) {
     try {
@@ -298,7 +298,7 @@ try {
 if ($agentToken) {
   $systemCfgDir = "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1"
   New-Item -ItemType Directory -Force -Path $systemCfgDir | Out-Null
-  $cfgPath = Join-Path $systemCfgDir "config.json"
+  $cfgPath = Join-Path $systemCfgDir "agent.json"
   $cfgObj = @{ agentToken = $agentToken; deviceId = $deviceId; server = $Server }
   ($cfgObj | ConvertTo-Json -Compress) | Set-Content -LiteralPath $cfgPath -Encoding UTF8 -NoNewline
   Write-Host "  wrote $cfgPath"

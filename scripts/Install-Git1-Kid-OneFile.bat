@@ -1,14 +1,11 @@
 @echo off
 setlocal
 REM ============================================================
-REM  Git1 Kid PC installer - SINGLE FILE. Double-click on the PC
-REM  you want to control. Enforcement applies to the user who
-REM  runs this (no separate Kiddo account is created).
+REM  Git1 Kid PC installer - SINGLE FILE.
 REM ============================================================
 set "GIT1_SERVER=https://git1-server.onrender.com"
 set "BRANCH=claude/setup-git1-dev-environment-QeNdU"
 
-REM Capture the actual logged-in user BEFORE elevation (UAC switches us to admin).
 if not defined GIT1_INSTALL_USER set "GIT1_INSTALL_USER=%USERNAME%"
 
 net session >nul 2>&1
@@ -17,8 +14,6 @@ if %errorlevel% NEQ 0 (
   powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs -ArgumentList '%GIT1_INSTALL_USER%'"
   exit /b
 )
-
-REM After elevation, the original user is passed as the first argument.
 if not "%~1"=="" set "GIT1_INSTALL_USER=%~1"
 set "CHILD_USER=%GIT1_INSTALL_USER%"
 
@@ -28,11 +23,7 @@ set "PS1=%TEMP%\Install-Git1-Kid.ps1"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$lines = Get-Content -LiteralPath '%~f0'; $i = ($lines | Select-String -SimpleMatch '__PS1_BELOW__' | Select-Object -Last 1).LineNumber; $ps = $lines[$i..($lines.Count-1)]; Set-Content -LiteralPath $env:TEMP'\Install-Git1-Kid.ps1' -Value $ps -Encoding UTF8"
 
-if not exist "%PS1%" (
-  echo ERROR: Could not write %PS1%
-  pause
-  exit /b 1
-)
+if not exist "%PS1%" ( echo ERROR: Could not write %PS1% & pause & exit /b 1 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -Server "%GIT1_SERVER%" -ChildUser "%CHILD_USER%" -Branch "%BRANCH%"
 
@@ -241,8 +232,8 @@ Step "Installing hardened agent service"
 # reconnects with an invalid token (server doesn't know it), no pair code
 # is ever generated, and the installer waits forever.
 foreach ($cfg in @(
-  "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\config.json",
-  (Join-Path $env:APPDATA "Git1\config.json")
+  "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1\agent.json",
+  (Join-Path $env:APPDATA "Git1\agent.json")
 )) {
   if (Test-Path $cfg) {
     try {
@@ -341,7 +332,7 @@ try {
 if ($agentToken) {
   $systemCfgDir = "C:\Windows\System32\config\systemprofile\AppData\Roaming\Git1"
   New-Item -ItemType Directory -Force -Path $systemCfgDir | Out-Null
-  $cfgPath = Join-Path $systemCfgDir "config.json"
+  $cfgPath = Join-Path $systemCfgDir "agent.json"
   $cfgObj = @{ agentToken = $agentToken; deviceId = $deviceId; server = $Server }
   ($cfgObj | ConvertTo-Json -Compress) | Set-Content -LiteralPath $cfgPath -Encoding UTF8 -NoNewline
   Write-Host "  wrote $cfgPath"
