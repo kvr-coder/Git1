@@ -306,6 +306,7 @@ async function addGeofence(deviceId){ /* legacy no-op; the More tab now has the 
 
 let SCHEDULES = [];
 let OPEN_PANELS = new Set();        // device IDs whose Settings panel is open
+let ACTIVE_TAB = new Map();         // deviceId -> active tab key (persists across refresh)
 let EDITING_FIELDS = new Set();     // input IDs the user is currently typing in
 const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
 function hhmm(min){ const h=Math.floor(min/60), m=min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
@@ -320,6 +321,7 @@ function renderDevices(list){
     const net = d.internetBlocked;
     const scheds = SCHEDULES.filter(s=>s.deviceId===d.id);
     const blocklist = (d.blocklist||[]).join(', ');
+    const at = ACTIVE_TAB.get(d.id) || 'time';   // which settings tab is active
     return `<div class="card">
       <div class="row">
         <div class="grow"><span class="name">${esc(d.name)}</span>
@@ -341,15 +343,15 @@ function renderDevices(list){
         <summary style="cursor:pointer;color:var(--mut);font-size:14px;padding:6px 0">⚙️ Settings &amp; limits</summary>
 
         <div class="tabs">
-          <button class="tab active" data-tab="time_${d.id}" onclick="selectTab(this,'${d.id}')">⏱ Time</button>
-          <button class="tab" data-tab="apps_${d.id}" onclick="selectTab(this,'${d.id}')">🚫 Apps</button>
-          <button class="tab" data-tab="sched_${d.id}" onclick="selectTab(this,'${d.id}')">📅 Schedule</button>
-          <button class="tab" data-tab="chores_${d.id}" onclick="selectTab(this,'${d.id}')">⭐ Chores</button>
-          <button class="tab" data-tab="more_${d.id}" onclick="selectTab(this,'${d.id}')">⋯ More</button>
+          <button class="tab ${at==='time'?'active':''}" data-tab="time_${d.id}" onclick="selectTab(this,'${d.id}')">⏱ Time</button>
+          <button class="tab ${at==='apps'?'active':''}" data-tab="apps_${d.id}" onclick="selectTab(this,'${d.id}')">🚫 Apps</button>
+          <button class="tab ${at==='sched'?'active':''}" data-tab="sched_${d.id}" onclick="selectTab(this,'${d.id}')">📅 Schedule</button>
+          <button class="tab ${at==='chores'?'active':''}" data-tab="chores_${d.id}" onclick="selectTab(this,'${d.id}')">⭐ Chores</button>
+          <button class="tab ${at==='more'?'active':''}" data-tab="more_${d.id}" onclick="selectTab(this,'${d.id}')">⋯ More</button>
         </div>
 
         <!-- TIME tab -->
-        <div class="tab-panel active" id="time_${d.id}">
+        <div class="tab-panel ${at==='time'?'active':''}" id="time_${d.id}">
           <div class="field-label">Daily time limit</div>
           <div class="quickrow">
             <button class="sec" onclick="quickLimit('${d.id}',60)">1h</button>
@@ -382,7 +384,7 @@ function renderDevices(list){
         </div>
 
         <!-- APPS tab -->
-        <div class="tab-panel" id="apps_${d.id}">
+        <div class="tab-panel ${at==='apps'?'active':''}" id="apps_${d.id}">
           <div class="field-label">Blocked apps / games</div>
           <div id="bllist_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:30px">
             ${(d.blocklist||[]).map(a=>`<span class="chip">${esc(a)}<span class="x" onclick="removeApp('${d.id}','${esc(a)}')">✕</span></span>`).join('') || '<span class="mut" style="font-size:13px">No blocked apps yet.</span>'}
@@ -398,7 +400,7 @@ function renderDevices(list){
         </div>
 
         <!-- SCHEDULE tab -->
-        <div class="tab-panel" id="sched_${d.id}">
+        <div class="tab-panel ${at==='sched'?'active':''}" id="sched_${d.id}">
           <div class="field-label">Active schedules (you can add as many as you want)</div>
           ${scheds.map(s=>`<div style="background:#0e1626;padding:12px;border-radius:10px;margin-bottom:8px;border-left:3px solid var(--accent)">
             <div class="row" style="margin-bottom:6px">
@@ -455,7 +457,7 @@ function renderDevices(list){
         </div>
 
         <!-- CHORES tab -->
-        <div class="tab-panel" id="chores_${d.id}">
+        <div class="tab-panel ${at==='chores'?'active':''}" id="chores_${d.id}">
           <div class="field-label">Chore templates the kid can claim for time</div>
           <div id="ct_${d.id}">${(d.choreTemplates||[]).map(t=>`<div class="row" style="margin:4px 0;background:#0e1626;padding:10px;border-radius:10px">
             <div class="grow">
@@ -480,7 +482,7 @@ function renderDevices(list){
         </div>
 
         <!-- MORE tab -->
-        <div class="tab-panel" id="more_${d.id}">
+        <div class="tab-panel ${at==='more'?'active':''}" id="more_${d.id}">
           <div class="field-label">Device name</div>
           <div class="row" style="gap:8px;margin-bottom:14px">
             <input id="rn_${d.id}" value="${esc(d.name)}" class="grow"/>
@@ -544,6 +546,8 @@ function selectTab(btn, deviceId){
   const targetId = btn.dataset.tab;
   const panels = btn.parentNode.parentNode.querySelectorAll('.tab-panel');
   panels.forEach(p=>p.classList.toggle('active', p.id===targetId));
+  // Remember the active tab so the 5s auto-refresh doesn't snap back to Time.
+  ACTIVE_TAB.set(deviceId, targetId.split('_')[0]);
 }
 
 async function addApp(deviceId){
