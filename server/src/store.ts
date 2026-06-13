@@ -337,7 +337,7 @@ export const store = {
   claimPairing(code: string, userId: string, name: string): DeviceRow | null {
     const pc = db.prepare('SELECT * FROM pair_codes WHERE code = ?').get(code) as any;
     if (!pc || pc.claimedByUserId) return null;
-    if (Date.now() - pc.createdAt > 10 * 60 * 1000) return null;
+    if (Date.now() - pc.createdAt > 24 * 60 * 60 * 1000) return null;
     const d: DeviceRow = {
       id: id(),
       userId,
