@@ -165,7 +165,7 @@ function showApp(){
   document.getElementById('logoutBtn').classList.remove('hidden');
   document.getElementById('pushBtn').classList.remove('hidden');
   refreshPushState();
-  refresh(); clearInterval(timer); timer=setInterval(refresh,5000);
+  forceRefresh(); clearInterval(timer); timer=setInterval(refresh,5000);
 }
 
 // ----- Web Push (instant phone notifications, no Expo/Apple Dev) -----
@@ -219,13 +219,13 @@ async function cmd(id, kind, payload){
 async function resolve(kind, id, status, minutes){
   const body = minutes!=null ? {status,minutes} : {status};
   try{ await api('/'+kind+'/'+id+'/resolve',{method:'POST',body:JSON.stringify(body)});
-       toast(status); refresh(); }catch(e){ toast(e.message); }
+       toast(status); forceRefresh(); }catch(e){ toast(e.message); }
 }
 async function pair(){
   const code=document.getElementById('pairCode').value.trim();
   if(code.length!==6) return toast('Enter the 6-digit code');
   try{ await api('/devices/pair',{method:'POST',body:JSON.stringify({code})});
-       document.getElementById('pairCode').value=''; toast('Paired!'); refresh(); }
+       document.getElementById('pairCode').value=''; toast('Paired!'); forceRefresh(); }
   catch(e){ toast(e.message); }
 }
 
@@ -282,7 +282,7 @@ async function claimCoParent(){
   const code = document.getElementById('coCode').value.trim();
   if(code.length!==6) return toast('Enter the 6-digit code');
   try{ await api('/co-parents/claim',{method:'POST',body:JSON.stringify({code})});
-       document.getElementById('coCode').value=''; toast('Linked!'); refresh(); }
+       document.getElementById('coCode').value=''; toast('Linked!'); forceRefresh(); }
   catch(e){ toast(e.message); }
 }
 async function recoverDevice(id){ return showRecoveryCode(id); }
@@ -428,10 +428,11 @@ function renderDevices(list){
         <!-- SCHEDULE tab -->
         <div class="tab-panel ${at==='sched'?'active':''}" id="sched_${d.id}">
           <div class="field-label">Active schedules (you can add as many as you want)</div>
-          ${scheds.map(s=>`<div style="background:#0e1626;padding:12px;border-radius:10px;margin-bottom:8px;border-left:3px solid var(--accent)">
-            <div class="row" style="margin-bottom:6px">
-              <div class="grow" style="font-weight:600">${esc(s.name)}${s.enabled?'':' <span class="mut">(off)</span>'}</div>
-              <button class="dng" style="padding:4px 10px;font-size:12px" onclick="delSchedule('${s.id}')">✕</button>
+          ${scheds.map(s=>`<div style="background:#0e1626;padding:12px;border-radius:10px;margin-bottom:8px;border-left:3px solid ${s.enabled?'var(--accent)':'var(--mut)'}">
+            <div class="row" style="margin-bottom:6px;gap:6px">
+              <div class="grow" style="font-weight:600">${esc(s.name)}${s.enabled?'':' <span class="mut" style="font-size:12px">(paused)</span>'}</div>
+              <button class="sec" style="padding:4px 10px;font-size:12px" onclick="toggleScheduleEnabled('${d.id}','${s.id}',${!s.enabled})">${s.enabled?'⏸ Pause':'▶ Resume'}</button>
+              <button class="dng" style="padding:4px 10px;font-size:12px" onclick="delSchedule('${s.id}')">🗑 Delete</button>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
               ${DAYS.map(day=>`<span style="padding:2px 8px;border-radius:6px;font-size:11px;background:${s.days.includes(day)?'var(--accent)':'#1a2438'};color:${s.days.includes(day)?'#fff':'var(--mut)'}">${day}</span>`).join('')}
@@ -650,7 +651,7 @@ async function pushBlocklist(deviceId, fn){
     const d = devs.find(x=>x.id===deviceId); if(!d) return;
     const next = fn(d.blocklist||[]);
     await api('/devices/'+deviceId+'/command',{method:'POST',body:JSON.stringify({kind:'set_blocklist',payload:{apps:next}})});
-    toast('Blocklist updated'); refresh();
+    toast('Blocklist updated'); forceRefresh();
   } catch(e){ toast(e.message); }
 }
 
@@ -661,13 +662,13 @@ async function addChoreTemplate(deviceId){
   try{
     await api('/devices/'+deviceId+'/chore-templates',{method:'POST',body:JSON.stringify({description, minutes})});
     document.getElementById('ctd_'+deviceId).value='';
-    toast('Chore added'); refresh();
+    toast('Chore added'); forceRefresh();
   } catch(e){ toast(e.message); }
 }
 async function delChoreTemplate(deviceId, templateId){
   try{
     await api('/devices/'+deviceId+'/chore-templates/'+templateId,{method:'DELETE'});
-    toast('Removed'); refresh();
+    toast('Removed'); forceRefresh();
   } catch(e){ toast(e.message); }
 }
 
@@ -706,8 +707,28 @@ async function saveSchedule(deviceId){
     await api('/schedules/'+id,{method:'PUT',body:JSON.stringify({
       deviceId, name, days, startMinute:toMin(start), endMinute:toMin(end), enabled:true, actions
     })});
-    toast('Schedule added'); refresh();
+    toast('Schedule added'); await forceRefresh();
   }catch(e){ toast(e.message); }
+}
+async function toggleScheduleEnabled(deviceId, schedId, on){
+  const s = SCHEDULES.find(x=>x.id===schedId); if(!s) return;
+  try{
+    await api('/schedules/'+schedId,{method:'PUT',body:JSON.stringify({
+      deviceId: s.deviceId, name: s.name, days: s.days,
+      startMinute: s.startMinute, endMinute: s.endMinute,
+      enabled: !!on, actions: s.actions||['lock']
+    })});
+    toast(on?'Schedule resumed':'Schedule paused'); await forceRefresh();
+  }catch(e){ toast(e.message); }
+}
+async function forceRefresh(){
+  // Used after a deliberate save action — bypasses the "panel open" guard so
+  // the user sees their change appear in the list immediately.
+  try{
+    const [devices, scheds] = await Promise.all([api('/devices'), api('/schedules').catch(()=>[])]);
+    SCHEDULES = scheds || [];
+    renderDevices(devices);
+  }catch(e){ /* ignore */ }
 }
 function armDelete(id, name){
   const host = document.getElementById('del_'+id);
@@ -727,13 +748,13 @@ function cancelDelete(id, name){
   if(host) host.innerHTML = `<button class="dng" onclick="armDelete('${id}','${name}')" style="width:100%;margin-top:8px">🗑 Delete device</button>`;
 }
 async function confirmDelete(id){
-  try{ await api('/devices/'+id,{method:'DELETE'}); toast('Deleted'); refresh(); }
+  try{ await api('/devices/'+id,{method:'DELETE'}); toast('Deleted'); forceRefresh(); }
   catch(e){ toast(e.message); }
 }
 // Keep legacy fn name in case anything calls it.
 async function deleteDevice(id, name){ armDelete(id, name); }
 async function delSchedule(id){
-  try{ await api('/schedules/'+id,{method:'DELETE'}); toast('Removed'); refresh(); }catch(e){ toast(e.message); }
+  try{ await api('/schedules/'+id,{method:'DELETE'}); toast('Removed'); forceRefresh(); }catch(e){ toast(e.message); }
 }
 function renderRequests(list){
   const el=document.getElementById('requests');

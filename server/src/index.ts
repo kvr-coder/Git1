@@ -286,8 +286,17 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     const m = Math.max(0, Math.min(24 * 60, Number(p.data.payload?.minutes ?? 0) | 0));
     store.updateDevice(d.id, { dailyLimitMinutes: m });
   }
-  if (p.data.kind === 'lock') store.updateDevice(d.id, { lockedByParent: true });
-  if (p.data.kind === 'unlock') store.updateDevice(d.id, { lockedByParent: false });
+  if (p.data.kind === 'lock') {
+    // Parent forced a lock -> clear any active schedule override so we don't
+    // immediately unlock again on the next tick.
+    store.updateDevice(d.id, { lockedByParent: true, scheduleOverrideUntil: 0 });
+  }
+  if (p.data.kind === 'unlock') {
+    // Override any currently-active lock schedule until the END of that
+    // schedule's window. Next schedule cycle re-engages automatically.
+    const overrideUntil = computeScheduleEndForDevice(d.id, Date.now());
+    store.updateDevice(d.id, { lockedByParent: false, scheduleOverrideUntil: overrideUntil });
+  }
   if (p.data.kind === 'set_blocklist') {
     const apps = (p.data.payload?.apps as string[]) ?? [];
     store.updateDevice(d.id, { blocklist: apps });
@@ -779,8 +788,52 @@ function buildSnapshot(d: DeviceRow) {
     choreTemplates: store.listChoreTemplates(d.userId, d.id),
     geofences: store.geofencesForDevice(d.id),
     lockedByParent: d.lockedByParent,
+    // While now < scheduleOverrideUntil the agent ignores schedule-driven lock
+    // and block_internet — so parent's Unlock genuinely unlocks until the
+    // current window ends. Reset to 0 once the window passes (or another lock).
+    scheduleOverrideUntil: d.scheduleOverrideUntil ?? 0,
     repoCommit: REPO_COMMIT,
   };
+}
+
+// Compute the end-of-current-active-window for the device, in epoch ms. Used
+// when the parent presses Unlock during an active lock schedule: we treat the
+// override as expiring when that window naturally ends.
+function computeScheduleEndForDevice(deviceId: string, nowMs: number): number {
+  const scheds = store.schedulesForDevice(deviceId);
+  const d = new Date(nowMs);
+  const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][d.getDay()];
+  const todayMin = d.getHours() * 60 + d.getMinutes();
+  let bestEndMin: number | null = null;
+  for (const s of scheds) {
+    if (!s.enabled) continue;
+    if (!(s.days || []).includes(dayKey)) continue;
+    if (!(s.actions || []).some((a: string) => a === 'lock' || a === 'block_internet' || a === 'block_apps')) continue;
+    const start = s.startMinute, end = s.endMinute;
+    // Same-day window
+    if (start <= end && todayMin >= start && todayMin < end) {
+      bestEndMin = Math.max(bestEndMin ?? 0, end);
+    }
+    // Overnight window (e.g. 21:00 -> 07:00) — if currently in either side
+    if (start > end) {
+      if (todayMin >= start) {
+        // override until tomorrow's `end` minute
+        const tomorrow = new Date(nowMs); tomorrow.setDate(tomorrow.getDate()+1); tomorrow.setHours(0,0,0,0);
+        return tomorrow.getTime() + end * 60_000;
+      }
+      if (todayMin < end) {
+        const today0 = new Date(nowMs); today0.setHours(0,0,0,0);
+        return today0.getTime() + end * 60_000;
+      }
+    }
+  }
+  if (bestEndMin == null) {
+    // Not in any active window — 6h grace, prevents instant re-lock if a
+    // schedule starts in 1 minute.
+    return nowMs + 6 * 3600_000;
+  }
+  const today0 = new Date(nowMs); today0.setHours(0,0,0,0);
+  return today0.getTime() + bestEndMin * 60_000;
 }
 
 function pushSnapshotToAgent(deviceId: string) {

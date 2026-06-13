@@ -458,6 +458,7 @@ BORROW_STATE: dict[str, Any] = {"enabled": False, "cap": 30}
 CHORE_TEMPLATES: list[dict[str, Any]] = []
 NOTIFICATIONS: list[dict[str, Any]] = []  # recent parent->kid toasts
 LOCKED_BY_PARENT: dict[str, bool] = {"value": False}
+SCHEDULE_OVERRIDE: dict[str, int] = {"untilMs": 0}  # ms-epoch; parent Unlock suppresses schedule lock until this
 
 
 def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
@@ -483,6 +484,7 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     CHORE_TEMPLATES.clear()
     CHORE_TEMPLATES.extend(msg.get("choreTemplates") or [])
     LOCKED_BY_PARENT["value"] = bool(msg.get("lockedByParent", False))
+    SCHEDULE_OVERRIDE["untilMs"] = int(msg.get("scheduleOverrideUntil") or 0)
     if persist:
         try:
             save_json(POLICY_PATH, {
@@ -585,14 +587,21 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         else:
             limit_notified = False
 
-        # 6. Schedule gate — apply each requested action
-        if "lock" in schedule_actions:
+        # 6. Schedule gate — apply each requested action UNLESS the parent
+        # pressed Unlock during an active window: the server set
+        # scheduleOverrideUntil to the end of that window so the schedule
+        # stops locking/blocking until then.
+        override_active = (
+            SCHEDULE_OVERRIDE["untilMs"] > 0 and
+            (time.time() * 1000) < SCHEDULE_OVERRIDE["untilMs"]
+        )
+        if "lock" in schedule_actions and not override_active:
             if now - last_relock >= RELOCK_INTERVAL_SEC:
                 last_relock = now
                 enforce_lock()
                 await emit_event(ws, "schedule_lock")
         # Internet block (idempotent; only flip when state changes)
-        want_net_block = "block_internet" in schedule_actions
+        want_net_block = ("block_internet" in schedule_actions) and not override_active
         if want_net_block and not enforcer_net.is_blocked():
             enforcer_net.block_internet()
             await emit_event(ws, "schedule_internet_block")

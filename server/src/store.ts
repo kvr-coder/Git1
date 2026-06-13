@@ -65,6 +65,7 @@ export interface DeviceRow {
   selfBorrowCapMinutes: number;
   bankedMinutes: number;
   lockedByParent: boolean;
+  scheduleOverrideUntil: number;
 }
 
 export interface ScheduleRow {
@@ -289,6 +290,7 @@ for (const stmt of [
   "ALTER TABLE devices ADD COLUMN selfBorrowCapMinutes INTEGER NOT NULL DEFAULT 30",
   "ALTER TABLE devices ADD COLUMN bankedMinutes INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN lockedByParent INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE devices ADD COLUMN scheduleOverrideUntil INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -312,6 +314,7 @@ const rowToDevice = (r: any): DeviceRow => ({
   selfBorrowCapMinutes: r.selfBorrowCapMinutes ?? 30,
   bankedMinutes: r.bankedMinutes ?? 0,
   lockedByParent: !!r.lockedByParent,
+  scheduleOverrideUntil: Number(r.scheduleOverrideUntil ?? 0),
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
