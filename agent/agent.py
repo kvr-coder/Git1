@@ -489,6 +489,11 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         enforcer_apps.set_blocklist(names)
         await emit_event(ws, "set_blocklist", {"count": len(names)})
 
+    elif kind == "set_always_blocklist":
+        names = list(payload.get("apps") or [])
+        enforcer_apps.set_always_blocklist(names)
+        await emit_event(ws, "set_always_blocklist", {"count": len(names)})
+
     elif kind == "set_schedules":
         items = list(payload.get("schedules") or [])
         enforcer_schedule.set_schedules(items)
@@ -535,6 +540,7 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     enforcer_logon.sync(scheds)
     lockmsg.sync_logon_message(scheds)
     enforcer_apps.set_blocklist(msg.get("blocklist") or [])
+    enforcer_apps.set_always_blocklist(msg.get("alwaysBlocklist") or [])
     BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
     # NOTE: we deliberately do NOT set bank from the snapshot. The agent is the
@@ -614,6 +620,13 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
                             usage.add_app_seconds(name, elapsed)
             except Exception as e:
                 print(f"[stats] app sampling failed: {e}")
+
+        # 2a. ALWAYS-blocked apps — killed every tick, no matter what (the
+        # parent's permanent ban list, separate from the lock-only blocklist).
+        always_killed = enforcer_apps.kill_always_blocked()
+        if always_killed:
+            print(f"[apps] killed (always-blocked): {always_killed}")
+            await emit_event(ws, "app_blocked", {"apps": always_killed, "scope": "always"})
 
         # 2. Kill blocked apps — but only WHILE the PC is supposed to be locked.
         # The Apps blocklist isn't a permanent ban; it's the "what should be

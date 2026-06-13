@@ -419,16 +419,26 @@ function renderDevices(list){
 
         <!-- APPS tab -->
         <div class="tab-panel ${at==='apps'?'active':''}" id="apps_${d.id}">
-          <div class="field-label">Apps / games to kill when locked</div>
-          <div class="mut" style="font-size:12px;margin-bottom:8px">These apps will be killed during bedtime, schedule locks, or when daily limit is reached. They run normally otherwise.</div>
+          <div class="field-label">🚫 Always blocked (never allowed)</div>
+          <div class="mut" style="font-size:12px;margin-bottom:8px">Killed every few seconds, no matter what. Use for stuff you want permanently banned.</div>
+          <div id="abllist_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:30px">
+            ${(d.alwaysBlocklist||[]).map(a=>`<span class="chip" style="background:rgba(239,68,68,.18)">${esc(a)}<span class="x" onclick="removeAlwaysApp('${d.id}','${esc(a)}')">✕</span></span>`).join('') || '<span class="mut" style="font-size:13px">No permanent blocks yet.</span>'}
+          </div>
+          <div class="row" style="gap:8px;margin-bottom:18px">
+            <input id="aba_${d.id}" placeholder="e.g. tor.exe" class="grow" onkeydown="if(event.key==='Enter')addAlwaysApp('${d.id}')"/>
+            <button class="dng" onclick="addAlwaysApp('${d.id}')">+ Add</button>
+          </div>
+
+          <div class="field-label">🌙 Killed when locked (bedtime / limit / Lock pressed)</div>
+          <div class="mut" style="font-size:12px;margin-bottom:8px">Runs normally outside lock periods. Killed during bedtime, schedule locks, or when daily limit is reached.</div>
           <div id="bllist_${d.id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:30px">
-            ${(d.blocklist||[]).map(a=>`<span class="chip">${esc(a)}<span class="x" onclick="removeApp('${d.id}','${esc(a)}')">✕</span></span>`).join('') || '<span class="mut" style="font-size:13px">No blocked apps yet.</span>'}
+            ${(d.blocklist||[]).map(a=>`<span class="chip">${esc(a)}<span class="x" onclick="removeApp('${d.id}','${esc(a)}')">✕</span></span>`).join('') || '<span class="mut" style="font-size:13px">No lock-time apps yet.</span>'}
           </div>
           <div class="row" style="gap:8px">
-            <input id="ba_${d.id}" placeholder="e.g. discord.exe" class="grow" onkeydown="if(event.key==='Enter')addApp('${d.id}')"/>
+            <input id="ba_${d.id}" placeholder="e.g. steam.exe" class="grow" onkeydown="if(event.key==='Enter')addApp('${d.id}')"/>
             <button class="sec" onclick="addApp('${d.id}')">+ Add</button>
           </div>
-          <div class="field-label" style="margin-top:10px">Common ones (tap to add):</div>
+          <div class="field-label" style="margin-top:10px">Common ones (tap to add to lock-time list):</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             ${['discord.exe','steam.exe','minecraft.exe','roblox.exe','epicgameslauncher.exe','fortnite.exe','spotify.exe','chrome.exe','msedge.exe'].map(a=>`<button class="sec" style="padding:6px 10px;font-size:12px" onclick="addAppDirect('${d.id}','${a}')">${a}</button>`).join('')}
           </div>
@@ -654,6 +664,29 @@ async function addAppDirect(deviceId, name){
 async function removeApp(deviceId, name){
   await pushBlocklist(deviceId, prev=>(prev||[]).filter(a=>a!==name));
 }
+async function addAlwaysApp(deviceId){
+  const el = document.getElementById('aba_'+deviceId);
+  const name = el.value.trim().toLowerCase();
+  if(!name) return;
+  await pushAlwaysBlocklist(deviceId, prev=>[...new Set([...(prev||[]), name])]);
+  el.value='';
+}
+async function removeAlwaysApp(deviceId, name){
+  await pushAlwaysBlocklist(deviceId, prev=>(prev||[]).filter(a=>a!==name));
+}
+async function pushAlwaysBlocklist(deviceId, fn){
+  try{
+    const devs = await api('/devices');
+    const d = devs.find(x=>x.id===deviceId); if(!d) return;
+    const next = fn(d.alwaysBlocklist||[]);
+    d.alwaysBlocklist = next;
+    renderDevices(devs);
+    await api('/devices/'+deviceId+'/command',{method:'POST',body:JSON.stringify({kind:'set_always_blocklist',payload:{apps:next}})});
+    toast('Always-block list updated');
+    await forceRefresh();
+  } catch(e){ toast(e.message); await forceRefresh(); }
+}
+
 async function pushBlocklist(deviceId, fn){
   try{
     const devs = await api('/devices');

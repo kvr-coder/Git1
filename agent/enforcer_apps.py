@@ -10,7 +10,12 @@ from typing import Iterable
 
 import psutil
 
+# Two separate kill lists with different policies:
+#  _blocklist      — killed only while the PC is in a locked state
+#                    (bedtime/limit/parent-lock). Outside lock = free play.
+#  _always_blocklist — killed every tick, no matter what (true permanent ban).
 _blocklist: set[str] = set()
+_always_blocklist: set[str] = set()
 
 
 def set_blocklist(names: Iterable[str]) -> None:
@@ -18,8 +23,17 @@ def set_blocklist(names: Iterable[str]) -> None:
     _blocklist = {n.strip().lower() for n in names if n.strip()}
 
 
+def set_always_blocklist(names: Iterable[str]) -> None:
+    global _always_blocklist
+    _always_blocklist = {n.strip().lower() for n in names if n.strip()}
+
+
 def get_blocklist() -> list[str]:
     return sorted(_blocklist)
+
+
+def get_always_blocklist() -> list[str]:
+    return sorted(_always_blocklist)
 
 
 _SYSTEM_PROCESS_NAMES = {
@@ -58,20 +72,28 @@ def running_user_apps_by_session(session_id: int) -> list[str]:
     return sorted(seen)
 
 
-def kill_blocked() -> list[str]:
-    """Iterate processes and kill any whose name matches the deny-list.
-
-    Returns the list of killed process names (with PID for logging).
-    """
-    if not _blocklist:
+def kill_matching(names: set[str]) -> list[str]:
+    """Kill any running processes whose exe name is in `names` and return their
+    name+pid for logging."""
+    if not names:
         return []
     killed: list[str] = []
     for proc in psutil.process_iter(attrs=["pid", "name"]):
         try:
             name = (proc.info.get("name") or "").lower()
-            if name in _blocklist:
+            if name in names:
                 proc.kill()
                 killed.append(f"{name}({proc.info['pid']})")
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     return killed
+
+
+def kill_blocked() -> list[str]:
+    """Kill processes on the lock-only deny-list (caller decides when)."""
+    return kill_matching(_blocklist)
+
+
+def kill_always_blocked() -> list[str]:
+    """Kill processes on the always-deny list (every tick, no exceptions)."""
+    return kill_matching(_always_blocklist)

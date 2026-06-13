@@ -258,6 +258,7 @@ const commandSchema = z.object({
     'block_internet',
     'unblock_internet',
     'set_blocklist',
+    'set_always_blocklist',
     'set_schedules',
     'set_borrow_settings',
     'add_bank_minutes',
@@ -325,6 +326,10 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   if (p.data.kind === 'set_blocklist') {
     const apps = (p.data.payload?.apps as string[]) ?? [];
     store.updateDevice(d.id, { blocklist: apps });
+  }
+  if (p.data.kind === 'set_always_blocklist') {
+    const apps = (p.data.payload?.apps as string[]) ?? [];
+    store.updateDevice(d.id, { alwaysBlocklist: apps });
   }
   if (p.data.kind === 'set_borrow_settings') {
     const enabled = !!p.data.payload?.enabled;
@@ -814,6 +819,7 @@ function buildSnapshot(d: DeviceRow) {
     kind: 'snapshot' as const,
     schedules: scheds,
     blocklist: d.blocklist,
+    alwaysBlocklist: d.alwaysBlocklist,
     internetBlocked: d.internetBlocked,
     selfBorrowEnabled: d.selfBorrowEnabled,
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
@@ -1094,6 +1100,7 @@ function toPublicDevice(d: DeviceRow) {
     usedTodayMinutes: d.usedTodayMinutes,
     internetBlocked: d.internetBlocked,
     blocklist: d.blocklist,
+    alwaysBlocklist: d.alwaysBlocklist,
     selfBorrowEnabled: d.selfBorrowEnabled,
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
     bankedMinutes: d.bankedMinutes,
