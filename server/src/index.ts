@@ -297,12 +297,17 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     // Parent forced a lock -> clear any active schedule override so we don't
     // immediately unlock again on the next tick.
     store.updateDevice(d.id, { lockedByParent: true, scheduleOverrideUntil: 0 });
+    pushSnapshotToAgent(d.id); // so the agent learns override=0 immediately
   }
   if (p.data.kind === 'unlock') {
     // Override any currently-active lock schedule until the END of that
     // schedule's window. Next schedule cycle re-engages automatically.
     const overrideUntil = computeScheduleEndForDevice(d.id, Date.now());
     store.updateDevice(d.id, { lockedByParent: false, scheduleOverrideUntil: overrideUntil });
+    // Push a fresh snapshot NOW so the agent suppresses the schedule lock
+    // immediately — otherwise it re-locks on the next 5s tick before the
+    // override timestamp arrives on a later snapshot.
+    pushSnapshotToAgent(d.id);
   }
   if (p.data.kind === 'set_blocklist') {
     const apps = (p.data.payload?.apps as string[]) ?? [];
