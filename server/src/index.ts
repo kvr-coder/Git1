@@ -857,10 +857,16 @@ wss.on('connection', (ws, req) => {
       return;
     }
     if (msg.kind === 'heartbeat') {
-      store.updateDevice(device.id, {
+      // The agent is authoritative on the bank balance; trust its heartbeat so
+      // the parent dashboard reflects spends/credits in real time (and the
+      // snapshot no longer fights the agent over the bank value).
+      const patch: Record<string, unknown> = {
         lastSeen: Date.now(),
-        usedTodayMinutes: msg.usedTodayMinutes,
-      });
+        usedTodayMinutes: (msg as any).usedTodayMinutes,
+      };
+      if (typeof (msg as any).bankedMinutes === 'number')
+        patch.bankedMinutes = (msg as any).bankedMinutes;
+      store.updateDevice(device.id, patch);
     } else if (msg.kind === 'event') {
       console.log(`[event] ${device.id} ${msg.name}`, msg.payload ?? {});
       let message = `${device.name}: ${msg.name.replace(/_/g, ' ')}`;

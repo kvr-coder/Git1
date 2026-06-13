@@ -464,8 +464,12 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     enforcer_apps.set_blocklist(msg.get("blocklist") or [])
     BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
-    if "bankedMinutes" in msg:
-        usage.set_bank(int(msg.get("bankedMinutes") or 0))
+    # NOTE: we deliberately do NOT set bank from the snapshot. The agent is the
+    # authority on bankedMinutes (it persists locally and reports via heartbeat).
+    # Parent-side changes (approved chore/request, +30, Set) arrive as explicit
+    # add_bank_minutes / set_bank_minutes COMMANDS. Letting a periodic snapshot
+    # also write the bank caused a race: a stale snapshot would re-credit minutes
+    # the kid had just spent, so the bank never drained (infinite time).
     CHORE_TEMPLATES.clear()
     CHORE_TEMPLATES.extend(msg.get("choreTemplates") or [])
     LOCKED_BY_PARENT["value"] = bool(msg.get("lockedByParent", False))
@@ -612,7 +616,15 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             try:
                 await ws.send(
                     json.dumps(
-                        {"kind": "heartbeat", "usedTodayMinutes": int(usage.minutes)},
+                        {
+                            "kind": "heartbeat",
+                            "usedTodayMinutes": int(usage.minutes),
+                            # Agent is authority on these; report so the parent
+                            # dashboard shows the live values (bank drains, limit
+                            # grows when bank/grant is spent).
+                            "bankedMinutes": int(usage.banked_minutes),
+                            "limitMinutes": int(usage.limit_minutes),
+                        },
                     )
                 )
             except websockets.ConnectionClosed:
