@@ -378,12 +378,21 @@ app.post('/requests/:id/resolve', auth, (req: AuthedRequest, res) => {
   if (r.status !== 'pending') return res.status(409).json({ error: 'already resolved' });
   store.resolveTimeRequest(req.userId!, r.id, p.data.status);
   if (p.data.status === 'approved') {
+    // Land the approved minutes in the BANK so the kid sees them under "Bank"
+    // and can spend them whenever (matches the UI). Previously this sent
+    // grant_minutes, which only extended today's limit and bypassed the bank.
+    const d = store.getDevice(req.userId!, r.deviceId);
+    if (d) {
+      const after = d.bankedMinutes + r.minutes;
+      store.updateDevice(d.id, { bankedMinutes: after });
+      store.appendBankLedger(req.userId!, d.id, r.minutes, after, 'request_approved', r.id);
+    }
     sendToAgent(r.deviceId, {
       kind: 'command',
       command: {
         id: randomBytes(6).toString('hex'),
         deviceId: r.deviceId,
-        kind: 'grant_minutes',
+        kind: 'add_bank_minutes',
         payload: { minutes: r.minutes },
         createdAt: Date.now(),
       },
