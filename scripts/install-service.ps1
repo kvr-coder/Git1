@@ -127,12 +127,25 @@ if (-not $nssm) {
             Write-Host "[svc] trying $url (attempt $i)"
             Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30 -UserAgent "Git1Installer/1.0"
             $sz = (Get-Item $zip).Length
-            if ($sz -gt 100000) {
-              Write-Host "[svc]   downloaded $sz bytes"
-              $ok = $true; break
-            } else {
+            if ($sz -lt 100000) {
               Write-Host "[svc]   too small ($sz bytes), discarding"
               Remove-Item $zip -Force -ErrorAction SilentlyContinue
+            } else {
+              # nupkg files have a different hash than the official zip; only
+              # checksum-verify the canonical nssm-2.24.zip mirrors.
+              if ($url -match 'nssm-2\.24\.zip$') {
+                $expected = "BE7B3577C6E3A280E5106A9E9DB5B3775931CEFC24C7FE13C7141887B33BD0FB"
+                $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToUpper()
+                if ($actual -ne $expected) {
+                  Write-Host "[svc]   SHA256 mismatch (got $actual) - discarding" -ForegroundColor Red
+                  Remove-Item $zip -Force -ErrorAction SilentlyContinue
+                  continue
+                }
+                Write-Host "[svc]   SHA256 verified"
+              } else {
+                Write-Host "[svc]   downloaded $sz bytes (no hash pinned for this mirror)"
+              }
+              $ok = $true; break
             }
           } catch {
             Write-Host "[svc]   failed: $($_.Exception.Message)"
