@@ -101,6 +101,9 @@ export default function Devices() {
         <Text style={[typography.caption, { color: colors.textMuted }]}>
           Tap a device to lock, unlock, or grant time.
         </Text>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>
+          timeoff • OTA rev 2 ✓
+        </Text>
       </View>
       {devices.map((d) => (
         <DeviceCard key={d.id} device={d} />

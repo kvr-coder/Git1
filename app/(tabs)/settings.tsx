@@ -75,6 +75,10 @@ export default function Settings() {
       <View style={{ marginTop: spacing.lg }}>
         <Button label="Sign out" variant="danger" onPress={signOut} />
       </View>
+
+      <Text style={[typography.caption, { color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg }]}>
+        timeoff • OTA rev 2 ✓
+      </Text>
     </Screen>
   );
 }
