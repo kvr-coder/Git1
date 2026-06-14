@@ -417,8 +417,8 @@ function renderDevices(list){
           <div class="mut" data-role="seen">${d.status}${d.lastSeen?(' · seen '+ago(d.lastSeen)):''}</div></div>
         <span class="pill ${online?'on':'off'}" data-role="pill">${online?'online':'offline'}</span>
       </div>
-      <div data-role="tamper" style="${d.tamperSuspected?'':'display:none'};margin:8px 0;padding:10px;border-radius:10px;background:rgba(239,68,68,.15);border:1px solid var(--danger);color:#fca5a5;font-size:13px">
-        ⚠ Agent stopped reporting — the app may have been closed, killed, or its internet blocked. Possible tampering.
+      <div data-role="tamper" style="${d.tamperSuspected?'':'display:none'};margin:8px 0;padding:10px;border-radius:10px;background:rgba(245,158,11,.15);border:1px solid var(--warn);color:#fbbf24;font-size:13px">
+        ⚠ Agent went silent abruptly. If the kid PC didn't just shut down or sleep, this could mean the app was killed or its network was cut.
       </div>
       <div class="bar"><i data-role="bar" style="width:${pct}%"></i></div>
       <div class="mut" data-role="stats">${fmt(d.usedTodayMinutes)} / ${fmt(d.dailyLimitMinutes)} today · bank ${fmt(d.bankedMinutes)}</div>

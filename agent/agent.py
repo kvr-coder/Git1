@@ -851,6 +851,23 @@ def main() -> None:
     # Best-effort location reporter (no-op on machines without internet).
     location_uploader.start(SERVER_HTTP, lambda: cfg.get("agentToken"))
 
+    # Graceful-shutdown signal: when Windows / SCM asks us to stop (PC shutting
+    # down, service stop, Ctrl+C), tell the server it was clean. The dashboard
+    # uses that flag to suppress the red "agent stopped reporting" banner so a
+    # normal PC-off / sleep doesn't look like tampering to the parent.
+    import atexit, signal
+    def _flag_clean_shutdown(*_a) -> None:
+        try:
+            bridge.emit("shutdown", {"reason": "process exit"})
+        except Exception:
+            pass
+    atexit.register(_flag_clean_shutdown)
+    try:
+        signal.signal(signal.SIGTERM, lambda *_a: (_flag_clean_shutdown(), os._exit(0)))
+        signal.signal(signal.SIGINT, lambda *_a: (_flag_clean_shutdown(), os._exit(0)))
+    except Exception:
+        pass  # SIGTERM not available on some Windows builds; atexit covers SCM stop
+
     # Initialise NTP anchor + VPN baseline before the loop runs.
     if clock.refresh(force=True) is None:
         print("[clock] NTP unreachable; falling back to local clock")

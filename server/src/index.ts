@@ -937,7 +937,7 @@ wss.on('connection', (ws, req) => {
       message: `${device.name}: agent reconnected`,
     });
   }
-  store.updateDevice(device.id, { status: 'online', lastSeen: Date.now() });
+  store.updateDevice(device.id, { status: 'online', lastSeen: Date.now(), shutdownCleanly: false });
 
   // Push current state to agent immediately.
   ws.send(JSON.stringify(buildSnapshot(device)));
@@ -1082,6 +1082,7 @@ wss.on('connection', (ws, req) => {
         });
         if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
         if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
+        if (msg.name === 'shutdown') store.updateDevice(device.id, { shutdownCleanly: true });
         if (shouldNotify(msg.name)) {
           notifyUser(device.userId, 'Git1', message, { deviceId: device.id, kind: msg.name });
         }
@@ -1115,13 +1116,16 @@ function toPublicDevice(d: DeviceRow) {
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
     bankedMinutes: d.bankedMinutes,
     choreTemplates: store.listChoreTemplates(d.userId, d.id),
-    // Tamper hint for the dashboard: offline but seen within the last 10 min =
-    // the agent went silent recently (killed / network-cut), not a PC that's
-    // been off all day. The dashboard shows a red banner for these.
+    // Tamper hint for the dashboard: the agent went silent very recently
+    // (within ~3 minutes of its last heartbeat). Anything longer is treated as
+    // "PC is off / asleep" — normal, no alarm. A graceful shutdown sets
+    // d.shutdownCleanly, which suppresses the banner too.
     tamperSuspected:
       d.status === 'offline' &&
       !!d.lastSeen &&
-      Date.now() - d.lastSeen < 10 * 60 * 1000,
+      !d.shutdownCleanly &&
+      Date.now() - d.lastSeen < 3 * 60 * 1000,
+    shutdownCleanly: !!d.shutdownCleanly,
     lastSeen: d.lastSeen,
   };
 }

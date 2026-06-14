@@ -62,6 +62,7 @@ export interface DeviceRow {
   internetBlocked: boolean;
   blocklist: string[];
   alwaysBlocklist: string[];
+  shutdownCleanly: boolean;
   selfBorrowEnabled: boolean;
   selfBorrowCapMinutes: number;
   bankedMinutes: number;
@@ -293,6 +294,7 @@ for (const stmt of [
   "ALTER TABLE devices ADD COLUMN lockedByParent INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN scheduleOverrideUntil INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN alwaysBlocklist TEXT NOT NULL DEFAULT '[]'",
+  "ALTER TABLE devices ADD COLUMN shutdownCleanly INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -313,6 +315,7 @@ const rowToDevice = (r: any): DeviceRow => ({
   internetBlocked: !!r.internetBlocked,
   blocklist: r.blocklist ? JSON.parse(r.blocklist) : [],
   alwaysBlocklist: r.alwaysBlocklist ? JSON.parse(r.alwaysBlocklist) : [],
+  shutdownCleanly: !!r.shutdownCleanly,
   selfBorrowEnabled: !!r.selfBorrowEnabled,
   selfBorrowCapMinutes: r.selfBorrowCapMinutes ?? 30,
   bankedMinutes: r.bankedMinutes ?? 0,
@@ -521,7 +524,7 @@ export const store = {
     const values = fields.map((f) => {
       const v = (patch as any)[f];
       if (f === 'blocklist' || f === 'alwaysBlocklist') return JSON.stringify(v ?? []);
-      if (f === 'internetBlocked' || f === 'selfBorrowEnabled' || f === 'lockedByParent')
+      if (f === 'internetBlocked' || f === 'selfBorrowEnabled' || f === 'lockedByParent' || f === 'shutdownCleanly')
         return v ? 1 : 0;
       return v;
     });
