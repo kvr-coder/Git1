@@ -14,6 +14,8 @@ import { useTheme } from '../../lib/ThemeContext';
 import { spacing, typography } from '../../lib/theme';
 import type { ChoreRequest, Device, TimeRequest } from '../../lib/types';
 import { AnimatedNumber, BounceIn } from '../../components/animated';
+import { Confetti } from '../../components/Confetti';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 function greetingMeta(): { text: string; icon: keyof typeof Ionicons.glyphMap; tint: 'morning' | 'day' | 'evening' } {
   const h = new Date().getHours();
@@ -64,10 +66,13 @@ export default function Home() {
     }
   };
 
+  const [confettiKey, setConfettiKey] = useState(0);
+
   const resolve = async (req: TimeRequest, status: 'approved' | 'denied') => {
     setBusyId(req.id);
     try {
       await api.resolveRequest(req.id, status);
+      if (status === 'approved') setConfettiKey((k) => k + 1);
       await refresh();
     } finally {
       setBusyId(null);
@@ -77,6 +82,7 @@ export default function Home() {
     setBusyId(c.id);
     try {
       await api.resolveChore(c.id, status, minutes);
+      if (status === 'approved') setConfettiKey((k) => k + 1);
       await refresh();
     } finally {
       setBusyId(null);
@@ -99,6 +105,8 @@ export default function Home() {
   const greetingColor = meta.tint === 'morning' ? colors.warning : meta.tint === 'day' ? colors.info : colors.primary;
 
   return (
+    <>
+    <Confetti trigger={confettiKey} />
     <Screen refreshing={refreshing} onRefresh={onPull}>
       {/* Greeting */}
       <View style={{ marginBottom: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -159,25 +167,27 @@ export default function Home() {
       {attention > 0 && (
         <>
           <SectionHeader>Needs your attention</SectionHeader>
-          {chores.map((c) => (
-            <ChoreCard
-              key={c.id}
-              chore={c}
-              deviceName={nameOf(c.deviceId)}
-              busy={busyId === c.id}
-              onApprove={(m) => resolveChore(c, 'approved', m)}
-              onDeny={() => resolveChore(c, 'denied')}
-            />
+          {chores.map((c, i) => (
+            <Animated.View key={c.id} entering={FadeInDown.delay(i * 60).springify().damping(14)}>
+              <ChoreCard
+                chore={c}
+                deviceName={nameOf(c.deviceId)}
+                busy={busyId === c.id}
+                onApprove={(m) => resolveChore(c, 'approved', m)}
+                onDeny={() => resolveChore(c, 'denied')}
+              />
+            </Animated.View>
           ))}
-          {requests.map((r) => (
-            <RequestCard
-              key={r.id}
-              request={r}
-              deviceName={nameOf(r.deviceId)}
-              busy={busyId === r.id}
-              onApprove={() => resolve(r, 'approved')}
-              onDeny={() => resolve(r, 'denied')}
-            />
+          {requests.map((r, i) => (
+            <Animated.View key={r.id} entering={FadeInDown.delay((chores.length + i) * 60).springify().damping(14)}>
+              <RequestCard
+                request={r}
+                deviceName={nameOf(r.deviceId)}
+                busy={busyId === r.id}
+                onApprove={() => resolve(r, 'approved')}
+                onDeny={() => resolve(r, 'denied')}
+              />
+            </Animated.View>
           ))}
         </>
       )}
@@ -203,7 +213,11 @@ export default function Home() {
         </Pressable>
       ) : (
         <>
-          {devices.map((d) => <DeviceCard key={d.id} device={d} />)}
+          {devices.map((d, i) => (
+            <Animated.View key={d.id} entering={FadeInDown.delay(i * 70).springify().damping(14)}>
+              <DeviceCard device={d} />
+            </Animated.View>
+          ))}
           {/* Always-visible CTA so adding another PC isn't buried in Settings. */}
           <Pressable onPress={() => router.push('/pair')}>
             <View style={[styles.addRow, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}>
@@ -216,6 +230,7 @@ export default function Home() {
         </>
       )}
     </Screen>
+    </>
   );
 }
 
