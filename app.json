@@ -1,28 +1,41 @@
 {
   "expo": {
-    "name": "Git1",
-    "slug": "git1-mobile",
+    "name": "timeoff",
+    "slug": "timeoff",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "git1",
+    "scheme": "timeoff",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0b1220"
+    },
     "android": {
-      "package": "com.example.git1",
+      "package": "com.kvrcoder.timeoff",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0b1220"
       }
     },
     "ios": {
-      "bundleIdentifier": "com.example.git1",
-      "supportsTablet": true
+      "bundleIdentifier": "com.kvrcoder.timeoff",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserNotificationUsageDescription": "Timeoff sends you instant alerts when your kid requests more screen time or completes a chore."
+      }
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        { "color": "#3b82f6" }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "kvr-coder"
   }
 }
