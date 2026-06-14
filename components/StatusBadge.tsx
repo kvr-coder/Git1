@@ -3,6 +3,7 @@ import { useTheme } from '../lib/ThemeContext';
 import { radius, spacing, typography } from '../lib/theme';
 import type { DeviceStatus } from '../lib/types';
 import { PulseDot } from './animated';
+import { HeartbeatDot } from './AnimatedIcons';
 
 export function StatusBadge({ status }: { status: DeviceStatus }) {
   const { colors } = useTheme();
@@ -14,7 +15,7 @@ export function StatusBadge({ status }: { status: DeviceStatus }) {
   const p = map[status];
   return (
     <View style={[styles.pill, { backgroundColor: p.bg }]}>
-      {p.pulse ? <PulseDot color={p.fg} size={6} /> : <View style={[styles.dot, { backgroundColor: p.fg }]} />}
+      {p.pulse ? <HeartbeatDot color={p.fg} size={7} /> : <View style={[styles.dot, { backgroundColor: p.fg }]} />}
       <Text style={[typography.tiny, { color: p.fg }]}>{p.label.toUpperCase()}</Text>
     </View>
   );

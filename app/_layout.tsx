@@ -1,6 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
+import { LoadingDots } from '../components/AnimatedIcons';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { realApi } from '../lib/api.real';
@@ -83,8 +84,8 @@ function RootNav() {
 
   if (!ready) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <LoadingDots size={90} />
       </View>
     );
   }

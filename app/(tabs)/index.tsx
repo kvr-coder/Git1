@@ -15,6 +15,7 @@ import { spacing, typography } from '../../lib/theme';
 import type { ChoreRequest, Device, TimeRequest } from '../../lib/types';
 import { AnimatedNumber, BounceIn } from '../../components/animated';
 import { Confetti } from '../../components/Confetti';
+import { HourglassIcon, RingingBell, WaveIcon } from '../../components/AnimatedIcons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 function greetingMeta(): { text: string; icon: keyof typeof Ionicons.glyphMap; tint: 'morning' | 'day' | 'evening' } {
@@ -143,10 +144,10 @@ export default function Home() {
         <BounceIn trigger={attention} style={{ flex: 1 }}>
           <Card style={{ flex: 1 } as any} accent={attention ? colors.warning : undefined}>
             <View style={styles.summaryHead}>
-              <Ionicons
-                name={attention ? 'notifications' : 'notifications-outline'}
+              <RingingBell
                 size={16}
                 color={attention ? colors.warning : colors.textMuted}
+                trigger={attention}
               />
               <Text style={[typography.tiny, { color: colors.textFaint }]}>INBOX</Text>
             </View>
@@ -197,9 +198,7 @@ export default function Home() {
       {devices.length === 0 ? (
         <Pressable onPress={() => router.push('/pair')}>
           <Card raised accent={colors.primary} style={{ alignItems: 'center', paddingVertical: spacing.xl } as any}>
-            <View style={[styles.bigIcon, { backgroundColor: colors.primarySoft }]}>
-              <Ionicons name="add" size={32} color={colors.primary} />
-            </View>
+            <WaveIcon size={120} />
             <Text style={[typography.h2, { color: colors.text, marginTop: spacing.sm }]}>
               Pair your first device
             </Text>

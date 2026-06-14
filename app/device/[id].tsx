@@ -13,6 +13,7 @@ import { useTheme } from '../../lib/ThemeContext';
 import { radius, spacing, typography } from '../../lib/theme';
 import type { Device } from '../../lib/types';
 import { AnimatedBar, AnimatedNumber, BounceIn } from '../../components/animated';
+import { HourglassIcon, LoadingDots, PadlockIcon } from '../../components/AnimatedIcons';
 
 export default function DeviceDetail() {
   const { colors } = useTheme();
@@ -53,7 +54,9 @@ export default function DeviceDetail() {
   if (!device) {
     return (
       <Screen>
-        <Text style={{ color: colors.textMuted }}>Loading…</Text>
+        <View style={{ alignItems: 'center', paddingTop: spacing.xxl }}>
+          <LoadingDots size={70} />
+        </View>
       </Screen>
     );
   }
@@ -82,8 +85,8 @@ export default function DeviceDetail() {
       {/* Time hero */}
       <Card raised>
         <View style={styles.heroRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
-            <Ionicons name="hourglass-outline" size={28} color={leftColor} />
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.xs }}>
+            <HourglassIcon size={52} />
             {device.dailyLimitMinutes === 0 ? (
               <Text style={[typography.stat, { color: leftColor }]}>∞</Text>
             ) : (
@@ -124,6 +127,9 @@ export default function DeviceDetail() {
       {/* Primary controls */}
       <SectionHeader>Right now</SectionHeader>
       <Card>
+        <View style={{ alignItems: 'center', marginVertical: -spacing.sm }}>
+          <PadlockIcon size={56} open={!locked} />
+        </View>
         <View style={styles.spread}>
           <Text style={[typography.caption, { color: colors.textMuted, flex: 1 }]}>Screen</Text>
           <BounceIn trigger={locked}>
