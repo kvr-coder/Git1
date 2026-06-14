@@ -35,7 +35,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "owner": "kvr-coder"
+    }
   }
 }
