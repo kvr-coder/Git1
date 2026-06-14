@@ -294,6 +294,16 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     const m = Math.max(0, Math.min(24 * 60, Number(p.data.payload?.minutes ?? 0) | 0));
     store.updateDevice(d.id, { dailyLimitMinutes: m });
   }
+  if (p.data.kind === 'grant_minutes') {
+    // Grant adds today-only minutes. Mirror the change server-side so the
+    // parent dashboard reflects the new total immediately (and offline agents
+    // pick it up on next reconnect via the snapshot).
+    const m = Math.max(0, Math.min(24 * 60, Number(p.data.payload?.minutes ?? 0) | 0));
+    if (m > 0) {
+      const newLimit = Math.min(24 * 60, (d.dailyLimitMinutes || 0) + m);
+      store.updateDevice(d.id, { dailyLimitMinutes: newLimit });
+    }
+  }
   if (p.data.kind === 'lock') {
     // Parent forced a lock -> clear any active schedule override so we don't
     // immediately unlock again on the next tick. Also flip status so the
