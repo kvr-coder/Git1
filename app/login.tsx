@@ -43,6 +43,9 @@ export default function Login() {
         <Text style={[typography.body, { color: colors.textMuted }]}>
           Sign in to manage your family's devices.
         </Text>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>
+          timeoff • OTA rev 1 ✓
+        </Text>
       </View>
       {isMockMode() && (
         <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
