@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../lib/ThemeContext';
 import { spacing, typography } from '../lib/theme';
 import type { Insight, Tip } from '../lib/wisdom';
@@ -22,10 +22,12 @@ export function TipCard({ tip }: { tip: Tip }) {
         </Text>
       </Pressable>
       {open && (
-        <Text style={[typography.caption, { color: colors.textMuted, fontStyle: 'italic' }]}>
-          {tip.source}
-          {tip.url ? '\n' + tip.url : ''}
-        </Text>
+        <Pressable onPress={() => tip.url && Linking.openURL(tip.url).catch(() => {})}>
+          <Text style={[typography.caption, { color: colors.textMuted, fontStyle: 'italic' }]}>
+            {tip.source}
+            {tip.url ? '\n↗ ' + tip.url : ''}
+          </Text>
+        </Pressable>
       )}
     </Card>
   );

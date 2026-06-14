@@ -5,6 +5,7 @@
 import type { Device } from './types';
 
 export type AgeBand = '6-9' | '10-13' | '14-16';
+export type Sex = 'all' | 'boys' | 'girls';
 export type TipTag =
   | 'daily-limit'
   | 'bedtime'
@@ -15,7 +16,29 @@ export type TipTag =
   | 'chores'
   | 'general'
   | 'gaming'
-  | 'social';
+  | 'social'
+  | 'sex-diff'
+  | 'sleep'
+  | 'adhd'
+  | 'autism';
+
+export interface ConversationScript {
+  id: string;
+  scenario: string;     // e.g. "Bedtime fight over phone"
+  ages: AgeBand[];
+  approach: string;     // method name shown
+  say: string[];        // verbatim parent lines
+  source: string;
+  url?: string;
+}
+
+export interface Reading {
+  id: string;
+  title: string;
+  citation: string;
+  url: string;
+  blurb: string;
+}
 
 export interface Tip {
   id: string;
@@ -230,6 +253,269 @@ export const WISDOM: Tip[] = [
     tags: ['bedtime', 'general'],
     source: 'Cochrane 2023 · AAO position',
     url: 'https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD013244.pub2/full',
+  },
+
+  // ── Sleep ────────────────────────────────────────────────
+  {
+    id: 'sleep-hours',
+    title: 'How much sleep your kid actually needs',
+    body:
+      'The American Academy of Sleep Medicine consensus: 9–12 hours for ages 6–12, 8–10 hours for ages 13–18. The size of the sleep effect on wellbeing dwarfs the screen-time effect.',
+    ages: ['6-9', '10-13', '14-16'],
+    tags: ['sleep', 'bedtime', 'schedule', 'general'],
+    source: 'Paruthi et al. 2016, J Clin Sleep Med',
+    url: 'https://jcsm.aasm.org/doi/full/10.5664/jcsm.5866',
+  },
+  {
+    id: 'sleep-vs-screens',
+    title: 'Sleep predicts mood more than screen-time does',
+    body:
+      'In 50,212 US kids, each extra hour of screens cost only 3–8 minutes of sleep and explained <1.9% of sleep variance. The bigger lever is total sleep, not minute caps on apps.',
+    ages: ['6-9', '10-13', '14-16'],
+    tags: ['sleep', 'general'],
+    source: 'Przybylski 2019, J Pediatrics',
+    url: 'https://www.jpeds.com/article/S0022-3476(18)31384-2/abstract',
+  },
+
+  // ── Goldilocks ───────────────────────────────────────────
+  {
+    id: 'goldilocks',
+    title: 'Moderate is better than zero',
+    body:
+      'In 120,115 UK 15-year-olds, light-to-moderate digital use related to *higher* wellbeing than abstinence; harm only appeared at very high use. Beware the "all screens are bad" frame.',
+    ages: ['10-13', '14-16'],
+    tags: ['general', 'daily-limit'],
+    source: 'Przybylski & Weinstein 2017, Psychological Science',
+    url: 'https://journals.sagepub.com/doi/10.1177/0956797616678438',
+  },
+
+  // ── Big sex-difference card ──────────────────────────────
+  {
+    id: 'sex-diff-windows',
+    title: 'Girls and boys have different sensitive windows',
+    body:
+      'A study of 84,011 UK teens found social-media use predicted lower life satisfaction 1 year later only inside narrow age windows: girls aged 11–13, boys aged 14–15, and then both around 19. Same number of minutes, very different ages.',
+    ages: ['10-13', '14-16'],
+    tags: ['sex-diff', 'social'],
+    source: 'Orben, Przybylski, Blakemore et al. 2022, Nature Communications',
+    url: 'https://www.nature.com/articles/s41467-022-29296-3',
+  },
+  {
+    id: 'sex-diff-girls-depression',
+    title: 'Girls’ depression rose more than boys’ post-2012',
+    body:
+      'Across 506,820 US adolescents, depressive symptoms among teen girls rose with effect size d≈0.27 from 2010–2015. The magnitude is contested; the *direction* of the gender gap is not.',
+    ages: ['10-13', '14-16'],
+    tags: ['sex-diff', 'social'],
+    source: 'Twenge et al. 2018, Clinical Psychological Science',
+    url: 'https://journals.sagepub.com/doi/10.1177/2167702617723376',
+  },
+  {
+    id: 'sex-diff-gaming',
+    title: 'Gaming concerns lean toward boys',
+    body:
+      'In matched samples, boys with ASD averaged 2.1 hr/day of games vs 1.2 hr/day for typically-developing boys; problematic-use scores are also higher in boys overall. Doesn’t mean girls are immune — but the base rate differs.',
+    ages: ['10-13', '14-16'],
+    tags: ['sex-diff', 'gaming'],
+    source: 'Mazurek & Engelhardt 2013, Pediatrics',
+    url: 'https://publications.aap.org/pediatrics/article/132/2/260',
+  },
+  {
+    id: 'passive-vs-active',
+    title: 'Passive scrolling hurts more than active use',
+    body:
+      'Lab + diary studies: scrolling-others’-posts predicts worse mood (mediated by envy); posting, messaging, video chats don’t. If your teen needs social media, encourage the active kind.',
+    ages: ['10-13', '14-16'],
+    tags: ['social'],
+    source: 'Verduyn et al. 2015/2017',
+    url: 'https://ppw.kuleuven.be/okp/_pdf/Verduyn2015PFUUA.pdf',
+  },
+  {
+    id: 'between-person-variance',
+    title: 'Your kid is not the average kid',
+    body:
+      'A 7-day daily-diary study found ~44% of teens showed no effect of social media on mood, ~10% strongly negative, ~46% slightly positive. Watch *your* kid, not the headline average.',
+    ages: ['10-13', '14-16'],
+    tags: ['general', 'social'],
+    source: 'Beyens et al. 2020, Scientific Reports',
+    url: 'https://www.nature.com/articles/s41598-020-67727-7',
+  },
+
+  // ── ADHD / Autism ────────────────────────────────────────
+  {
+    id: 'adhd-screens',
+    title: 'ADHD + screens: small, bidirectional link',
+    body:
+      'In 2,587 LA teens followed 2 years, each extra high-frequency media activity raised ADHD-symptom odds 10%. Meta-analytic effects are modest (r≈0.12) and go both ways. Quality and routine matter more than the raw number for these kids.',
+    ages: ['10-13', '14-16'],
+    tags: ['adhd'],
+    source: 'Ra et al. 2018, JAMA · Nikkelen et al. 2014',
+    url: 'https://jamanetwork.com/journals/jama/fullarticle/2687861',
+  },
+  {
+    id: 'autism-co-use',
+    title: 'For autistic kids, structured use is the win',
+    body:
+      'Video modeling is an evidence-based teaching tool (PND ~89% for functional skills). Distinguish therapeutic / communication-aid screen use from recreational — limits should apply to the latter.',
+    ages: ['6-9', '10-13', '14-16'],
+    tags: ['autism'],
+    source: 'Bellini & Akullian 2007, Exceptional Children',
+    url: 'https://journals.sagepub.com/doi/10.1177/001440290707300301',
+  },
+];
+
+// ─── Verbatim conversation scripts ────────────────────────
+export const SCRIPTS: ConversationScript[] = [
+  {
+    id: 'cps-bedtime',
+    scenario: 'Stopping at bedtime is a fight',
+    ages: ['6-9', '10-13', '14-16'],
+    approach: 'Collaborative & Proactive Solutions (Greene)',
+    say: [
+      '“I’ve noticed it’s really hard to stop the game when I say it’s time. What’s up?” *(then listen — drill in with “What else?” until the real concern surfaces, e.g. “if I leave mid-match I let my squad down”).*',
+      '“My concern is that when you stop at 10, you can’t fall asleep and you’re a zombie at school.”',
+      '“I wonder if there’s a way you don’t bail on your squad *and* you still get to sleep on time. Got any ideas?”',
+    ],
+    source: 'Greene et al. 2004 RCT, JCCP',
+    url: 'https://livesinthebalance.org/wp-content/uploads/2021/06/Greene-JCCP-2004.pdf',
+  },
+  {
+    id: 'mi-teen',
+    scenario: 'Teen says limits are unfair',
+    ages: ['14-16'],
+    approach: 'Motivational Interviewing',
+    say: [
+      '“What do you like about how you’re using your phone right now — and what, if anything, bugs you about it?” *(open question + evocation, don’t argue)*',
+      '“So part of you feels the limits are unfair, and another part has noticed you feel kind of crap after a long TikTok session. Did I get that right?” *(reflection)*',
+      '“It took guts to be straight with me about that. Thanks.” *(affirmation)*',
+    ],
+    source: 'Naar-King & Suarez 2011',
+    url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC3917675/',
+  },
+  {
+    id: 'authoritative-rule',
+    scenario: 'Setting a rule without picking a fight',
+    ages: ['10-13', '14-16'],
+    approach: 'Authoritative (warmth + firm structure)',
+    say: [
+      '“I love hanging out with you — and the phone goes on the kitchen counter at 9 so we can actually talk.” *(warmth + limit, said in one breath)*',
+      '“The rule is one hour of games on school nights. I know you disagree. The rule stands; let’s talk about weekends.” *(demanding, respectful, no guilt-trip)*',
+    ],
+    source: 'Steinberg et al. 1994, Child Development',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/8045165/',
+  },
+  {
+    id: 'no-snooping',
+    scenario: 'Your teen suspects you’re checking up on them',
+    ages: ['14-16'],
+    approach: 'Disclosure over surveillance (Kerr & Stattin)',
+    say: [
+      '“I use the parent app to see how much time you’re on, not to read your messages.”',
+      '“If something feels off, I’d rather you tell me than have me guess from data. What’s a fair way to handle it?”',
+    ],
+    source: 'Kerr & Stattin 2000, Developmental Psychology',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/10830980/',
+  },
+  {
+    id: 'family-meeting',
+    scenario: 'Weekly family check-in',
+    ages: ['6-9', '10-13', '14-16'],
+    approach: 'Family Check-Up (Stormshak RCT)',
+    say: [
+      'Set a 15-minute slot, same time each week. Three rounds:',
+      '1. **Appreciations** — each person names one thing the others did well.',
+      '2. **One thing working / one thing not.**',
+      '3. **One decision to make together** (e.g. weekend screen rule).',
+      'The RCT effect is on listening + problem-solving — not on the document.',
+    ],
+    source: 'Stormshak et al. 2011 RCT, n≈593 families',
+    url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC4873463/',
+  },
+  {
+    id: 'gaming-disorder-talk',
+    scenario: 'You’re worried about gaming addiction',
+    ages: ['10-13', '14-16'],
+    approach: 'Frame around impairment, not hours',
+    say: [
+      'Watch for: lying about play time, irritability when not playing, declining sleep/grades, loss of other interests, skipping meals. *Hours alone don’t qualify under WHO ICD-11 6C51.*',
+      'Open with worry, not accusation: “I’ve been worrying about how much you’re missing sleep / dropping the football team. I’d like to figure it out *with* you.”',
+    ],
+    source: 'WHO ICD-11 Gaming Disorder · Petry et al. 2014',
+    url: 'https://onlinelibrary.wiley.com/doi/10.1111/add.12457',
+  },
+];
+
+// ─── Reading list ────────────────────────────────────────
+export const READING: Reading[] = [
+  {
+    id: 'aap-policy',
+    title: 'AAP Media Use in School-Aged Children and Adolescents',
+    citation: 'AAP Council on Communications and Media, Pediatrics, 2016',
+    url: 'https://publications.aap.org/pediatrics/article/138/5/e20162592',
+    blurb: 'The policy statement that abandoned the “2-hour rule” for ages 5–18 in favour of a Family Media Plan.',
+  },
+  {
+    id: 'aap-family-media-plan',
+    title: 'AAP Family Media Plan tool',
+    citation: 'healthychildren.org / AAP',
+    url: 'https://www.healthychildren.org/English/family-life/Media/Pages/helping-kids-thrive-in-a-digital-world-AAP-policy-explained.aspx',
+    blurb: 'Build a household plan covering bedrooms, mealtimes, the hour before bed, content choice and communication.',
+  },
+  {
+    id: 'orben-przybylski',
+    title: 'The association between adolescent well-being and digital technology use',
+    citation: 'Orben & Przybylski 2019, Nature Human Behaviour',
+    url: 'https://www.nature.com/articles/s41562-018-0506-1',
+    blurb: 'The 0.4%-of-variance / “potato” paper. Why the headline-grabbing screen-time effect is tiny on average.',
+  },
+  {
+    id: 'carter-meta',
+    title: 'Portable media in the bedroom and sleep (meta-analysis)',
+    citation: 'Carter et al. 2016, JAMA Pediatrics, n=125,198',
+    url: 'https://jamanetwork.com/journals/jamapediatrics/fullarticle/2571467',
+    blurb: 'The strongest single finding in this whole literature: device presence in the bedroom raised inadequate-sleep odds 79%, even when not used.',
+  },
+  {
+    id: 'orben-windows',
+    title: 'Windows of developmental sensitivity to social media',
+    citation: 'Orben, Przybylski, Blakemore et al. 2022, Nature Communications, n=84,011',
+    url: 'https://www.nature.com/articles/s41467-022-29296-3',
+    blurb: 'Why “teens” isn’t one group: girls 11–13 and boys 14–15 are the sensitive windows.',
+  },
+  {
+    id: 'pickard-rct',
+    title: 'PASTI trial: a screen-free hour before bed (RCT)',
+    citation: 'Pickard et al. 2024, JAMA Pediatrics',
+    url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC11581737/',
+    blurb: 'The only RCT directly testing a pre-bed screen cutoff. d=0.56 on sleep efficiency; no effect on total duration.',
+  },
+  {
+    id: 'cochrane-blue',
+    title: 'Cochrane review: blue-light filtering glasses',
+    citation: 'Singh et al. 2023, Cochrane Database',
+    url: 'https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD013244.pub2/full',
+    blurb: '17 RCTs, n=619: no clear benefit for eye strain, sleep or eye health. AAO does not recommend them.',
+  },
+  {
+    id: 'greene-cps',
+    title: 'Collaborative & Proactive Solutions for ODD (RCT)',
+    citation: 'Greene et al. 2004, JCCP',
+    url: 'https://livesinthebalance.org/wp-content/uploads/2021/06/Greene-JCCP-2004.pdf',
+    blurb: '“Kids do well if they can.” Equally effective as standard parent training, less resentment.',
+  },
+  {
+    id: 'who-icd11-gaming',
+    title: 'WHO ICD-11 Gaming Disorder (6C51)',
+    citation: 'WHO ICD-11 / Petry et al. 2014, Addiction',
+    url: 'https://onlinelibrary.wiley.com/doi/10.1111/add.12457',
+    blurb: 'The diagnostic standard. Impairment of life functioning, not raw hours, is the criterion.',
+  },
+  {
+    id: 'commonsense-census',
+    title: 'Common Sense Census: Media Use by Tweens and Teens',
+    citation: 'Common Sense Media 2021, US, n=1,306',
+    url: 'https://www.commonsensemedia.org/research/the-common-sense-census-media-use-by-tweens-and-teens-2021',
+    blurb: 'Benchmark for what kids actually do: tweens 5h33m/day, teens 8h39m/day of entertainment screen time.',
   },
 ];
 

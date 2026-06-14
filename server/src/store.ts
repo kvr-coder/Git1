@@ -336,6 +336,9 @@ const rowToSchedule = (r: any): ScheduleRow => ({
 });
 
 export const store = {
+  /** Escape hatch for ad-hoc tables / one-off raw queries (e.g. bug reports). */
+  _db() { return db; },
+
   createUser(email: string, passwordHash: string): User {
     // Deterministic id from email so a re-register after a DB wipe re-links
     // existing devices (whose signed tokens carry the email) to this account.

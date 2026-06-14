@@ -98,6 +98,19 @@ export default function Settings() {
         )}
       </Card>
 
+      <SectionHeader>Help</SectionHeader>
+      <Card>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h3, { color: colors.text }]}>Report a bug</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Tell us what broke. We get your version + platform automatically.
+            </Text>
+          </View>
+          <Button label="Send" icon="bug-outline" onPress={() => router.push('/feedback')} />
+        </View>
+      </Card>
+
       <View style={{ marginTop: spacing.md }}>
         <Button label="Sign out" variant="danger" icon="log-out-outline" onPress={signOut} />
       </View>

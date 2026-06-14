@@ -184,6 +184,9 @@ export const realApi = {
   async registerPushToken(token: string) {
     await request('/push/register', { method: 'POST', body: JSON.stringify({ token }) });
   },
+  async sendFeedback(payload: { body: string; app?: string; version?: string; platform?: string; email?: string }) {
+    await request('/feedback', { method: 'POST', body: JSON.stringify(payload) });
+  },
   async listRequests(status?: 'pending' | 'approved' | 'denied'): Promise<TimeRequest[]> {
     const qs = status ? `?status=${status}` : '';
     return request<TimeRequest[]>(`/requests${qs}`);

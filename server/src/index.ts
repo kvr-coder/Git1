@@ -215,6 +215,30 @@ app.post('/webpush/unsubscribe', auth, (req: AuthedRequest, res) => {
   res.json({ ok: true });
 });
 // Lets the parent verify push works end-to-end without bothering the kid.
+// ── User-submitted bug reports ─────────────────────────────
+// Stored to a tiny table so we can see them in Render's shell, and printed to
+// the server log so they show up in Render's live tail.
+try {
+  store._db().exec(
+    'CREATE TABLE IF NOT EXISTS bug_reports (id TEXT PRIMARY KEY, userId TEXT, email TEXT, ts INTEGER, app TEXT, version TEXT, platform TEXT, body TEXT)',
+  );
+} catch {}
+app.post('/feedback', auth, (req: AuthedRequest, res) => {
+  const body = String((req.body as any)?.body ?? '').slice(0, 5000);
+  const app = String((req.body as any)?.app ?? '').slice(0, 64);
+  const version = String((req.body as any)?.version ?? '').slice(0, 64);
+  const platform = String((req.body as any)?.platform ?? '').slice(0, 32);
+  const email = String((req.body as any)?.email ?? '').slice(0, 128);
+  const id = randomBytes(8).toString('hex');
+  try {
+    store._db().prepare(
+      'INSERT INTO bug_reports (id,userId,email,ts,app,version,platform,body) VALUES (?,?,?,?,?,?,?,?)',
+    ).run(id, req.userId!, email, Date.now(), app, version, platform, body);
+  } catch (e) { console.warn('[feedback] db write failed', e); }
+  console.log(`[feedback] ${platform} ${app}@${version} <${email}> ${body.slice(0, 200)}`);
+  res.json({ ok: true, id });
+});
+
 app.post('/webpush/test', auth, async (req: AuthedRequest, res) => {
   await notifyUser(req.userId!, 'Git1 test', 'Push notifications are working.', { kind: 'test' });
   res.json({ ok: true });

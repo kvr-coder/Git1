@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../lib/ThemeContext';
 import { radius, spacing, typography } from '../lib/theme';
 import type { Tip } from '../lib/wisdom';
@@ -29,9 +29,12 @@ export function HintButton({ tip }: { tip: Tip }) {
             {tip.title}
           </Text>
           <Text style={[typography.body, { color: colors.text }]}>{tip.body}</Text>
-          <Text style={[typography.caption, { color: colors.textMuted, marginTop: 6, fontStyle: 'italic' }]}>
-            {tip.source}
-          </Text>
+          <Pressable onPress={() => tip.url && Linking.openURL(tip.url).catch(() => {})}>
+            <Text style={[typography.caption, { color: tip.url ? colors.info : colors.textMuted, marginTop: 6, fontStyle: 'italic' }]}>
+              {tip.source}
+              {tip.url ? '  ↗' : ''}
+            </Text>
+          </Pressable>
         </View>
       )}
     </View>

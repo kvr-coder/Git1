@@ -1,25 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
-import { Segmented, SectionHeader } from '../../components/ui';
+import { SectionHeader, Segmented } from '../../components/ui';
 import { TipCard } from '../../components/TipCard';
 import { useTheme } from '../../lib/ThemeContext';
 import { spacing, typography } from '../../lib/theme';
-import { ANTI_PATTERNS, AgeBand, WISDOM } from '../../lib/wisdom';
+import { ANTI_PATTERNS, AgeBand, READING, SCRIPTS, WISDOM } from '../../lib/wisdom';
+
+type Section = 'tips' | 'scripts' | 'sex' | 'reading' | 'backfires';
 
 export default function Wisdom() {
   const { colors } = useTheme();
   const [age, setAge] = useState<AgeBand | 'all'>('all');
-  const tips = WISDOM.filter((t) => age === 'all' || t.ages.length === 0 || t.ages.includes(age));
+  const [section, setSection] = useState<Section>('tips');
+
+  const tipsForAge = WISDOM.filter((t) => age === 'all' || t.ages.length === 0 || t.ages.includes(age));
+  const sexTips = tipsForAge.filter((t) => t.tags.includes('sex-diff') || t.tags.includes('social'));
+  const scripts = SCRIPTS.filter((s) => age === 'all' || s.ages.includes(age as AgeBand));
+
+  const open = (url?: string) => url && Linking.openURL(url).catch(() => {});
 
   return (
     <Screen>
       <View>
         <Text style={[typography.display, { color: colors.text }]}>Wisdom</Text>
         <Text style={[typography.caption, { color: colors.textMuted }]}>
-          Advice grounded in peer-reviewed research — tap any tip to see the source.
+          Advice grounded in peer-reviewed research. Tap any source to open the paper.
         </Text>
       </View>
 
@@ -39,31 +47,119 @@ export default function Wisdom() {
         />
       </Card>
 
-      <SectionHeader>Evidence-based tips</SectionHeader>
-      {tips.map((t) => (
-        <TipCard key={t.id} tip={t} />
-      ))}
-
-      <SectionHeader>What backfires</SectionHeader>
-      {ANTI_PATTERNS.map((a, i) => (
-        <Card key={i}>
-          <View style={styles.row}>
-            <Ionicons name="warning-outline" size={18} color={colors.danger} />
-            <Text style={[typography.h3, { color: colors.text, flex: 1 }]}>{a.title}</Text>
-          </View>
-          <Text style={[typography.body, { color: colors.text }]}>{a.body}</Text>
-        </Card>
-      ))}
-
-      <Card>
-        <View style={styles.row}>
-          <Ionicons name="library-outline" size={20} color={colors.info} />
-          <Text style={[typography.h3, { color: colors.text }]}>Where this comes from</Text>
-        </View>
-        <Text style={[typography.body, { color: colors.text }]}>
-          Sources include AAP 2016/2024 policies, WHO 2019 guidelines, RCPCH 2019, Orben &amp; Przybylski 2019 (Nature Human Behaviour), Carter et al. 2016 (JAMA Pediatrics), Steinberg, Baumrind, Mindell, Deci/Ryan, Greene, Kerr &amp; Stattin, Cochrane 2023 review on blue-light filters, and the WHO ICD-11 Gaming Disorder criteria. Where evidence is weak or contested, the tip says so.
-        </Text>
+      <Card padded={false} style={{ padding: 4 } as any}>
+        <Segmented<Section>
+          value={section}
+          onChange={setSection}
+          options={[
+            { key: 'tips', label: 'Tips', icon: 'bulb-outline' },
+            { key: 'scripts', label: 'How to talk', icon: 'chatbubble-ellipses-outline' },
+            { key: 'sex', label: 'Boys vs girls', icon: 'people-outline' },
+            { key: 'backfires', label: 'What backfires', icon: 'warning-outline' },
+            { key: 'reading', label: 'Read more', icon: 'library-outline' },
+          ]}
+        />
       </Card>
+
+      {section === 'tips' && (
+        <>
+          <SectionHeader>Evidence-based tips</SectionHeader>
+          {tipsForAge.map((t) => (
+            <TipCard key={t.id} tip={t} />
+          ))}
+        </>
+      )}
+
+      {section === 'scripts' && (
+        <>
+          <SectionHeader>How to talk to your kid</SectionHeader>
+          {scripts.length === 0 ? (
+            <Card>
+              <Text style={[typography.caption, { color: colors.textMuted }]}>No scripts for this age band.</Text>
+            </Card>
+          ) : (
+            scripts.map((s) => (
+              <Card key={s.id} accent={colors.info}>
+                <View style={styles.row}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.info} />
+                  <Text style={[typography.h3, { color: colors.text, flex: 1 }]}>{s.scenario}</Text>
+                </View>
+                <Text style={[typography.caption, { color: colors.info }]}>{s.approach}</Text>
+                {s.say.map((line, i) => (
+                  <Text key={i} style={[typography.body, { color: colors.text, marginTop: 4 }]}>
+                    {line}
+                  </Text>
+                ))}
+                <Pressable onPress={() => open(s.url)}>
+                  <Text style={[typography.caption, { color: colors.textMuted, fontStyle: 'italic', marginTop: spacing.xs }]}>
+                    {s.source}
+                    {s.url ? '  · tap for source' : ''}
+                  </Text>
+                </Pressable>
+              </Card>
+            ))
+          )}
+        </>
+      )}
+
+      {section === 'sex' && (
+        <>
+          <SectionHeader>Boys vs girls — what the data says</SectionHeader>
+          <Card>
+            <Text style={[typography.body, { color: colors.text }]}>
+              The headline numbers ("teens average X hours") hide big sex × age differences. The strongest
+              finding is that <Text style={{ fontWeight: '700' }}>sensitivity to social media peaks in
+              different windows for girls and boys</Text>. Pick the age band above and the cards below
+              filter accordingly.
+            </Text>
+          </Card>
+          {sexTips.map((t) => (
+            <TipCard key={t.id} tip={t} />
+          ))}
+        </>
+      )}
+
+      {section === 'backfires' && (
+        <>
+          <SectionHeader>Common mistakes that backfire</SectionHeader>
+          {ANTI_PATTERNS.map((a, i) => (
+            <Card key={i} accent={colors.danger}>
+              <View style={styles.row}>
+                <Ionicons name="warning-outline" size={18} color={colors.danger} />
+                <Text style={[typography.h3, { color: colors.text, flex: 1 }]}>{a.title}</Text>
+              </View>
+              <Text style={[typography.body, { color: colors.text }]}>{a.body}</Text>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {section === 'reading' && (
+        <>
+          <SectionHeader>Reading list</SectionHeader>
+          <Card>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Open papers, policy statements, and benchmarks. All links public.
+            </Text>
+          </Card>
+          {READING.map((r) => (
+            <Pressable key={r.id} onPress={() => open(r.url)}>
+              <Card>
+                <View style={styles.row}>
+                  <Ionicons name="document-text-outline" size={18} color={colors.primary} />
+                  <Text style={[typography.h3, { color: colors.text, flex: 1 }]}>{r.title}</Text>
+                  <Ionicons name="open-outline" size={16} color={colors.textMuted} />
+                </View>
+                <Text style={[typography.caption, { color: colors.info }]}>{r.citation}</Text>
+                <Text style={[typography.body, { color: colors.text }]}>{r.blurb}</Text>
+                <Text style={[typography.caption, { color: colors.textMuted }]} numberOfLines={1}>
+                  {r.url}
+                </Text>
+              </Card>
+            </Pressable>
+          ))}
+        </>
+      )}
     </Screen>
   );
 }
