@@ -14,12 +14,19 @@ import { radius, spacing, typography } from '../../lib/theme';
 import type { Device } from '../../lib/types';
 import { AnimatedBar, AnimatedNumber, BounceIn } from '../../components/animated';
 import { HourglassIcon, LoadingDots, PadlockIcon } from '../../components/AnimatedIcons';
+import { HintButton } from '../../components/HintButton';
+import { InsightCard } from '../../components/TipCard';
+import { getDeviceAge, setDeviceAge } from '../../lib/deviceAge';
+import { AgeBand, computeInsights, tipsFor } from '../../lib/wisdom';
 
 export default function DeviceDetail() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [device, setDevice] = useState<Device | undefined>();
+  const [age, setAge] = useState<AgeBand | undefined>();
+  // Load the per-device age band from local storage when the screen mounts.
+  useEffect(() => { if (id) getDeviceAge(String(id)).then(setAge); }, [id]);
   const [busy, setBusy] = useState(false);
   const [appInput, setAppInput] = useState('');
 
@@ -82,6 +89,26 @@ export default function DeviceDetail() {
         <StatusBadge status={device.status} />
       </View>
 
+      {/* Kid's age band — drives which advice is shown. Stored locally. */}
+      <Card>
+        <Text style={[typography.caption, { color: colors.textMuted, marginBottom: 6 }]}>
+          Tune advice for kid's age
+        </Text>
+        <Segmented<string>
+          value={age ?? ''}
+          onChange={(v) => {
+            const b = v as AgeBand;
+            setAge(b);
+            setDeviceAge(String(id), b);
+          }}
+          options={[
+            { key: '6-9', label: '6–9' },
+            { key: '10-13', label: '10–13' },
+            { key: '14-16', label: '14–16' },
+          ]}
+        />
+      </Card>
+
       {/* Time hero */}
       <Card raised>
         <View style={styles.heroRow}>
@@ -123,6 +150,23 @@ export default function DeviceDetail() {
           {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(device.dailyLimitMinutes)} used today
         </Text>
       </Card>
+
+      {/* Behaviour-driven insights — generated from this device's data. */}
+      {(() => {
+        const ins = computeInsights({
+          device,
+          hasSchedule: undefined, // we don't know without an extra fetch; safe-default skips this card
+        });
+        if (!ins.length) return null;
+        return (
+          <>
+            <SectionHeader>For your kid right now</SectionHeader>
+            {ins.map((i) => (
+              <InsightCard key={i.id} insight={i} />
+            ))}
+          </>
+        );
+      })()}
 
       {/* Primary controls */}
       <SectionHeader>Right now</SectionHeader>
@@ -210,8 +254,9 @@ export default function DeviceDetail() {
       <SectionHeader>Reward bank</SectionHeader>
       <Card>
         <View style={styles.spread}>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <Text style={[typography.h3, { color: colors.text }]}>Bank balance</Text>
+            {tipsFor('bank', age, 1).map((t) => <HintButton key={t.id} tip={t} />)}
             <Text style={[typography.caption, { color: colors.textMuted }]}>
               Minutes the kid can spend whenever.
             </Text>
@@ -279,6 +324,7 @@ export default function DeviceDetail() {
       {/* Blocked apps */}
       <SectionHeader>Blocked apps</SectionHeader>
       <Card>
+        {tipsFor('blocklist', age, 1).map((t) => <HintButton key={t.id} tip={t} />)}
         <Text style={[typography.caption, { color: colors.textMuted }]}>
           Processes killed during lock periods. Use the .exe name, e.g.{' '}
           <Text style={{ color: colors.text }}>steam.exe</Text>.

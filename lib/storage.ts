@@ -13,4 +13,6 @@ export const KEYS = {
   serverUrl: 'git1.serverUrl',
   themePref: 'git1.themePref',
   activityRetention: 'git1.activityRetentionDays',
+  // Per-device kid age band; keyed `git1.deviceAge.<deviceId>` -> '6-9' | '10-13' | '14-16'.
+  deviceAgePrefix: 'git1.deviceAge.',
 };
