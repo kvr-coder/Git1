@@ -1,22 +1,17 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../lib/ThemeContext';
 import { getApiBase, isMockMode } from '../lib/config';
-import { colors, radius, spacing } from '../lib/theme';
+import { radius, spacing, typography } from '../lib/theme';
 
 export function ApiBanner() {
-  if (isMockMode()) {
-    return (
-      <View style={[styles.bar, { backgroundColor: colors.danger }]}>
-        <Text style={styles.text}>
-          ⚠️ MOCK MODE — pairing won't reach your server.{'\n'}
-          Settings → Server URL → enter http://&lt;your-PC-IP&gt;:8080
-        </Text>
-      </View>
-    );
-  }
+  const { colors } = useTheme();
+  // Only surface a banner when something is wrong (mock mode). When the real
+  // server is configured we stay silent — no need to nag the parent.
+  if (!isMockMode()) return null;
   return (
-    <View style={[styles.bar, { backgroundColor: '#1E3A2A' }]}>
-      <Text style={[styles.text, { color: colors.success }]}>
-        ✓ Server: {getApiBase()}
+    <View style={[styles.bar, { backgroundColor: colors.warningSoft }]}>
+      <Text style={[typography.caption, { color: colors.warning, textAlign: 'center' }]}>
+        ⚠ Demo mode — Settings → Server URL → enter http://{'<your-PC-IP>'}:8080
       </Text>
     </View>
   );
@@ -27,12 +22,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
-    marginBottom: spacing.sm,
-  },
-  text: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 12,
-    textAlign: 'center',
   },
 });

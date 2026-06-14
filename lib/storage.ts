@@ -11,4 +11,5 @@ export const KEYS = {
   authEmail: 'git1.authEmail',
   pushToken: 'git1.pushToken',
   serverUrl: 'git1.serverUrl',
+  themePref: 'git1.themePref',
 };

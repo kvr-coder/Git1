@@ -5,12 +5,14 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { api } from '../../lib/api';
-import { colors, radius, spacing, typography } from '../../lib/theme';
+import { useTheme } from '../../lib/ThemeContext';
+import { radius, spacing, typography } from '../../lib/theme';
 import type { ChoreTemplate } from '../../lib/types';
 
 const QUICK_MINUTES = [5, 10, 15, 30, 60];
 
 export default function ChoreTemplates() {
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [items, setItems] = useState<ChoreTemplate[]>([]);
   const [desc, setDesc] = useState('');
@@ -33,7 +35,6 @@ export default function ChoreTemplates() {
       setBusy(false);
     }
   };
-
   const remove = async (templateId: string) => {
     setBusy(true);
     try {
@@ -45,61 +46,57 @@ export default function ChoreTemplates() {
   };
 
   return (
-    <Screen>
+    <Screen topInset={false}>
       <Text style={[typography.h1, { color: colors.text }]}>Chore templates</Text>
       <Text style={[typography.caption, { color: colors.textMuted }]}>
-        Re-usable chore templates the kid can tap on their dashboard. They still
-        have to submit each time and you still approve.
+        Re-usable chores the kid can claim from their dashboard. They still submit each one and you
+        approve it.
       </Text>
 
       <Card>
-        <Text style={[typography.caption, { color: colors.textMuted }]}>
-          New template
-        </Text>
+        <Text style={[typography.h3, { color: colors.text }]}>New chore</Text>
         <TextInput
           value={desc}
           onChangeText={setDesc}
-          placeholder="e.g. Make bed"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
+          placeholder="e.g. Make your bed"
+          placeholderTextColor={colors.textFaint}
+          style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text }]}
         />
-        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.sm }]}>
-          Reward: {minutes} min
+        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>
+          Reward
         </Text>
         <View style={styles.chipRow}>
-          {QUICK_MINUTES.map((m) => (
-            <Pressable
-              key={m}
-              onPress={() => setMinutes(m)}
-              style={[styles.chip, minutes === m && styles.chipActive]}
-            >
-              <Text style={{ color: minutes === m ? colors.primaryText : colors.text }}>
-                {m}m
-              </Text>
-            </Pressable>
-          ))}
+          {QUICK_MINUTES.map((m) => {
+            const on = minutes === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setMinutes(m)}
+                style={[styles.chip, { backgroundColor: on ? colors.primary : colors.surfaceAlt }]}
+              >
+                <Text style={[typography.bodyStrong, { color: on ? colors.primaryText : colors.text }]}>
+                  {m}m
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-        <Button label="Add template" onPress={add} loading={busy} />
+        <Button label="Add chore" icon="add" onPress={add} loading={busy} />
       </Card>
 
       {items.length === 0 ? (
-        <Text style={{ color: colors.textMuted }}>No templates yet.</Text>
+        <Text style={{ color: colors.textFaint }}>No chores yet.</Text>
       ) : (
         items.map((t) => (
           <Card key={t.id}>
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <Text style={[typography.h2, { color: colors.text }]}>{t.description}</Text>
+                <Text style={[typography.h3, { color: colors.text }]}>{t.description}</Text>
                 <Text style={[typography.caption, { color: colors.textMuted }]}>
-                  Suggested reward: {t.minutes} min
+                  Reward: {t.minutes} min
                 </Text>
               </View>
-              <Button
-                label="Delete"
-                variant="danger"
-                onPress={() => remove(t.id)}
-                loading={busy}
-              />
+              <Button label="" icon="trash-outline" variant="danger" size="sm" onPress={() => remove(t.id)} loading={busy} />
             </View>
           </Card>
         ))
@@ -110,35 +107,13 @@ export default function ChoreTemplates() {
 
 const styles = StyleSheet.create({
   input: {
-    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.text,
+    paddingVertical: spacing.sm + 2,
     fontSize: 16,
     marginTop: spacing.xs,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginVertical: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm - 2,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginVertical: spacing.xs },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm - 1, borderRadius: radius.pill },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

@@ -1,16 +1,20 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { StatusBadge } from '../../components/StatusBadge';
+import { Chip, SectionHeader, Segmented, TimeBar } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatDuration, formatRelative } from '../../lib/format';
-import { colors, radius, spacing, typography } from '../../lib/theme';
+import { useTheme } from '../../lib/ThemeContext';
+import { radius, spacing, typography } from '../../lib/theme';
 import type { Device } from '../../lib/types';
 
 export default function DeviceDetail() {
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [device, setDevice] = useState<Device | undefined>();
@@ -20,6 +24,8 @@ export default function DeviceDetail() {
   const refresh = () => api.getDevice(id).then(setDevice);
   useEffect(() => {
     refresh();
+    const t = setInterval(refresh, 5000);
+    return () => clearInterval(t);
   }, [id]);
 
   const run = async (fn: () => Promise<void>) => {
@@ -38,11 +44,9 @@ export default function DeviceDetail() {
     setAppInput('');
     run(() => api.setBlocklist(device.id, next));
   };
-
   const removeApp = (name: string) => {
     if (!device) return;
-    const next = device.blocklist.filter((n) => n !== name);
-    run(() => api.setBlocklist(device.id, next));
+    run(() => api.setBlocklist(device.id, device.blocklist.filter((n) => n !== name)));
   };
 
   if (!device) {
@@ -53,187 +57,182 @@ export default function DeviceDetail() {
     );
   }
 
+  const limit = Math.max(1, device.dailyLimitMinutes);
+  const pct = Math.min(1, device.usedTodayMinutes / limit);
+  const left = Math.max(0, device.dailyLimitMinutes - device.usedTodayMinutes);
+  const locked = device.status === 'locked';
+  const leftColor = pct >= 1 ? colors.danger : pct >= 0.8 ? colors.warning : colors.success;
+
   return (
-    <Screen>
-      <View style={{ gap: spacing.xs }}>
-        <Text style={[typography.h1, { color: colors.text }]}>{device.name}</Text>
-        <Text style={[typography.caption, { color: colors.textMuted }]}>
-          {device.ownerName} · {device.platform} · last seen {formatRelative(device.lastSeen)}
-        </Text>
-        <View style={{ marginTop: spacing.sm }}>
-          <StatusBadge status={device.status} />
-        </View>
-      </View>
-
-      <Card>
-        <Text style={[typography.h2, { color: colors.text }]}>Today</Text>
-        <Text style={[typography.body, { color: colors.text }]}>
-          {formatDuration(device.usedTodayMinutes)} of {formatDuration(device.dailyLimitMinutes)} used
-        </Text>
-      </Card>
-
-      <Card>
-        <Text style={[typography.h2, { color: colors.text }]}>Controls</Text>
-        <View style={{ gap: spacing.sm }}>
-          <Button
-            label="Lock now"
-            variant="danger"
-            loading={busy}
-            onPress={() => run(() => api.lockDevice(device.id))}
-          />
-          <Button
-            label="Unlock"
-            loading={busy}
-            onPress={() => run(() => api.unlockDevice(device.id))}
-          />
-          <Button
-            label="Grant +15 min"
-            variant="secondary"
-            loading={busy}
-            onPress={() => run(() => api.grantBonusMinutes(device.id, 15))}
-          />
-        </View>
-      </Card>
-
-      <Card>
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={[typography.h2, { color: colors.text }]}>Internet</Text>
-            <Text style={[typography.caption, { color: colors.textMuted }]}>
-              Cut all network traffic on this PC.
-            </Text>
-          </View>
-          <Switch
-            value={device.internetBlocked}
-            onValueChange={(v) => run(() => api.setInternetBlocked(device.id, v))}
-            trackColor={{ true: colors.danger, false: colors.surfaceAlt }}
-            disabled={busy}
-          />
-        </View>
-      </Card>
-
-      <Card>
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={[typography.h2, { color: colors.text }]}>Bank</Text>
-            <Text style={[typography.caption, { color: colors.textMuted }]}>
-              Reward minutes the kid can spend whenever.
-            </Text>
-          </View>
-          <Text style={[typography.h1, { color: colors.success }]}>
-            {device.bankedMinutes}m
+    <Screen topInset={false}>
+      {/* Header */}
+      <View style={styles.headRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.h1, { color: colors.text }]} numberOfLines={1}>
+            {device.name}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textMuted }]}>
+            {device.ownerName} · seen {formatRelative(device.lastSeen)}
           </Text>
         </View>
-        <View style={styles.stepperRow}>
-          <Text style={{ color: colors.textMuted, flex: 1 }}>Adjust</Text>
+        <StatusBadge status={device.status} />
+      </View>
+
+      {/* Time hero */}
+      <Card raised>
+        <View style={styles.heroRow}>
+          <View>
+            <Text style={[typography.stat, { color: leftColor }]}>
+              {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(left)}
+            </Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              {device.dailyLimitMinutes === 0 ? 'no limit set' : 'left today'}
+            </Text>
+          </View>
+          {device.bankedMinutes > 0 && (
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[typography.h1, { color: colors.success }]}>{device.bankedMinutes}m</Text>
+              <Text style={[typography.caption, { color: colors.textMuted }]}>in bank</Text>
+            </View>
+          )}
+        </View>
+        <TimeBar pct={pct} height={12} />
+        <Text style={[typography.caption, { color: colors.textFaint }]}>
+          {formatDuration(device.usedTodayMinutes)} of{' '}
+          {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(device.dailyLimitMinutes)} used today
+        </Text>
+      </Card>
+
+      {/* Primary controls */}
+      <SectionHeader>Right now</SectionHeader>
+      <Card>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>Screen</Text>
+        <Segmented
+          value={locked ? 'locked' : 'open'}
+          onChange={(v) =>
+            run(() => (v === 'locked' ? api.lockDevice(device.id) : api.unlockDevice(device.id)))
+          }
+          options={[
+            { key: 'open', label: 'Unlocked', icon: 'lock-open-outline' },
+            { key: 'locked', label: 'Locked', icon: 'lock-closed' },
+          ]}
+        />
+        <View style={{ height: spacing.xs }} />
+        <Text style={[typography.caption, { color: colors.textMuted }]}>Internet</Text>
+        <Segmented
+          value={device.internetBlocked ? 'off' : 'on'}
+          onChange={(v) => run(() => api.setInternetBlocked(device.id, v === 'off'))}
+          options={[
+            { key: 'on', label: 'Allowed', icon: 'globe-outline' },
+            { key: 'off', label: 'Blocked', icon: 'ban-outline' },
+          ]}
+        />
+        <View style={{ height: spacing.xs }} />
+        <Button
+          label="Grant +15 minutes"
+          variant="secondary"
+          icon="add"
+          loading={busy}
+          onPress={() => run(() => api.grantBonusMinutes(device.id, 15))}
+        />
+      </Card>
+
+      {/* Bank */}
+      <SectionHeader>Reward bank</SectionHeader>
+      <Card>
+        <View style={styles.spread}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h3, { color: colors.text }]}>Bank balance</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Minutes the kid can spend whenever.
+            </Text>
+          </View>
+          <Text style={[typography.h1, { color: colors.success }]}>{device.bankedMinutes}m</Text>
+        </View>
+        <View style={styles.btnRow}>
           <Button
             label="−15"
             variant="secondary"
-            onPress={() =>
-              run(() =>
-                api.setBankMinutes(device.id, Math.max(0, device.bankedMinutes - 15)),
-              )
-            }
+            full
+            onPress={() => run(() => api.setBankMinutes(device.id, Math.max(0, device.bankedMinutes - 15)))}
           />
-          <Button
-            label="+15"
-            variant="secondary"
-            onPress={() => run(() => api.addBankMinutes(device.id, 15))}
-          />
+          <Button label="+15" variant="secondary" full onPress={() => run(() => api.addBankMinutes(device.id, 15))} />
         </View>
-        <Button
-          label="View history"
-          variant="secondary"
-          onPress={() => router.push(`/device-bank/${device.id}`)}
-        />
-        <Button
-          label="Manage chore templates"
-          variant="secondary"
-          onPress={() => router.push(`/device-templates/${device.id}`)}
-        />
+        <View style={styles.btnRow}>
+          <Button label="History" variant="ghost" full icon="receipt-outline" onPress={() => router.push(`/device-bank/${device.id}`)} />
+          <Button label="Chores" variant="ghost" full icon="sparkles-outline" onPress={() => router.push(`/device-templates/${device.id}`)} />
+        </View>
       </Card>
 
+      {/* Self-borrow */}
+      <SectionHeader>Allowances</SectionHeader>
       <Card>
-        <View style={styles.row}>
+        <View style={styles.spread}>
           <View style={{ flex: 1 }}>
-            <Text style={[typography.h2, { color: colors.text }]}>Self-borrow</Text>
+            <Text style={[typography.h3, { color: colors.text }]}>Let kid borrow time</Text>
             <Text style={[typography.caption, { color: colors.textMuted }]}>
-              Let kid borrow time from tomorrow without your approval. Tomorrow's
-              limit is reduced by the same amount.
+              Borrow from tomorrow without asking. Tomorrow shrinks by the same amount.
             </Text>
           </View>
           <Switch
             value={device.selfBorrowEnabled}
-            onValueChange={(v) =>
-              run(() => api.setBorrowSettings(device.id, v, device.selfBorrowCapMinutes))
-            }
+            onValueChange={(v) => run(() => api.setBorrowSettings(device.id, v, device.selfBorrowCapMinutes))}
             trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
+            thumbColor="#fff"
             disabled={busy}
           />
         </View>
         {device.selfBorrowEnabled && (
-          <View style={styles.stepperRow}>
-            <Text style={{ color: colors.textMuted, flex: 1 }}>
+          <View style={[styles.spread, { marginTop: spacing.sm }]}>
+            <Text style={[typography.caption, { color: colors.textMuted, flex: 1 }]}>
               Max per request: {device.selfBorrowCapMinutes} min
             </Text>
             <Button
               label="−15"
+              size="sm"
               variant="secondary"
               onPress={() =>
-                run(() =>
-                  api.setBorrowSettings(
-                    device.id,
-                    true,
-                    Math.max(0, device.selfBorrowCapMinutes - 15),
-                  ),
-                )
+                run(() => api.setBorrowSettings(device.id, true, Math.max(0, device.selfBorrowCapMinutes - 15)))
               }
             />
             <Button
               label="+15"
+              size="sm"
               variant="secondary"
               onPress={() =>
-                run(() =>
-                  api.setBorrowSettings(
-                    device.id,
-                    true,
-                    Math.min(240, device.selfBorrowCapMinutes + 15),
-                  ),
-                )
+                run(() => api.setBorrowSettings(device.id, true, Math.min(240, device.selfBorrowCapMinutes + 15)))
               }
             />
           </View>
         )}
       </Card>
 
+      {/* Blocked apps */}
+      <SectionHeader>Blocked apps</SectionHeader>
       <Card>
-        <Text style={[typography.h2, { color: colors.text }]}>Blocked apps</Text>
         <Text style={[typography.caption, { color: colors.textMuted }]}>
-          Any process matching these names is killed on sight (case-insensitive). Use the .exe name
-          like <Text style={{ color: colors.text }}>steam.exe</Text>.
+          Processes killed during lock periods. Use the .exe name, e.g.{' '}
+          <Text style={{ color: colors.text }}>steam.exe</Text>.
         </Text>
         <View style={styles.inputRow}>
           <TextInput
             value={appInput}
             onChangeText={setAppInput}
             placeholder="discord.exe"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
-            style={styles.input}
+            autoCorrect={false}
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text }]}
             onSubmitEditing={addApp}
           />
-          <Button label="Add" onPress={addApp} />
+          <Button label="Add" icon="add" onPress={addApp} />
         </View>
         {device.blocklist.length === 0 ? (
-          <Text style={[typography.caption, { color: colors.textMuted }]}>
-            No apps blocked yet.
-          </Text>
+          <Text style={[typography.caption, { color: colors.textFaint }]}>No apps blocked yet.</Text>
         ) : (
           <View style={styles.chipRow}>
             {device.blocklist.map((name) => (
-              <Pressable key={name} onPress={() => removeApp(name)} style={styles.chip}>
-                <Text style={{ color: colors.text }}>{name}  ×</Text>
-              </Pressable>
+              <Chip key={name} label={name} onRemove={() => removeApp(name)} tone="danger" />
             ))}
           </View>
         )}
@@ -243,42 +242,17 @@ export default function DeviceDetail() {
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'center',
-  },
+  headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  spread: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  btnRow: { flexDirection: 'row', gap: spacing.sm },
+  inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   input: {
     flex: 1,
-    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.text,
+    paddingVertical: spacing.sm + 2,
     fontSize: 15,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

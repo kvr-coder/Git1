@@ -2,14 +2,16 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { realApi } from '../lib/api.real';
 import { AuthContext } from '../lib/auth';
 import { getApiBase, isMockMode, loadStoredServerUrl } from '../lib/config';
 import { registerForPush } from '../lib/push';
 import { KEYS, storage } from '../lib/storage';
-import { colors } from '../lib/theme';
+import { ThemeProvider, useTheme } from '../lib/ThemeContext';
 
-export default function RootLayout() {
+function RootNav() {
+  const { colors } = useTheme();
   const [signedIn, setSignedIn] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -21,8 +23,8 @@ export default function RootLayout() {
       await loadStoredServerUrl();
       console.log(
         isMockMode()
-          ? '[git1] MOCK MODE — set the Server URL in Settings'
-          : `[git1] using server: ${getApiBase()}`,
+          ? '[timeoff] DEMO MODE — set the Server URL in Settings'
+          : `[timeoff] using server: ${getApiBase()}`,
       );
       const [token, savedEmail] = await Promise.all([
         storage.get(KEYS.authToken),
@@ -49,9 +51,6 @@ export default function RootLayout() {
           try {
             token = await realApi.login(e, p);
           } catch (err) {
-            // If login fails (bad creds OR fresh server DB), try to
-            // auto-create the account. Convenient for dev / Render free
-            // tier where the DB resets on every redeploy.
             try {
               token = await realApi.register(e, p);
             } catch {
@@ -90,33 +89,39 @@ export default function RootLayout() {
     );
   }
 
+  const stackHeader = {
+    headerStyle: { backgroundColor: colors.bg },
+    headerTintColor: colors.text,
+    headerTitleStyle: { color: colors.text },
+    headerShadowVisible: false,
+    contentStyle: { backgroundColor: colors.bg },
+  };
+
   return (
     <AuthContext.Provider value={auth}>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false }}>
+      <StatusBar style={colors.mode === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" />
-        <Stack.Screen
-          name="device/[id]"
-          options={{ headerShown: true, title: 'Device', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
-        />
+        <Stack.Screen name="device/[id]" options={{ headerShown: true, title: '', ...stackHeader }} />
         <Stack.Screen
           name="pair"
-          options={{ headerShown: true, title: 'Pair device', presentation: 'modal', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
+          options={{ headerShown: true, title: 'Pair device', presentation: 'modal', ...stackHeader }}
         />
-        <Stack.Screen
-          name="schedule/[id]"
-          options={{ headerShown: true, title: 'Edit schedule', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
-        />
-        <Stack.Screen
-          name="device-bank/[id]"
-          options={{ headerShown: true, title: 'Bank history', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
-        />
-        <Stack.Screen
-          name="device-templates/[id]"
-          options={{ headerShown: true, title: 'Chore templates', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
-        />
+        <Stack.Screen name="schedule/[id]" options={{ headerShown: true, title: 'Schedule', ...stackHeader }} />
+        <Stack.Screen name="device-bank/[id]" options={{ headerShown: true, title: 'Bank history', ...stackHeader }} />
+        <Stack.Screen name="device-templates/[id]" options={{ headerShown: true, title: 'Chores', ...stackHeader }} />
       </Stack>
     </AuthContext.Provider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <RootNav />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

@@ -1,40 +1,70 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, typography } from '../lib/theme';
+import { useTheme } from '../lib/ThemeContext';
 import { formatDuration, formatRelative } from '../lib/format';
+import { radius, spacing, typography } from '../lib/theme';
 import type { Device } from '../lib/types';
 import { Card } from './Card';
 import { StatusBadge } from './StatusBadge';
+import { TimeBar } from './ui';
 
 export function DeviceCard({ device }: { device: Device }) {
-  const pct = Math.min(1, device.usedTodayMinutes / Math.max(1, device.dailyLimitMinutes));
+  const { colors } = useTheme();
+  const limit = Math.max(1, device.dailyLimitMinutes);
+  const pct = Math.min(1, device.usedTodayMinutes / limit);
+  const left = Math.max(0, device.dailyLimitMinutes - device.usedTodayMinutes);
+  const leftColor = pct >= 1 ? colors.danger : pct >= 0.8 ? colors.warning : colors.success;
+  const accent =
+    device.status === 'locked' ? colors.danger : device.status === 'offline' ? colors.border : colors.primary;
+
   return (
     <Link href={`/device/${device.id}`} asChild>
       <Pressable>
-        <Card>
-          <View style={styles.row}>
+        <Card raised accent={accent}>
+          <View style={styles.top}>
             <View style={{ flex: 1 }}>
-              <Text style={[typography.h2, { color: colors.text }]}>{device.name}</Text>
-              <Text style={[typography.caption, { color: colors.textMuted }]}>
-                {device.ownerName} · {device.platform} · {formatRelative(device.lastSeen)}
+              <Text style={[typography.h2, { color: colors.text }]} numberOfLines={1}>
+                {device.name}
+              </Text>
+              <Text style={[typography.caption, { color: colors.textMuted }]} numberOfLines={1}>
+                {device.ownerName} · seen {formatRelative(device.lastSeen)}
               </Text>
             </View>
             <StatusBadge status={device.status} />
           </View>
-          <View style={styles.barTrack}>
-            <View
-              style={[
-                styles.barFill,
-                {
-                  width: `${pct * 100}%`,
-                  backgroundColor: pct >= 1 ? colors.danger : colors.primary,
-                },
-              ]}
-            />
+
+          <View style={styles.metrics}>
+            <View>
+              <Text style={[typography.h1, { color: leftColor, fontSize: 30 }]}>
+                {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(left)}
+              </Text>
+              <Text style={[typography.caption, { color: colors.textMuted }]}>
+                {device.dailyLimitMinutes === 0 ? 'no limit today' : 'left today'}
+              </Text>
+            </View>
+            <View style={styles.rightMeta}>
+              {device.internetBlocked ? (
+                <View style={[styles.tag, { backgroundColor: colors.warningSoft }]}>
+                  <Ionicons name="globe-outline" size={13} color={colors.warning} />
+                  <Text style={[typography.tiny, { color: colors.warning }]}>NET OFF</Text>
+                </View>
+              ) : null}
+              {device.bankedMinutes > 0 ? (
+                <View style={[styles.tag, { backgroundColor: colors.successSoft }]}>
+                  <Ionicons name="wallet-outline" size={13} color={colors.success} />
+                  <Text style={[typography.tiny, { color: colors.success }]}>
+                    {device.bankedMinutes}m BANK
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
-          <Text style={[typography.caption, { color: colors.textMuted }]}>
-            {formatDuration(device.usedTodayMinutes)} of {formatDuration(device.dailyLimitMinutes)} used
-            today
+
+          <TimeBar pct={pct} />
+          <Text style={[typography.caption, { color: colors.textFaint }]}>
+            {formatDuration(device.usedTodayMinutes)} of{' '}
+            {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(device.dailyLimitMinutes)} used
           </Text>
         </Card>
       </Pressable>
@@ -43,18 +73,20 @@ export function DeviceCard({ device }: { device: Device }) {
 }
 
 const styles = StyleSheet.create({
-  row: {
+  top: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  metrics: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
   },
-  barTrack: {
-    height: 6,
+  rightMeta: { alignItems: 'flex-end', gap: spacing.xs },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: radius.pill,
-    backgroundColor: colors.surfaceAlt,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
   },
 });

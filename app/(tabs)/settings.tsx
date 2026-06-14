@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
@@ -5,11 +6,14 @@ import { ApiBanner } from '../../components/ApiBanner';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
+import { SectionHeader, Segmented } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
 import { getApiBase, setServerUrl } from '../../lib/config';
-import { colors, radius, spacing, typography } from '../../lib/theme';
+import { ThemePref, useTheme } from '../../lib/ThemeContext';
+import { radius, spacing, typography } from '../../lib/theme';
 
 export default function Settings() {
+  const { colors, pref, setPref } = useTheme();
   const { email, signOut } = useAuth();
   const router = useRouter();
   const [url, setUrl] = useState('');
@@ -32,66 +36,86 @@ export default function Settings() {
 
   return (
     <Screen>
+      <Text style={[typography.display, { color: colors.text }]}>Settings</Text>
       <ApiBanner />
-      <Text style={[typography.h1, { color: colors.text }]}>Settings</Text>
 
+      <SectionHeader>Appearance</SectionHeader>
       <Card>
-        <Text style={[typography.h2, { color: colors.text }]}>Server URL</Text>
+        <Segmented<ThemePref>
+          value={pref}
+          onChange={setPref}
+          options={[
+            { key: 'light', label: 'Light', icon: 'sunny-outline' },
+            { key: 'dark', label: 'Dark', icon: 'moon-outline' },
+            { key: 'system', label: 'Auto', icon: 'phone-portrait-outline' },
+          ]}
+        />
+      </Card>
+
+      <SectionHeader>Account</SectionHeader>
+      <Card>
+        <View style={styles.row}>
+          <Ionicons name="person-circle-outline" size={34} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>Signed in as</Text>
+            <Text style={[typography.bodyStrong, { color: colors.text }]}>{email ?? '—'}</Text>
+          </View>
+        </View>
+      </Card>
+
+      <SectionHeader>Devices</SectionHeader>
+      <Card>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h3, { color: colors.text }]}>Pair a new device</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Install the agent on the PC, then enter its 6-digit code.
+            </Text>
+          </View>
+          <Button label="Pair" icon="add" onPress={() => router.push('/pair')} />
+        </View>
+      </Card>
+
+      <SectionHeader>Connection</SectionHeader>
+      <Card>
+        <Text style={[typography.h3, { color: colors.text }]}>Server URL</Text>
         <Text style={[typography.caption, { color: colors.textMuted }]}>
-          Where your Git1 backend is running. Use the PC's LAN IP, e.g.
-          {' '}<Text style={{ color: colors.text }}>http://192.168.1.42:8080</Text>.
+          The backend address. Default points at the cloud server.
         </Text>
         <TextInput
           value={url}
           onChangeText={setUrl}
-          placeholder="http://192.168.1.42:8080"
-          placeholderTextColor={colors.textMuted}
+          placeholder="https://git1-server.onrender.com"
+          placeholderTextColor={colors.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text }]}
         />
-        <Button label="Save server URL" onPress={save} loading={saving} />
+        <Button label="Save" variant="secondary" onPress={save} loading={saving} />
         {savedAt && (
-          <Text style={[typography.caption, { color: colors.success }]}>
-            Saved. New requests use this URL immediately.
-          </Text>
+          <Text style={[typography.caption, { color: colors.success }]}>Saved ✓</Text>
         )}
       </Card>
 
-      <Card>
-        <Text style={[typography.caption, { color: colors.textMuted }]}>Signed in as</Text>
-        <Text style={[typography.body, { color: colors.text }]}>{email ?? '—'}</Text>
-      </Card>
-
-      <Card>
-        <Text style={[typography.h2, { color: colors.text }]}>Pair a new device</Text>
-        <Text style={[typography.caption, { color: colors.textMuted }]}>
-          Install the Git1 agent on your child's PC and enter the 6-digit code shown there.
-        </Text>
-        <Button label="Enter pairing code" onPress={() => router.push('/pair')} />
-      </Card>
-
-      <View style={{ marginTop: spacing.lg }}>
-        <Button label="Sign out" variant="danger" onPress={signOut} />
+      <View style={{ marginTop: spacing.md }}>
+        <Button label="Sign out" variant="danger" icon="log-out-outline" onPress={signOut} />
       </View>
 
-      <Text style={[typography.caption, { color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg }]}>
-        timeoff • OTA rev 2 ✓
+      <Text style={[typography.caption, { color: colors.textFaint, textAlign: 'center', marginTop: spacing.md }]}>
+        timeoff • v1.0 • rev 3
       </Text>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   input: {
-    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.text,
+    paddingVertical: spacing.sm + 2,
     fontSize: 15,
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
   },
 });

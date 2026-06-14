@@ -1,25 +1,25 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
+import { Chip } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatMinutes } from '../../lib/format';
-import { colors, spacing, typography } from '../../lib/theme';
+import { useTheme } from '../../lib/ThemeContext';
+import { spacing, typography } from '../../lib/theme';
 import type { Schedule } from '../../lib/types';
 
 const dayLabel = (d: string) => d[0].toUpperCase() + d.slice(1);
-
 const ACTION_SHORT: Record<string, string> = {
   lock: 'Lock',
   block_internet: 'No internet',
   block_apps: 'Block apps',
 };
-const summarizeActions = (acts: string[] | undefined) =>
-  (acts && acts.length ? acts : ['lock']).map((a) => ACTION_SHORT[a] ?? a).join(' · ');
 
 export default function Schedules() {
+  const { colors } = useTheme();
   const [items, setItems] = useState<Schedule[]>([]);
   const router = useRouter();
 
@@ -38,28 +38,54 @@ export default function Schedules() {
   return (
     <Screen>
       <View style={styles.header}>
-        <Text style={[typography.h1, { color: colors.text, flex: 1 }]}>Schedules</Text>
-        <Button label="New" onPress={() => router.push('/schedule/new')} />
+        <Text style={[typography.display, { color: colors.text, flex: 1 }]}>Schedules</Text>
+        <Pressable
+          onPress={() => router.push('/schedule/new')}
+          style={[styles.addBtn, { backgroundColor: colors.primary }]}
+        >
+          <Ionicons name="add" size={22} color={colors.primaryText} />
+        </Pressable>
       </View>
+
+      {items.length === 0 && (
+        <Card style={{ alignItems: 'center', paddingVertical: spacing.xl } as any}>
+          <Ionicons name="time-outline" size={38} color={colors.textFaint} />
+          <Text style={[typography.h3, { color: colors.text, marginTop: spacing.sm }]}>
+            No schedules yet
+          </Text>
+          <Text style={[typography.caption, { color: colors.textMuted, textAlign: 'center' }]}>
+            Add bedtime or school-hours rules. Tap + to create one.
+          </Text>
+        </Card>
+      )}
+
       {items.map((s) => (
         <Pressable key={s.id} onPress={() => router.push(`/schedule/${s.id}`)}>
-          <Card>
+          <Card accent={s.enabled ? colors.primary : colors.border}>
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <Text style={[typography.h2, { color: colors.text }]}>{s.name}</Text>
+                <Text style={[typography.h3, { color: colors.text }]}>{s.name}</Text>
                 <Text style={[typography.caption, { color: colors.textMuted }]}>
-                  {s.days.map(dayLabel).join(' ')} · {formatMinutes(s.startMinute)}–
-                  {formatMinutes(s.endMinute)}
-                </Text>
-                <Text style={[typography.caption, { color: colors.primary, marginTop: 2 }]}>
-                  Outside: {summarizeActions(s.actions)}
+                  {s.days.map(dayLabel).join(' · ')}
                 </Text>
               </View>
               <Switch
                 value={s.enabled}
                 onValueChange={() => toggle(s)}
                 trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
+                thumbColor="#fff"
               />
+            </View>
+            <View style={styles.meta}>
+              <View style={styles.timePill}>
+                <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+                <Text style={[typography.caption, { color: colors.text }]}>
+                  {formatMinutes(s.startMinute)}–{formatMinutes(s.endMinute)}
+                </Text>
+              </View>
+              {(s.actions && s.actions.length ? s.actions : ['lock']).map((a) => (
+                <Chip key={a} label={ACTION_SHORT[a] ?? a} tone="primary" />
+              ))}
             </View>
           </Card>
         </Pressable>
@@ -69,14 +95,9 @@ export default function Schedules() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  addBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs + 2 },
+  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });

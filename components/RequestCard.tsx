@@ -1,9 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../lib/ThemeContext';
+import { formatRelative } from '../lib/format';
+import { spacing, typography } from '../lib/theme';
+import type { TimeRequest } from '../lib/types';
 import { Button } from './Button';
 import { Card } from './Card';
-import { formatRelative } from '../lib/format';
-import { colors, spacing, typography } from '../lib/theme';
-import type { TimeRequest } from '../lib/types';
+import { IconBadge } from './ui';
 
 interface Props {
   request: TimeRequest;
@@ -14,35 +16,33 @@ interface Props {
 }
 
 export function RequestCard({ request, deviceName, busy, onApprove, onDeny }: Props) {
+  const { colors } = useTheme();
   return (
-    <Card>
-      <Text style={[typography.h2, { color: colors.text }]}>
-        {deviceName ?? request.deviceId} — +{request.minutes} min
-      </Text>
-      <Text style={[typography.caption, { color: colors.textMuted }]}>
-        {formatRelative(new Date(request.createdAt).toISOString())}
-      </Text>
+    <Card raised accent={colors.warning}>
+      <View style={styles.head}>
+        <IconBadge name="hand-left" color={colors.warning} soft={colors.warningSoft} />
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.h3, { color: colors.text }]}>
+            {deviceName ?? request.deviceId} wants{' '}
+            <Text style={{ color: colors.warning }}>+{request.minutes} min</Text>
+          </Text>
+          <Text style={[typography.caption, { color: colors.textMuted }]}>
+            {formatRelative(new Date(request.createdAt).toISOString())}
+          </Text>
+        </View>
+      </View>
       {request.reason ? (
-        <Text style={[typography.body, { color: colors.text, marginTop: spacing.xs }]}>
-          “{request.reason}”
-        </Text>
+        <Text style={[typography.body, { color: colors.text }]}>“{request.reason}”</Text>
       ) : null}
       <View style={styles.actions}>
-        <View style={{ flex: 1 }}>
-          <Button label="Deny" variant="secondary" onPress={onDeny} loading={busy} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button label="Approve" onPress={onApprove} loading={busy} />
-        </View>
+        <Button label="Deny" variant="danger" full onPress={onDeny} loading={busy} />
+        <Button label="Approve" variant="primary" full icon="checkmark" onPress={onApprove} loading={busy} />
       </View>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
 });

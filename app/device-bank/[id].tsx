@@ -5,7 +5,8 @@ import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { api } from '../../lib/api';
 import { formatRelative } from '../../lib/format';
-import { colors, spacing, typography } from '../../lib/theme';
+import { useTheme } from '../../lib/ThemeContext';
+import { spacing, typography } from '../../lib/theme';
 import type { BankLedgerEntry } from '../../lib/types';
 
 const labelFor = (reason: string) => {
@@ -17,6 +18,7 @@ const labelFor = (reason: string) => {
 };
 
 export default function BankHistory() {
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [entries, setEntries] = useState<BankLedgerEntry[]>([]);
 
@@ -25,7 +27,7 @@ export default function BankHistory() {
   }, [id]);
 
   return (
-    <Screen>
+    <Screen topInset={false}>
       <Text style={[typography.h1, { color: colors.text }]}>Bank history</Text>
       {entries.length === 0 && (
         <Text style={{ color: colors.textMuted }}>Nothing yet.</Text>

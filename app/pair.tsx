@@ -5,9 +5,11 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Screen } from '../components/Screen';
 import { api } from '../lib/api';
-import { colors, radius, spacing, typography } from '../lib/theme';
+import { useTheme } from '../lib/ThemeContext';
+import { radius, spacing, typography } from '../lib/theme';
 
 export default function Pair() {
+  const { colors } = useTheme();
   const router = useRouter();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,26 +33,29 @@ export default function Pair() {
   };
 
   return (
-    <Screen>
+    <Screen topInset={false}>
       <Card>
         <Text style={[typography.h2, { color: colors.text }]}>Pair a child's PC</Text>
         <Text style={[typography.caption, { color: colors.textMuted }]}>
-          1. Install the Git1 agent on the PC.{'\n'}2. The agent shows a 6-digit code.{'\n'}3. Enter
-          it below.
+          1. Install the timeoff agent on the PC.{'\n'}2. It shows a 6-digit code.{'\n'}3. Enter it
+          below.
         </Text>
       </Card>
       <View style={{ gap: spacing.sm }}>
         <TextInput
-          placeholder="123456"
-          placeholderTextColor={colors.textMuted}
+          placeholder="••••••"
+          placeholderTextColor={colors.textFaint}
           keyboardType="number-pad"
           maxLength={6}
           value={code}
           onChangeText={setCode}
-          style={styles.input}
+          style={[
+            styles.input,
+            { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+          ]}
         />
-        {error && <Text style={{ color: colors.danger }}>{error}</Text>}
-        <Button label="Pair device" onPress={submit} loading={busy} />
+        {error && <Text style={[typography.caption, { color: colors.danger }]}>{error}</Text>}
+        <Button label="Pair device" icon="link" onPress={submit} loading={busy} />
       </View>
     </Screen>
   );
@@ -58,15 +63,13 @@ export default function Pair() {
 
 const styles = StyleSheet.create({
   input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    color: colors.text,
-    fontSize: 22,
+    fontSize: 26,
     textAlign: 'center',
-    letterSpacing: 8,
+    letterSpacing: 10,
+    fontWeight: '700',
   },
 });
