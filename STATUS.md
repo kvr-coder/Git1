@@ -30,10 +30,9 @@ Parental-control system for Windows PCs, driven from an iPhone (Expo Go).
 2. Phone app talks to server over HTTPS from any network.
 3. Kid PC runs the agent (`python agent.py`, `GIT1_SERVER` env points at
    Render). Agent holds a WebSocket, receives commands + snapshots.
-4. Metro/Expo is tunnelled to the phone via a Cloudflare quick tunnel
-   (NOT ngrok — ngrok throws "Cannot read properties of undefined
-   (reading 'body')" on this setup). Cloudflare quick-tunnel URLs rotate
-   each launch, so the QR must be re-scanned every session.
+4. Metro/Expo runs in LAN mode on port 8081 — the phone must be on the
+   same Wi-Fi as the PC. (Tunneling was dropped in favour of the always-on
+   Render dashboard for remote control.)
 
 ---
 
@@ -123,14 +122,11 @@ parent web dashboard at `/`:
 ## Gotchas learned (don't repeat)
 - PowerShell ≠ cmd: `%VAR%` doesn't expand (use `$env:VAR`); `del /s /q`,
   `copy /Y`, `rmdir /s` are cmd-only (use `Remove-Item`, `Copy-Item`).
-- ngrok tunnel is broken here → use Cloudflare quick tunnels for Metro too.
 - Render healthcheck must hit `/health` (public 200), not `/devices` (401).
 - Server must `listen(PORT, '0.0.0.0')` or Render healthcheck times out.
 - `better-sqlite3` needs `@types/better-sqlite3`; `tsx` must be a prod dep
   (Render strips devDeps).
 - Agent firewall commands need Administrator → launchers self-elevate (UAC).
-- Cloudflare quick-tunnel prints scary `ERR control stream...` lines then
-  succeeds with `Registered tunnel connection` — that noise is fine.
 
 ---
 

@@ -208,7 +208,7 @@ def lock_workstation() -> bool:
 def _disconnect_session(sess: int) -> bool:
     """Lock by disconnecting the console session. Works from session 0 but
     leaves Explorer slightly unhappy after reconnect — only used as a fallback
-    when the clean impersonated LockWorkStation path fails."""
+    when the in-session tray isn't responding to lock signals."""
     try:
         ok = ctypes.windll.wtsapi32.WTSDisconnectSession(0, int(sess), False)
         if ok:
@@ -368,8 +368,8 @@ def try_recovery() -> str | None:
 
 
 def pair() -> str:
-    # Retry the initial pair/start until the server responds. The Cloudflare
-    # quick tunnel can take 10-30s after launch before DNS resolves.
+    # Retry the initial pair/start until the server responds. Render's free tier
+    # can take ~30s to wake from sleep on the first request of the day.
     code: str | None = None
     while code is None:
         try:

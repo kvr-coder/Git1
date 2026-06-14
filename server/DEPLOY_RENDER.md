@@ -27,13 +27,12 @@ Should return `{"error":"unauthorized"}`.
 
 ## Use it
 
-- **Mobile app**: Settings → Server URL → paste `https://git1-server-xxxx.onrender.com` → Save. **You set this once and never again** (unlike the rotating Cloudflare quick-tunnel URLs).
-- **Agent**: set `GIT1_SERVER` to the Render URL before launching:
+- **Mobile app**: Settings → Server URL → paste `https://git1-server-xxxx.onrender.com` → Save. **You set this once and never again** — the URL is stable.
+- **Agent**: the installer (`Install-Git1-Kid.bat`) bakes the Render URL into the service env vars automatically. To run the agent manually for testing:
   ```
   $env:GIT1_SERVER = "https://git1-server-xxxx.onrender.com"
   python agent.py
   ```
-  Or update your `Git1.bat` to use this URL instead of starting a Cloudflare tunnel.
 
 ## Caveats
 

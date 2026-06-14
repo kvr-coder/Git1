@@ -43,9 +43,9 @@ Cross-platform mobile app built with React Native + Expo. Targets Android (prima
 There are two ways to preview changes when commands are sent from the phone via Claude Code (web/mobile) and pushed to git.
 
 ### Option A — PC-as-dev-server (instant hot reload)
-Use when the PC is on. Phone connects from anywhere via tunnel.
+Use when the PC is on. Phone connects via LAN (same Wi-Fi as the PC).
 1. On the PC: `./scripts/dev-watch.sh`
-   - Auto-pulls the current branch every 5s and runs `expo start --tunnel`
+   - Auto-pulls the current branch every 5s and runs `expo start --lan`
 2. Open Expo Go on the phone, scan the QR
 3. Push from Claude → PC pulls → Metro reloads on the phone
 

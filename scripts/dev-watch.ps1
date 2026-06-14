@@ -20,12 +20,9 @@ $pullJob = Start-Job -ScriptBlock {
 } -ArgumentList $branch, $pullInterval, (Get-Location).Path
 
 try {
-    # LAN mode (phone + PC on same Wi-Fi). Set GIT1_TUNNEL=1 to use ngrok tunnel instead.
-    if ($env:GIT1_TUNNEL -eq "1") {
-        npx expo start --tunnel
-    } else {
-        npx expo start --lan
-    }
+    # LAN mode: phone + PC must be on the same Wi-Fi. Remote control happens via
+    # the Render dashboard, not through a tunnel.
+    npx expo start --lan
 }
 finally {
     Stop-Job $pullJob -ErrorAction SilentlyContinue
