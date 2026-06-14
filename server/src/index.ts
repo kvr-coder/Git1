@@ -296,19 +296,23 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
   }
   if (p.data.kind === 'lock') {
     // Parent forced a lock -> clear any active schedule override so we don't
-    // immediately unlock again on the next tick.
-    store.updateDevice(d.id, { lockedByParent: true, scheduleOverrideUntil: 0 });
-    pushSnapshotToAgent(d.id); // so the agent learns override=0 immediately
+    // immediately unlock again on the next tick. Also flip status so the
+    // dashboard reflects the new effective state straight away.
+    store.updateDevice(d.id, { lockedByParent: true, scheduleOverrideUntil: 0, status: 'locked' });
+    pushSnapshotToAgent(d.id);
   }
   if (p.data.kind === 'unlock') {
     // Unlock = clear ALL active restrictions: stop locking, lift internet block,
     // and suppress the schedule until its current window ends. (Parent's
-    // explicit "let them back on now" button.)
+    // explicit "let them back on now" button.) Also reset status='online' so the
+    // dashboard's unified lock indicator flips immediately — a leftover 'locked'
+    // status from an earlier schedule lock was making the button snap back.
     const overrideUntil = computeScheduleEndForDevice(d.id, Date.now());
     store.updateDevice(d.id, {
       lockedByParent: false,
       internetBlocked: false,
       scheduleOverrideUntil: overrideUntil,
+      status: 'online',
     });
     // Tell the agent to lift the firewall block right now (don't wait for the
     // snapshot), then push the snapshot so the schedule override applies too.
