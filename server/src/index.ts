@@ -839,40 +839,32 @@ function buildSnapshot(d: DeviceRow) {
 // when the parent presses Unlock during an active lock schedule: we treat the
 // override as expiring when that window naturally ends.
 function computeScheduleEndForDevice(deviceId: string, nowMs: number): number {
-  const scheds = store.schedulesForDevice(deviceId);
-  const d = new Date(nowMs);
-  const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][d.getDay()];
-  const todayMin = d.getHours() * 60 + d.getMinutes();
-  let bestEndMin: number | null = null;
-  for (const s of scheds) {
-    if (!s.enabled) continue;
-    if (!(s.days || []).includes(dayKey)) continue;
-    if (!(s.actions || []).some((a: string) => a === 'lock' || a === 'block_internet' || a === 'block_apps')) continue;
-    const start = s.startMinute, end = s.endMinute;
-    // Same-day window
-    if (start <= end && todayMin >= start && todayMin < end) {
-      bestEndMin = Math.max(bestEndMin ?? 0, end);
-    }
-    // Overnight window (e.g. 21:00 -> 07:00) — if currently in either side
-    if (start > end) {
-      if (todayMin >= start) {
-        // override until tomorrow's `end` minute
-        const tomorrow = new Date(nowMs); tomorrow.setDate(tomorrow.getDate()+1); tomorrow.setHours(0,0,0,0);
-        return tomorrow.getTime() + end * 60_000;
-      }
-      if (todayMin < end) {
-        const today0 = new Date(nowMs); today0.setHours(0,0,0,0);
-        return today0.getTime() + end * 60_000;
-      }
-    }
+  // Walk minute-by-minute over the next 24h: the override expires at the FIRST
+  // moment when NO enabled lock schedule is active for this device. That way,
+  // overlapping or back-to-back windows (e.g. 21–07 + 23–13 + 06–11:30) collapse
+  // into a single continuous block — Unlock keeps the PC free until ALL of them
+  // are over, instead of re-locking the instant the first one ends.
+  const scheds = store.schedulesForDevice(deviceId).filter(s =>
+    s.enabled && (s.actions || []).some((a: string) => a === 'lock' || a === 'block_internet' || a === 'block_apps')
+  );
+  const inWindow = (s: any, dayKey: string, m: number) => {
+    if (!(s.days || []).includes(dayKey)) return false;
+    const a = s.startMinute, b = s.endMinute;
+    if (a <= b) return m >= a && m < b;
+    return m >= a || m < b; // overnight wrap
+  };
+  const DAYS = ['sun','mon','tue','wed','thu','fri','sat'];
+  let cursor = new Date(nowMs);
+  const MAX_HORIZON_MIN = 24 * 60; // give up after 24h
+  for (let i = 0; i < MAX_HORIZON_MIN; i++) {
+    const dayKey = DAYS[cursor.getDay()];
+    const m = cursor.getHours() * 60 + cursor.getMinutes();
+    const anyActive = scheds.some(s => inWindow(s, dayKey, m));
+    if (!anyActive) return cursor.getTime();
+    cursor = new Date(cursor.getTime() + 60_000); // step 1 minute
   }
-  if (bestEndMin == null) {
-    // Not in any active window — 6h grace, prevents instant re-lock if a
-    // schedule starts in 1 minute.
-    return nowMs + 6 * 3600_000;
-  }
-  const today0 = new Date(nowMs); today0.setHours(0,0,0,0);
-  return today0.getTime() + bestEndMin * 60_000;
+  // Safety: schedules cover the entire next 24h — apply override for 24h max.
+  return nowMs + 24 * 3600_000;
 }
 
 function pushSnapshotToAgent(deviceId: string) {

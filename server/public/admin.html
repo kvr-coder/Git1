@@ -238,16 +238,32 @@ async function toggleNet(id, wantOn){
     await forceRefresh();
   }catch(e){ toast(e.message); await forceRefresh(); }
 }
-function paintLockBtn(id, locked){
+// Effective lock state: parent-pressed Lock OR active schedule lock.
+function lockedNow(d){ return !!(d.lockedByParent || d.status === 'locked'); }
+function lockReason(d){
+  if (d.lockedByParent) return 'Locked by you';
+  if (d.status === 'locked') return 'Locked by schedule';
+  return 'Unlocked';
+}
+function renderLockBadge(d){
+  const locked = lockedNow(d);
+  const reason = lockReason(d);
+  return `<span data-role="lockBadge" style="padding:3px 9px;border-radius:999px;background:${locked?'rgba(239,68,68,.18)':'rgba(34,197,94,.18)'};color:${locked?'#fca5a5':'#86efac'}">${locked?'🔒':'🔓'} ${reason}</span>`;
+}
+function renderNetBadge(d){
+  const blocked = !!d.internetBlocked;
+  return `<span data-role="netBadge" style="padding:3px 9px;border-radius:999px;background:${blocked?'rgba(245,158,11,.18)':'rgba(34,197,94,.18)'};color:${blocked?'#fbbf24':'#86efac'}">${blocked?'🚫':'🌐'} Internet ${blocked?'OFF':'ON'}</span>`;
+}
+function paintLockBtn(id, lockedFlag, statusOverride){
   const card = document.querySelector('#devices .card[data-device="'+id+'"]'); if(!card) return;
   const b = card.querySelector('[data-role="lockBtn"]'); if(!b) return;
+  const fakeD = { lockedByParent: !!lockedFlag, status: statusOverride || (lockedFlag?'locked':'online') };
+  const locked = lockedNow(fakeD);
   b.textContent = locked ? '🔓 Unlock' : '🔒 Lock';
   b.className = locked ? 'ok' : 'dng';
   b.setAttribute('onclick', `toggleLock('${id}',${!locked})`);
-  const s = card.querySelector('[data-role="stateLine"]'); if(!s) return;
-  const net = card.querySelector('[data-role="netBtn"]')?.textContent || '';
-  const netPart = net.includes('OFF') ? '🚫 Internet blocked' : '🌐 Internet allowed';
-  s.innerHTML = (locked?'🔒 Locked by parent':'🔓 Unlocked') + ' · ' + netPart;
+  const badge = card.querySelector('[data-role="lockBadge"]');
+  if (badge) badge.outerHTML = renderLockBadge(fakeD);
 }
 function paintNetBtn(id, blocked){
   const card = document.querySelector('#devices .card[data-device="'+id+'"]'); if(!card) return;
@@ -255,10 +271,8 @@ function paintNetBtn(id, blocked){
   b.textContent = blocked ? '🚫 Internet OFF' : '🌐 Internet ON';
   b.className = blocked ? 'warn' : 'ok';
   b.setAttribute('onclick', `toggleNet('${id}',${blocked?true:false})`);
-  const s = card.querySelector('[data-role="stateLine"]'); if(!s) return;
-  const lockBtn = card.querySelector('[data-role="lockBtn"]')?.textContent || '';
-  const lockPart = lockBtn.includes('Unlock') ? '🔒 Locked by parent' : '🔓 Unlocked';
-  s.innerHTML = lockPart + ' · ' + (blocked?'🚫 Internet blocked':'🌐 Internet allowed');
+  const badge = card.querySelector('[data-role="netBadge"]');
+  if (badge) badge.outerHTML = renderNetBadge({ internetBlocked: !!blocked });
 }
 async function resolve(kind, id, status, minutes){
   const body = minutes!=null ? {status,minutes} : {status};
@@ -382,7 +396,7 @@ function updateDeviceStatsInPlace(list){
     if (tamper) tamper.style.display = d.tamperSuspected ? '' : 'none';
     // Reflect authoritative state on the toggles, so the button label/colour
     // matches reality even if the agent rejected/applied the command.
-    paintLockBtn(d.id, !!d.lockedByParent);
+    paintLockBtn(d.id, !!d.lockedByParent, d.status);
     paintNetBtn(d.id, !!d.internetBlocked);
   }
 }
@@ -410,16 +424,16 @@ function renderDevices(list){
       <div class="mut" data-role="stats">${fmt(d.usedTodayMinutes)} / ${fmt(d.dailyLimitMinutes)} today · bank ${fmt(d.bankedMinutes)}</div>
 
       <div class="btns">
-        <button data-role="lockBtn" class="${d.lockedByParent?'ok':'dng'}" onclick="toggleLock('${d.id}',${!d.lockedByParent})">
-          ${d.lockedByParent?'🔓 Unlock':'🔒 Lock'}
+        <button data-role="lockBtn" class="${(d.lockedByParent || d.status==='locked') ? 'ok':'dng'}" onclick="toggleLock('${d.id}',${!(d.lockedByParent || d.status==='locked')})">
+          ${(d.lockedByParent || d.status==='locked') ? '🔓 Unlock' : '🔒 Lock'}
         </button>
         <button class="sec" onclick="cmd('${d.id}','grant_minutes',{minutes:15})">+15 min</button>
         <button data-role="netBtn" class="${net?'warn':'ok'}" onclick="toggleNet('${d.id}',${net?false:true})">
           ${net?'🚫 Internet OFF':'🌐 Internet ON'}
         </button>
       </div>
-      <div class="mut" data-role="stateLine" style="font-size:12px;margin-top:6px">
-        ${d.lockedByParent ? '🔒 Locked by parent' : (d.tamperSuspected ? '' : '🔓 Unlocked')} · ${net ? '🚫 Internet blocked' : '🌐 Internet allowed'}
+      <div class="mut" data-role="stateLine" style="font-size:13px;margin-top:8px;display:flex;flex-wrap:wrap;gap:10px">
+        ${renderLockBadge(d)} ${renderNetBadge(d)}
       </div>
 
       <details ${OPEN_PANELS.has(d.id)?'open':''} style="margin-top:12px" ontoggle="this.open?OPEN_PANELS.add('${d.id}'):OPEN_PANELS.delete('${d.id}')">
