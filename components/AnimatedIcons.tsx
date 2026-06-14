@@ -98,6 +98,41 @@ export function RingingBell({
   );
 }
 
+// ─── More Lottie wrappers ──────────────────────────────────
+
+export function CalendarIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/calendar.json')} style={{ width: size, height: size }} />;
+}
+export function GearIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/gear.json')} style={{ width: size, height: size }} />;
+}
+export function PulseLineIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/pulse.json')} style={{ width: size, height: size }} />;
+}
+export function StarIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/star.json')} style={{ width: size, height: size }} />;
+}
+export function CoinIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/coin.json')} style={{ width: size, height: size }} />;
+}
+export function HomeIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/home.json')} style={{ width: size, height: size }} />;
+}
+export function LaptopIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/laptop.json')} style={{ width: size, height: size }} />;
+}
+export function DesktopIcon({ size = 28 }: { size?: number }) {
+  return <LottieView autoPlay loop source={require('../assets/lottie/desktop.json')} style={{ width: size, height: size }} />;
+}
+/** One-shot check that draws itself when `trigger` increments. */
+export function CheckBurst({ size = 28, trigger }: { size?: number; trigger: number }) {
+  return (
+    <View key={trigger} style={{ width: size, height: size }}>
+      <LottieView autoPlay loop={false} source={require('../assets/lottie/check.json')} style={{ width: size, height: size }} />
+    </View>
+  );
+}
+
 /** Subtle "breathing" pulse on the online status dot. */
 export function HeartbeatDot({ size = 8, color }: { size?: number; color: string }) {
   const s = useRef(new Animated.Value(1)).current;
