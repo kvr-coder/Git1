@@ -12,4 +12,5 @@ export const KEYS = {
   pushToken: 'git1.pushToken',
   serverUrl: 'git1.serverUrl',
   themePref: 'git1.themePref',
+  activityRetention: 'git1.activityRetentionDays',
 };

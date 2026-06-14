@@ -33,6 +33,11 @@ export function DeviceCard({ device }: { device: Device }) {
             </View>
             <StatusBadge status={device.status} />
           </View>
+          {/* Affordance: make it obvious the whole card is tappable. */}
+          <View style={styles.tapHint}>
+            <Text style={[typography.tiny, { color: colors.textFaint }]}>TAP TO MANAGE</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </View>
 
           <View style={styles.metrics}>
             <View>
@@ -81,6 +86,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   rightMeta: { alignItems: 'flex-end', gap: spacing.xs },
+  tapHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 2,
+    marginTop: 2,
+  },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',

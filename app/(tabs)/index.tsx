@@ -81,7 +81,14 @@ export default function Home() {
   const nameOf = (deviceId: string) => devices.find((d) => d.id === deviceId)?.name;
   const attention = requests.length + chores.length;
   const onlineCount = devices.filter((d) => d.status !== 'offline').length;
-  const name = email ? email.split('@')[0] : 'there';
+  // First word of the email's local part — drops surnames after dots/underscores
+  // (e.g. "linas.kvaraciejus@…" → "linas"). Falls back to "there".
+  const name = (() => {
+    if (!email) return 'there';
+    const local = email.split('@')[0];
+    const first = local.split(/[._-]/)[0];
+    return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'there';
+  })();
 
   return (
     <Screen refreshing={refreshing} onRefresh={onPull}>
@@ -145,18 +152,34 @@ export default function Home() {
       <SectionHeader>Devices</SectionHeader>
       {devices.length === 0 ? (
         <Pressable onPress={() => router.push('/pair')}>
-          <Card style={{ alignItems: 'center', paddingVertical: spacing.xl } as any}>
-            <Ionicons name="add-circle-outline" size={40} color={colors.primary} />
-            <Text style={[typography.h3, { color: colors.text, marginTop: spacing.sm }]}>
+          <Card raised accent={colors.primary} style={{ alignItems: 'center', paddingVertical: spacing.xl } as any}>
+            <View style={[styles.bigIcon, { backgroundColor: colors.primarySoft }]}>
+              <Ionicons name="add" size={32} color={colors.primary} />
+            </View>
+            <Text style={[typography.h2, { color: colors.text, marginTop: spacing.sm }]}>
               Pair your first device
             </Text>
-            <Text style={[typography.caption, { color: colors.textMuted, textAlign: 'center' }]}>
-              Install the agent on your kid's PC, then tap here to enter the code.
+            <Text style={[typography.caption, { color: colors.textMuted, textAlign: 'center', marginTop: 2 }]}>
+              Install the agent on the kid's PC, then tap here to enter the 6-digit code it shows.
             </Text>
+            <View style={{ marginTop: spacing.md }}>
+              <Text style={[typography.bodyStrong, { color: colors.primary }]}>Start setup →</Text>
+            </View>
           </Card>
         </Pressable>
       ) : (
-        devices.map((d) => <DeviceCard key={d.id} device={d} />)
+        <>
+          {devices.map((d) => <DeviceCard key={d.id} device={d} />)}
+          {/* Always-visible CTA so adding another PC isn't buried in Settings. */}
+          <Pressable onPress={() => router.push('/pair')}>
+            <View style={[styles.addRow, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}>
+              <Ionicons name="add" size={20} color={colors.primary} />
+              <Text style={[typography.bodyStrong, { color: colors.primary }]}>
+                Pair another device
+              </Text>
+            </View>
+          </Pressable>
+        </>
       )}
     </Screen>
   );
@@ -164,4 +187,21 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', gap: spacing.sm },
+  bigIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: 'dashed',
+  },
 });
