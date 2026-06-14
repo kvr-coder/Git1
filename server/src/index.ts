@@ -825,6 +825,10 @@ function buildSnapshot(d: DeviceRow) {
     blocklist: d.blocklist,
     alwaysBlocklist: d.alwaysBlocklist,
     internetBlocked: d.internetBlocked,
+    // Parent's chosen daily limit (the BASE, in minutes). The agent reconciles
+    // its own usage.limit_minutes to this on every snapshot so a value the kid
+    // dashboard shows (e.g. 4h) can't drift from what the parent app shows (2h).
+    dailyLimitMinutes: d.dailyLimitMinutes,
     selfBorrowEnabled: d.selfBorrowEnabled,
     selfBorrowCapMinutes: d.selfBorrowCapMinutes,
     bankedMinutes: d.bankedMinutes,

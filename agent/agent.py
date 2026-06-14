@@ -555,6 +555,14 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     SCHEDULE_OVERRIDE["untilMs"] = int(msg.get("scheduleOverrideUntil") or 0)
     if "internetBlocked" in msg:
         PARENT_NET_BLOCK["value"] = bool(msg.get("internetBlocked", False))
+    # Reconcile today's limit to the parent's chosen base value. Without this,
+    # local accumulation from past grants/bank spends made the kid see e.g. 4h
+    # while the parent app showed 2h — two sources of truth disagreeing.
+    if "dailyLimitMinutes" in msg:
+        try:
+            usage.set_limit(int(msg.get("dailyLimitMinutes") or 0))
+        except Exception:
+            pass
     if persist:
         try:
             save_json(POLICY_PATH, {
