@@ -13,12 +13,17 @@ import { api } from '../../lib/api';
 import { useTheme } from '../../lib/ThemeContext';
 import { spacing, typography } from '../../lib/theme';
 import type { ChoreRequest, Device, TimeRequest } from '../../lib/types';
+import { AnimatedNumber, BounceIn } from '../../components/animated';
+
+function greetingMeta(): { text: string; icon: keyof typeof Ionicons.glyphMap; tint: 'morning' | 'day' | 'evening' } {
+  const h = new Date().getHours();
+  if (h < 12) return { text: 'Good morning', icon: 'sunny', tint: 'morning' };
+  if (h < 18) return { text: 'Good afternoon', icon: 'partly-sunny', tint: 'day' };
+  return { text: 'Good evening', icon: 'moon', tint: 'evening' };
+}
 
 function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
+  return greetingMeta().text;
 }
 
 export default function Home() {
@@ -90,35 +95,64 @@ export default function Home() {
     return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'there';
   })();
 
+  const meta = greetingMeta();
+  const greetingColor = meta.tint === 'morning' ? colors.warning : meta.tint === 'day' ? colors.info : colors.primary;
+
   return (
     <Screen refreshing={refreshing} onRefresh={onPull}>
       {/* Greeting */}
-      <View style={{ marginBottom: spacing.xs }}>
-        <Text style={[typography.caption, { color: colors.textMuted }]}>{greeting()},</Text>
-        <Text style={[typography.display, { color: colors.text }]} numberOfLines={1}>
-          {name}
-        </Text>
+      <View style={{ marginBottom: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <View style={[styles.greetIcon, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Ionicons name={meta.icon} size={22} color={greetingColor} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.caption, { color: colors.textMuted }]}>{meta.text},</Text>
+          <Text style={[typography.display, { color: colors.text }]} numberOfLines={1}>
+            {name}
+          </Text>
+        </View>
       </View>
 
       {/* Summary strip */}
       <View style={styles.summaryRow}>
         <Card style={{ flex: 1 } as any}>
-          <Text style={[typography.stat, { color: colors.text, fontSize: 28 }]}>
-            {onlineCount}/{devices.length || 0}
-          </Text>
-          <Text style={[typography.caption, { color: colors.textMuted }]}>devices online</Text>
+          <View style={styles.summaryHead}>
+            <Ionicons name="desktop-outline" size={16} color={colors.textMuted} />
+            <Text style={[typography.tiny, { color: colors.textFaint }]}>DEVICES</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+            <AnimatedNumber
+              value={onlineCount}
+              format={(n) => Math.round(n).toString()}
+              style={[typography.stat, { color: colors.text, fontSize: 28 }]}
+            />
+            <Text style={[typography.bodyStrong, { color: colors.textMuted }]}>
+              / {devices.length || 0}
+            </Text>
+          </View>
+          <Text style={[typography.caption, { color: colors.textMuted }]}>online</Text>
         </Card>
-        <Card style={{ flex: 1 } as any} accent={attention ? colors.warning : undefined}>
-          <Text
-            style={[
-              typography.stat,
-              { color: attention ? colors.warning : colors.text, fontSize: 28 },
-            ]}
-          >
-            {attention}
-          </Text>
-          <Text style={[typography.caption, { color: colors.textMuted }]}>need your reply</Text>
-        </Card>
+        <BounceIn trigger={attention} style={{ flex: 1 }}>
+          <Card style={{ flex: 1 } as any} accent={attention ? colors.warning : undefined}>
+            <View style={styles.summaryHead}>
+              <Ionicons
+                name={attention ? 'notifications' : 'notifications-outline'}
+                size={16}
+                color={attention ? colors.warning : colors.textMuted}
+              />
+              <Text style={[typography.tiny, { color: colors.textFaint }]}>INBOX</Text>
+            </View>
+            <AnimatedNumber
+              value={attention}
+              format={(n) => Math.round(n).toString()}
+              style={[
+                typography.stat,
+                { color: attention ? colors.warning : colors.text, fontSize: 28 },
+              ]}
+            />
+            <Text style={[typography.caption, { color: colors.textMuted }]}>need your reply</Text>
+          </Card>
+        </BounceIn>
       </View>
 
       {/* Needs attention */}
@@ -187,6 +221,15 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', gap: spacing.sm },
+  summaryHead: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+  greetIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   bigIcon: {
     width: 56,
     height: 56,

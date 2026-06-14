@@ -5,9 +5,9 @@ import { useTheme } from '../lib/ThemeContext';
 import { formatDuration, formatRelative } from '../lib/format';
 import { radius, spacing, typography } from '../lib/theme';
 import type { Device } from '../lib/types';
+import { AnimatedBar, AnimatedNumber } from './animated';
 import { Card } from './Card';
 import { StatusBadge } from './StatusBadge';
-import { TimeBar } from './ui';
 
 export function DeviceCard({ device }: { device: Device }) {
   const { colors } = useTheme();
@@ -17,47 +17,52 @@ export function DeviceCard({ device }: { device: Device }) {
   const leftColor = pct >= 1 ? colors.danger : pct >= 0.8 ? colors.warning : colors.success;
   const accent =
     device.status === 'locked' ? colors.danger : device.status === 'offline' ? colors.border : colors.primary;
+  const platformIcon: keyof typeof Ionicons.glyphMap =
+    device.platform === 'macos' ? 'logo-apple' : device.platform === 'linux' ? 'logo-tux' : 'logo-windows';
 
   return (
     <Link href={`/device/${device.id}`} asChild>
       <Pressable>
         <Card raised accent={accent}>
           <View style={styles.top}>
-            <View style={{ flex: 1 }}>
-              <Text style={[typography.h2, { color: colors.text }]} numberOfLines={1}>
+            <View style={styles.titleRow}>
+              <Ionicons name={platformIcon} size={18} color={colors.textMuted} />
+              <Text style={[typography.h2, { color: colors.text, flex: 1 }]} numberOfLines={1}>
                 {device.name}
-              </Text>
-              <Text style={[typography.caption, { color: colors.textMuted }]} numberOfLines={1}>
-                {device.ownerName} · seen {formatRelative(device.lastSeen)}
               </Text>
             </View>
             <StatusBadge status={device.status} />
           </View>
-          {/* Affordance: make it obvious the whole card is tappable. */}
-          <View style={styles.tapHint}>
-            <Text style={[typography.tiny, { color: colors.textFaint }]}>TAP TO MANAGE</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-          </View>
+          <Text style={[typography.caption, { color: colors.textMuted }]} numberOfLines={1}>
+            {device.ownerName} · seen {formatRelative(device.lastSeen)}
+          </Text>
 
           <View style={styles.metrics}>
-            <View>
-              <Text style={[typography.h1, { color: leftColor, fontSize: 30 }]}>
-                {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(left)}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              <Ionicons name="time-outline" size={20} color={leftColor} />
+              {device.dailyLimitMinutes === 0 ? (
+                <Text style={[typography.h1, { color: leftColor, fontSize: 30 }]}>∞</Text>
+              ) : (
+                <AnimatedNumber
+                  value={left}
+                  format={(n) => formatDuration(Math.max(0, Math.round(n)))}
+                  style={[typography.h1, { color: leftColor, fontSize: 30 }]}
+                />
+              )}
               <Text style={[typography.caption, { color: colors.textMuted }]}>
-                {device.dailyLimitMinutes === 0 ? 'no limit today' : 'left today'}
+                {device.dailyLimitMinutes === 0 ? 'no limit' : 'left'}
               </Text>
             </View>
             <View style={styles.rightMeta}>
               {device.internetBlocked ? (
                 <View style={[styles.tag, { backgroundColor: colors.warningSoft }]}>
-                  <Ionicons name="globe-outline" size={13} color={colors.warning} />
+                  <Ionicons name="cloud-offline-outline" size={13} color={colors.warning} />
                   <Text style={[typography.tiny, { color: colors.warning }]}>NET OFF</Text>
                 </View>
               ) : null}
               {device.bankedMinutes > 0 ? (
                 <View style={[styles.tag, { backgroundColor: colors.successSoft }]}>
-                  <Ionicons name="wallet-outline" size={13} color={colors.success} />
+                  <Ionicons name="wallet" size={13} color={colors.success} />
                   <Text style={[typography.tiny, { color: colors.success }]}>
                     {device.bankedMinutes}m BANK
                   </Text>
@@ -66,11 +71,24 @@ export function DeviceCard({ device }: { device: Device }) {
             </View>
           </View>
 
-          <TimeBar pct={pct} />
-          <Text style={[typography.caption, { color: colors.textFaint }]}>
-            {formatDuration(device.usedTodayMinutes)} of{' '}
-            {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(device.dailyLimitMinutes)} used
-          </Text>
+          <AnimatedBar
+            pct={pct}
+            track={colors.track}
+            green={colors.success}
+            amber={colors.warning}
+            red={colors.danger}
+          />
+
+          <View style={styles.bottomRow}>
+            <Text style={[typography.caption, { color: colors.textFaint }]}>
+              {formatDuration(device.usedTodayMinutes)} of{' '}
+              {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(device.dailyLimitMinutes)} used
+            </Text>
+            <View style={styles.tapHint}>
+              <Text style={[typography.tiny, { color: colors.primary }]}>MANAGE</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+            </View>
+          </View>
         </Card>
       </Pressable>
     </Link>
@@ -79,6 +97,7 @@ export function DeviceCard({ device }: { device: Device }) {
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   metrics: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -86,13 +105,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   rightMeta: { alignItems: 'flex-end', gap: spacing.xs },
-  tapHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 2,
-    marginTop: 2,
-  },
+  bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  tapHint: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',

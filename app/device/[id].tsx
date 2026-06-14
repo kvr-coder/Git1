@@ -12,6 +12,7 @@ import { formatDuration, formatRelative } from '../../lib/format';
 import { useTheme } from '../../lib/ThemeContext';
 import { radius, spacing, typography } from '../../lib/theme';
 import type { Device } from '../../lib/types';
+import { AnimatedBar, AnimatedNumber, BounceIn } from '../../components/animated';
 
 export default function DeviceDetail() {
   const { colors } = useTheme();
@@ -81,22 +82,39 @@ export default function DeviceDetail() {
       {/* Time hero */}
       <Card raised>
         <View style={styles.heroRow}>
-          <View>
-            <Text style={[typography.stat, { color: leftColor }]}>
-              {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(left)}
-            </Text>
-            <Text style={[typography.caption, { color: colors.textMuted }]}>
-              {device.dailyLimitMinutes === 0 ? 'no limit set' : 'left today'}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+            <Ionicons name="hourglass-outline" size={28} color={leftColor} />
+            {device.dailyLimitMinutes === 0 ? (
+              <Text style={[typography.stat, { color: leftColor }]}>∞</Text>
+            ) : (
+              <AnimatedNumber
+                value={left}
+                format={(n) => formatDuration(Math.max(0, Math.round(n)))}
+                style={[typography.stat, { color: leftColor }]}
+              />
+            )}
           </View>
           {device.bankedMinutes > 0 && (
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={[typography.h1, { color: colors.success }]}>{device.bankedMinutes}m</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="wallet" size={18} color={colors.success} />
+                <Text style={[typography.h1, { color: colors.success }]}>{device.bankedMinutes}m</Text>
+              </View>
               <Text style={[typography.caption, { color: colors.textMuted }]}>in bank</Text>
             </View>
           )}
         </View>
-        <TimeBar pct={pct} height={12} />
+        <Text style={[typography.caption, { color: colors.textMuted, marginTop: -4 }]}>
+          {device.dailyLimitMinutes === 0 ? 'no limit set' : 'left today'}
+        </Text>
+        <AnimatedBar
+          pct={pct}
+          height={12}
+          track={colors.track}
+          green={colors.success}
+          amber={colors.warning}
+          red={colors.danger}
+        />
         <Text style={[typography.caption, { color: colors.textFaint }]}>
           {formatDuration(device.usedTodayMinutes)} of{' '}
           {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(device.dailyLimitMinutes)} used today
@@ -106,7 +124,26 @@ export default function DeviceDetail() {
       {/* Primary controls */}
       <SectionHeader>Right now</SectionHeader>
       <Card>
-        <Text style={[typography.caption, { color: colors.textMuted }]}>Screen</Text>
+        <View style={styles.spread}>
+          <Text style={[typography.caption, { color: colors.textMuted, flex: 1 }]}>Screen</Text>
+          <BounceIn trigger={locked}>
+            <View
+              style={[
+                styles.statePill,
+                { backgroundColor: locked ? colors.dangerSoft : colors.successSoft },
+              ]}
+            >
+              <Ionicons
+                name={locked ? 'lock-closed' : 'lock-open'}
+                size={14}
+                color={locked ? colors.danger : colors.success}
+              />
+              <Text style={[typography.tiny, { color: locked ? colors.danger : colors.success }]}>
+                {locked ? 'LOCKED NOW' : 'UNLOCKED NOW'}
+              </Text>
+            </View>
+          </BounceIn>
+        </View>
         <Segmented
           value={locked ? 'locked' : 'open'}
           onChange={(v) =>
@@ -118,7 +155,33 @@ export default function DeviceDetail() {
           ]}
         />
         <View style={{ height: spacing.xs }} />
-        <Text style={[typography.caption, { color: colors.textMuted }]}>Internet</Text>
+        <View style={styles.spread}>
+          <Text style={[typography.caption, { color: colors.textMuted, flex: 1 }]}>Internet</Text>
+          <BounceIn trigger={device.internetBlocked}>
+            <View
+              style={[
+                styles.statePill,
+                {
+                  backgroundColor: device.internetBlocked ? colors.warningSoft : colors.successSoft,
+                },
+              ]}
+            >
+              <Ionicons
+                name={device.internetBlocked ? 'cloud-offline' : 'cloud-done'}
+                size={14}
+                color={device.internetBlocked ? colors.warning : colors.success}
+              />
+              <Text
+                style={[
+                  typography.tiny,
+                  { color: device.internetBlocked ? colors.warning : colors.success },
+                ]}
+              >
+                {device.internetBlocked ? 'BLOCKED' : 'ALLOWED'}
+              </Text>
+            </View>
+          </BounceIn>
+        </View>
         <Segmented
           value={device.internetBlocked ? 'off' : 'on'}
           onChange={(v) => run(() => api.setInternetBlocked(device.id, v === 'off'))}
@@ -245,6 +308,14 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   spread: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  statePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
   btnRow: { flexDirection: 'row', gap: spacing.sm },
   inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   input: {
