@@ -142,10 +142,10 @@ export default function Wisdom() {
           <SectionHeader>Boys vs girls — what the data says</SectionHeader>
           <Card>
             <Text style={[typography.body, { color: colors.text }]}>
-              The headline numbers ("teens average X hours") hide big sex × age differences. The strongest
-              finding is that <Text style={{ fontWeight: '700' }}>sensitivity to social media peaks in
-              different windows for girls and boys</Text>. Pick the age band above and the cards below
-              filter accordingly.
+              On a home PC the patterns split: <Text style={{ fontWeight: '700' }}>boys skew to
+              competitive gaming time-loss; girls skew to social/messaging</Text> (Discord, group chats)
+              even on the desktop. The risks — and the right limits — differ. Pick the age band above to
+              filter.
             </Text>
           </Card>
           {sexTips.map((t) => (

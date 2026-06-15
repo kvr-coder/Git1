@@ -223,24 +223,33 @@ export const WISDOM: Tip[] = [
     source: 'WHO ICD-11 6C51 · Petry et al. 2014',
   },
 
-  // ── Social media / teen girls ────────────────────────────
+  // ── Gaming on the PC (the core use-case) ─────────────────
   {
-    id: 'sm-girls',
-    title: 'Social media + appearance content: real, modest effect on girls',
+    id: 'game-stop-points',
+    title: 'Games are built to be hard to stop — use natural breakpoints',
     body:
-      'Internal Meta research: 32% of teen girls said Instagram made body-image feelings worse. Effect sizes in academic studies are smaller and contested — but the appearance-comparison mechanism is well-replicated.',
-    ages: ['10-13', '14-16'],
-    tags: ['social'],
-    source: 'Fardouly & Vartanian 2016 · WSJ Facebook Files 2021',
+      'Ranked matches, raids and queues have no clean “end”. A cut-off at a random minute lands mid-game and feels like a punishment. Tie limits to match/round ends where you can, and always give a 5–10 min heads-up so they can save or finish — this is exactly what the “save your game” warning does.',
+    ages: ['6-9', '10-13', '14-16'],
+    tags: ['gaming', 'schedule'],
+    source: 'King & Delfabbro 2018, structural game features',
   },
   {
-    id: 'passive-active',
-    title: 'Passive scrolling hurts more than active use',
+    id: 'game-variable-reward',
+    title: 'Why “just one more game” is real, not defiance',
     body:
-      'Lab + diary studies show scrolling-others’-posts predicts worse mood (mediated by envy). Posting, messaging, video chats don’t. If your teen needs social media, encourage the active kind.',
-    ages: ['14-16'],
-    tags: ['social'],
-    source: 'Verduyn et al. 2015/2017 · Kross et al. 2013',
+      'Loot drops, ranked progress and battle-pass timers run on variable-ratio reward schedules — the most habit-forming pattern known. The pull is engineered. Naming it with your kid (“the game is designed to keep you going”) works better than treating it as a willpower failure.',
+    ages: ['10-13', '14-16'],
+    tags: ['gaming', 'general'],
+    source: 'Skinner variable-ratio · King & Delfabbro 2018',
+  },
+  {
+    id: 'game-co-play',
+    title: 'Play with your younger kid before you police it',
+    body:
+      'For under-10s, sitting in on Minecraft or Roblox for 15 minutes teaches you what they’re doing and makes limits feel shared, not imposed. Co-use is the one mediation style that consistently predicts better outcomes.',
+    ages: ['6-9'],
+    tags: ['gaming', 'general'],
+    source: 'Chen & Shi 2018 meta-analysis (active/co-use mediation)',
   },
 
   // ── Blue-light hype ──────────────────────────────────────
@@ -289,54 +298,44 @@ export const WISDOM: Tip[] = [
     url: 'https://journals.sagepub.com/doi/10.1177/0956797616678438',
   },
 
-  // ── Big sex-difference card ──────────────────────────────
+  // ── Boys vs girls on a PC ────────────────────────────────
   {
-    id: 'sex-diff-windows',
-    title: 'Girls and boys have different sensitive windows',
+    id: 'pc-boys-gaming',
+    title: 'Boys: the risk is competitive gaming time-loss',
     body:
-      'A study of 84,011 UK teens found social-media use predicted lower life satisfaction 1 year later only inside narrow age windows: girls aged 11–13, boys aged 14–15, and then both around 19. Same number of minutes, very different ages.',
-    ages: ['10-13', '14-16'],
-    tags: ['sex-diff', 'social'],
-    source: 'Orben, Przybylski, Blakemore et al. 2022, Nature Communications',
-    url: 'https://www.nature.com/articles/s41467-022-29296-3',
-  },
-  {
-    id: 'sex-diff-girls-depression',
-    title: 'Girls’ depression rose more than boys’ post-2012',
-    body:
-      'Across 506,820 US adolescents, depressive symptoms among teen girls rose with effect size d≈0.27 from 2010–2015. The magnitude is contested; the *direction* of the gender gap is not.',
-    ages: ['10-13', '14-16'],
-    tags: ['sex-diff', 'social'],
-    source: 'Twenge et al. 2018, Clinical Psychological Science',
-    url: 'https://journals.sagepub.com/doi/10.1177/2167702617723376',
-  },
-  {
-    id: 'sex-diff-gaming',
-    title: 'Gaming concerns lean toward boys',
-    body:
-      'In matched samples, boys with ASD averaged 2.1 hr/day of games vs 1.2 hr/day for typically-developing boys; problematic-use scores are also higher in boys overall. Doesn’t mean girls are immune — but the base rate differs.',
+      'On a home PC, boys skew heavily to competitive multiplayer (Fortnite, CS, League). Problematic-use scores run higher in boys, and the “lost track of time” pattern clusters around ranked play. Watch session length and what it displaces — sleep, homework — not just total hours.',
     ages: ['10-13', '14-16'],
     tags: ['sex-diff', 'gaming'],
-    source: 'Mazurek & Engelhardt 2013, Pediatrics',
+    source: 'Mazurek & Engelhardt 2013 · WHO gaming-disorder 2019',
     url: 'https://publications.aap.org/pediatrics/article/132/2/260',
   },
   {
-    id: 'passive-vs-active',
-    title: 'Passive scrolling hurts more than active use',
+    id: 'pc-girls-social',
+    title: 'Girls: the pull is social, even on the desktop',
     body:
-      'Lab + diary studies: scrolling-others’-posts predicts worse mood (mediated by envy); posting, messaging, video chats don’t. If your teen needs social media, encourage the active kind.',
+      'Girls more often use the PC for Discord, group chats and browser social. The healthy-vs-harmful split is passive scrolling (worse for mood) vs active chatting with friends they actually know (fine). Aim limits at the feed-scrolling, keep the real friend contact.',
     ages: ['10-13', '14-16'],
-    tags: ['social'],
-    source: 'Verduyn et al. 2015/2017',
+    tags: ['sex-diff', 'social'],
+    source: 'Verduyn et al. 2015/2017 (passive vs active use)',
     url: 'https://ppw.kuleuven.be/okp/_pdf/Verduyn2015PFUUA.pdf',
+  },
+  {
+    id: 'sex-diff-windows',
+    title: 'Sensitive windows differ by sex',
+    body:
+      'A study of 84,011 UK teens found social use predicted lower life-satisfaction a year later only in narrow windows: girls ~11–13, boys ~14–15. If you tighten anything, tighten it most during your kid’s window.',
+    ages: ['10-13', '14-16'],
+    tags: ['sex-diff'],
+    source: 'Orben, Przybylski, Blakemore et al. 2022, Nature Communications',
+    url: 'https://www.nature.com/articles/s41467-022-29296-3',
   },
   {
     id: 'between-person-variance',
     title: 'Your kid is not the average kid',
     body:
-      'A 7-day daily-diary study found ~44% of teens showed no effect of social media on mood, ~10% strongly negative, ~46% slightly positive. Watch *your* kid, not the headline average.',
-    ages: ['10-13', '14-16'],
-    tags: ['general', 'social'],
+      'A 7-day daily-diary study found ~44% of teens showed no mood effect from screen use, ~10% clearly negative, ~46% slightly positive. Watch how your kid actually acts after a session — wired and irritable, or fine — not the headline average.',
+    ages: ['6-9', '10-13', '14-16'],
+    tags: ['general'],
     source: 'Beyens et al. 2020, Scientific Reports',
     url: 'https://www.nature.com/articles/s41598-020-67727-7',
   },
@@ -361,6 +360,66 @@ export const WISDOM: Tip[] = [
     tags: ['autism'],
     source: 'Bellini & Akullian 2007, Exceptional Children',
     url: 'https://journals.sagepub.com/doi/10.1177/001440290707300301',
+  },
+
+  // ── Age 6–9: routines, countdowns, co-play ───────────────
+  {
+    id: 'young-countdowns',
+    title: '6–9: countdowns, not cut-offs',
+    body:
+      'Under-10s have little time-sense and almost no impulse brake yet. A visible “10 minutes left → 5 → 2, save your game” sequence prevents the meltdown that a sudden lock causes. The agent’s warnings are built for exactly this.',
+    ages: ['6-9'],
+    tags: ['gaming', 'schedule', 'general'],
+    source: 'Executive-function development · Best & Miller 2010',
+  },
+  {
+    id: 'young-same-time',
+    title: '6–9: same time every day beats a minutes budget',
+    body:
+      'Young kids follow rhythms, not allowances. “PC after homework until dinner” is easier to keep than “90 minutes somewhere today”. Predictability lowers the daily negotiation and the fights.',
+    ages: ['6-9'],
+    tags: ['schedule', 'daily-limit'],
+    source: 'Routine-based mediation · AAP Family Media Plan',
+  },
+
+  // ── Age 10–13: homework displacement, negotiation ────────
+  {
+    id: 'tween-displacement',
+    title: '10–13: protect sleep and homework first',
+    body:
+      'At this age the harm signal isn’t hours of gaming — it’s what the gaming pushes out. Lock the schedule around homework and bedtime and let the rest be flexible. Kids who help set the rule break it less.',
+    ages: ['10-13'],
+    tags: ['schedule', 'bedtime', 'general'],
+    source: 'Steinberg et al. 1994 · displacement hypothesis',
+  },
+  {
+    id: 'tween-negotiate',
+    title: '10–13: negotiate the number together',
+    body:
+      'This is the age to move from “my rule” to “our rule”. Co-set the daily limit and the request flow. The kid-side dashboard (their bank, their request button) is the tool that makes the negotiation real instead of theoretical.',
+    ages: ['10-13'],
+    tags: ['requests', 'bank', 'general'],
+    source: 'Van Petegem et al. 2015 (co-constructed rules reduce defiance)',
+  },
+
+  // ── Age 14–16: hand off self-regulation ──────────────────
+  {
+    id: 'teen-handoff',
+    title: '14–16: start handing the controls over',
+    body:
+      'The goal by 16 is a kid who self-regulates, not one who’s externally policed. Loosen caps as they demonstrate it; keep transparency and the conversation. Surveillance that tightens with age predicts more sneaking, not less.',
+    ages: ['14-16'],
+    tags: ['general', 'requests'],
+    source: 'Stattin & Kerr 2000 · self-determination theory',
+  },
+  {
+    id: 'teen-late-night',
+    title: '14–16: the real fight is late-night gaming',
+    body:
+      'Teens’ body clocks shift later, and ranked play peaks at night. A consistent PC-off-by bedtime protects more wellbeing than any daytime cap — sleep is the single biggest lever at this age.',
+    ages: ['14-16'],
+    tags: ['bedtime', 'sleep', 'gaming'],
+    source: 'Paruthi et al. 2016 · adolescent sleep-phase delay',
   },
 ];
 
