@@ -36,6 +36,7 @@ import enforcer_net
 import enforcer_schedule
 import enforcer_vpn
 import lockmsg
+import endofday
 import location_uploader
 import offline_queue
 import recovery as recovery_mod
@@ -244,7 +245,25 @@ def enforce_lock() -> bool:
             return False
     # Friendly heads-up before locking (debounced — see _last_banner_at).
     _maybe_show_prelock_banner()
+    # End-of-day recap fires once per calendar day, right before the lock.
+    # This is the natural moment — kid was just told time's up; show them the
+    # factual summary so the day closes on warm + transparent, not on red.
+    _maybe_show_endofday()
     return lock_workstation()
+
+
+_ENDOFDAY_STATE = {"day": ""}
+
+def _maybe_show_endofday() -> None:
+    """Pop the end-of-day recap once per calendar date. Best-effort."""
+    today = time.strftime("%Y-%m-%d")
+    if _ENDOFDAY_STATE["day"] == today:
+        return
+    _ENDOFDAY_STATE["day"] = today
+    try:
+        endofday.show_summary(seconds=25)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 _PRELOCK_STATE = {"last": 0.0}
