@@ -32,8 +32,7 @@
       [
         "expo-notifications",
         { "color": "#3b82f6" }
-      ],
-      "react-native-reanimated"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
