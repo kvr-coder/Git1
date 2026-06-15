@@ -2,6 +2,13 @@
 
 Cross-platform mobile app built with React Native + Expo. Targets Android (primary) and iOS.
 
+## Local paths on the user's PC (Kvara's Windows machine)
+- **Dev clone (where the user ships OTAs from)**: `C:\ProgramData\Git1`
+- **Manual OTA ship**: `cd C:\ProgramData\Git1` → `git pull` → `npx eas update --branch preview --platform ios --message "..."`
+- **Helper script (same thing in one step)**: `scripts\ship-app.bat "what changed"`
+- **If `eas` not on PATH**: `npm install -g eas-cli` once.
+- **CI OTA workflow** requires `EXPO_TOKEN` in repo secrets (https://expo.dev → Access tokens → paste into github.com/kvr-coder/Git1/settings/secrets/actions). When absent, the workflow fails and the user must ship manually from the path above.
+
 ## Stack
 - Expo SDK 51 (managed workflow)
 - Expo Router (file-based routing in `app/`)
