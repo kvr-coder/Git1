@@ -1,195 +1,103 @@
-# Git1 — Roadmap & Feature Ideas
+# timeoff — Strategy & Ideas
 
-A backlog of features that would extend Git1 beyond the current MVP and
-position it to compete with Qustodio, Bark, Norton Family, and Microsoft
-Family Safety.
+Captured from competitive landscape research (Jun 2026). Sources: Pew 2024–25,
+Common Sense Census, Ghosh/Wisniewski CHI/CSCW papers, Stattin & Kerr 2000,
+Ryan & Deci SDT, EPFL parental-app privacy study, Qoria FY25 disclosures,
+RevenueCat State of Subs 2025, TechCrunch stalkerware coverage, Mozilla
+*Privacy Not Included, NetChoice v. Bonta, EU DSA Art. 28 Guidelines, UK OSA
+Ofcom Codes, BBB Gabb complaints, Trustpilot Pinwheel/Gabb reviews.
 
-Grouped by impact. Tier 1 directly counters the #1 user complaint about
-existing products (kids bypass them); Tier 5 are differentiating moonshots.
+## The bet in one sentence
 
----
+> The only parental-control app built on the only finding that replicates —
+> kids who know what's tracked and can negotiate it are safer than kids under
+> surveillance — and the only one where the data never leaves the family.
 
-## Already shipped (MVP)
-- Parent mobile app: tabs (Devices / Schedules / Activity / Settings), login, secure-store auth, push notifications
-- Pairing flow (6-digit code on the agent)
-- Device controls: Lock now, Unlock, Grant +15 min
-- Schedule editor with day chips + time steppers
-- Internet kill-switch (toggle in Device detail)
-- App blocklist editor (chips)
-- Server: Express + ws + SQLite, push fanout to Expo
-- Windows agent: idle-aware session-time tracking, daily-limit auto-lock,
-  schedule enforcement loop, app/process killer, internet kill via
-  `netsh advfirewall`
-- NSSM Windows-Service install guide
+## Add (in order of impact)
 
----
+### 1. Co-parent-aware controls
+**Why.** OurFamilyWizard owns co-parenting comms (court-recommended, hundreds
+of thousands of US families) but ships zero device controls. No
+parental-control app handles split households. We already have co-parent sync
+at the data layer — surface it.
 
-## Tier 1 — Defends against bypass (the #1 complaint)
+**What.** Separate quiet hours per parent (already supported via per-user
+prefs), per-request "approved by" stamp on time/chore decisions, audit trail
+in activity feed.
 
-### 1. Tamper-proof service hardening
-- Agent runs as `LocalSystem` (already documented via NSSM)
-- Watchdog process that restarts the agent if killed
-- File ACLs that prevent the kid's user from reading/writing `agent.json`
-- Signed installer (Authenticode)
+### 2. Privacy-as-wedge, loud
+**Why.** EPFL: ~70% of Android parental-control apps share kid data without
+consent; ~75% embed ad/analytics SDKs. mSpy (2.4M emails, 2024), pcTattletale
+(138k, 2024), Cocospy/Spyic (2.65M, 2025) all leaked. Mozilla *Privacy Not
+Included flagged Life360. Our architecture is self-hosted, no analytics, no
+third-party sharing — a credibility gap incumbents can't close.
 
-### 2. Boot-time lock
-- Agent starts before user logon (Windows Service auto-start; check)
-- Refuse logon outside allowed windows via `net user <kid> /times:...`
-- Scheduled Task at boot that re-applies policy before any user shell
+**What.** Headline in onboarding + Privacy card in Settings stating exactly
+what's collected, where it lives, who reads it.
 
-### 3. VPN / Tor / proxy detection
-- Detect new `tun*` / `tap*` adapters → emit `vpn_detected`, optionally cut net
-- Kill known VPN client `.exe`s (NordVPN, ProtonVPN, OpenVPN, etc.)
-- Block outbound TCP 9001 (Tor relay) and 9050 (SOCKS) at firewall
+### 3. Clinical/research-backed coaching nudges
+**Why.** Aura is the only competitor doing structured coaching (clinical-psych
+validated). We already shipped the Wisdom tab — extend it into *contextual*
+nudges that read device telemetry: requests, used minutes, bedtime conflicts.
+Example: "Linas asked for +15 three nights this week, all after 20:30.
+Coyne 2023: one extended bedtime per week reduces conflict without raising
+average use. Try approving?"
 
-### 4. Clock-tamper detection
-- Agent pings NTP every minute, pins server-issued time
-- Ignore the local clock for limit calculations if drift > 60 s
-- Emit `clock_tamper` event
+**What.** `computeContextualNudges(device, requests, age)` in `lib/wisdom.ts`;
+render on device detail above existing Insights.
 
-### 5. DNS lock
-- Write a DNS allow-list (NextDNS family / OpenDNS Family) into the
-  active adapter and re-apply if changed
-- Detect DoH (Cloudflare 1.1.1.1, NextDNS) and block via firewall
+### 4. Kid-side disclosure surface (promote it)
+**Why.** Stattin & Kerr 2000 (most-cited paper in the field): knowledge
+derived from kid disclosure protects more than surveillance does. We shipped
+the "What your parent sees / doesn't see" page on /kid — but it's hidden.
 
-### 6. Uninstall resistance
-- MSI installer to `C:\Program Files\Git1\` (admin only)
-- Group Policy registry pin
-- Persist a hidden Scheduled Task that bootstraps re-install if files
-  vanish
+**What.** Surface link in onboarding ("show this to your kid") and in
+Settings → Account.
 
----
+### 5. Neurodivergent specialization
+**Why.** CHADD runs ND tech study; Understood.org builds tools. No competitor
+partnered. ADHD/ASD families churn least (anecdotal across forums) and are
+underserved. Cheap moat candidate.
 
-## Tier 2 — Smarter than the competition
+**What.** Per-device "ADHD / executive-function support" toggle in Settings.
+When on: warmer transition warnings, longer no-surprise grace, ND-tagged tips
+in Wisdom. New `TipTag = 'adhd'`.
 
-### 7. Local on-device content classification
-- Small local NSFW image classifier (ONNX, < 50 MB) for screenshots
-- Local sentiment / bullying classifier for chat windows
-- **Pitch:** "Your kid's data never leaves the home" — privacy advantage
-  over Qustodio/Bark cloud OCR (which has 48 h delays)
+## Cut / don't build
 
-### 8. Per-app time budgets
-- 30 min/day YouTube, 1 h/day Steam, etc.
-- Reuse the existing `enforcer_apps` polling loop with per-name accounting
+- **AI message/chat scanning** — Bark/Aura territory. False positives (Bark
+  CEO admitted "KMS"→suicide flag) destroy trust. Directly contradicts the
+  disclosure-first philosophy.
+- **Kid phone hardware** — Pinwheel screens shatter day-one (Trustpilot);
+  Gabb failed to respond to 156 BBB complaints. Capital-intensive, low margin.
+- **Streaks/badges/coin economies** beyond the bank — Lepper 1973
+  overjustification crowds out intrinsic self-regulation.
+- **Stealth mode** — stalkerware category is the most-breached in security
+  press (TechCrunch Feb 2026); FTC banned SpyFone outright (2021).
+- **Platform parity arms race** — Apple DeclaredAgeRange (iOS 26) + EU
+  age-verification wallet commoditize basic gating. Compete on philosophy,
+  not feature checklists.
 
-### 9. Reward / chore system
-- Parent defines chores → kid checks done → parent approves → +N minutes
-- New tab in mobile app, new server endpoints, new agent command
+## Keep but reframe
 
-### 10. Flat-rate family pricing
-- Unlimited devices for one monthly fee (advertised loudly)
-- Counter-positioning vs Qustodio's per-device cost stacking
+- **Schedules / blocklist / limits** — table stakes per SafeWise 2026. Don't
+  market as differentiators.
+- **Bank + chore requests** — keep, but lean into the kid-voice framing
+  (Wisniewski 2017: only 11% of safety-app features support teen
+  self-regulation; ours does).
 
----
+## Pricing
 
-## Tier 3 — Trust & transparency (counters "relationship damage")
+Category at $50–110/yr (Qustodio $59.95–$109.95, Bark $99, Net Nanny $54.99).
+Don't undercut — privacy buyers don't shop on price.
 
-### 11. Kid-side dashboard (on the child's PC)
-- Tray icon shows: "47 min left today · 2 schedules active · 1 app blocked"
-- No surprises = less resentment
-- Could be a tiny Tauri/Electron tray app or a webview to a localhost
-  server endpoint
+**Target: $79/yr or $9/mo. 30-day no-questions refund. One-tap cancel.**
 
-### 12. 5-minute warning toast before auto-lock
-- Windows toast notification ("4 min remaining today")
-- Configurable thresholds (10/5/1 min)
+Cancel friction is a top-3 complaint across Bark/Norton/Net Nanny.
 
-### 13. Negotiation flow
-- Kid taps "request 15 more min" in tray app → push to parent
-- Parent approves / denies / counter-offers in one tap → minutes granted
-- Activity log of all requests + outcomes
+## Biggest risk
 
-### 14. Parent action audit log visible to the kid
-- Kid sees when/why a rule changed, who changed it
-- Counters the "parent silently changed the rules" resentment pattern
-
----
-
-## Tier 4 — Cross-platform parity (the iOS / Android gap)
-
-### 15. Android child agent
-- React Native / Kotlin background service
-- Lock via `DevicePolicyManager.lockNow()`
-- App-block via `UsageStatsManager` + Accessibility service
-- Same WS protocol as the Windows agent
-- **Biggest market after Windows.**
-
-### 16. macOS agent
-- LaunchDaemon
-- Lock via `caffeinate -d` and Screen Time / `pmset displaysleepnow`
-- App-block via process kill (same as Windows)
-
-### 17. Browser extension
-- Chrome / Edge / Firefox MV3 extension
-- Web filtering, time accounting, idle detection
-- Fills the iOS monitoring gap (Apple won't let you monitor much native,
-  but a browser extension on Safari is fine)
-
----
-
-## Tier 5 — Differentiating moonshots
-
-### 18. Home-router agent
-- Install on OpenWRT / pfSense / OPNsense
-- Block sites by kid-device MAC regardless of which laptop they use
-- Catches the "kid borrows sister's laptop" scenario
-- No per-device install for *web* filtering
-
-### 19. AI homework helper
-- "You can use ChatGPT 10 min only after entering your homework into
-  our prompt template" — productive use as the unlock
-- Built-in homework templates (math, essay outlining, code review)
-- Position as "AI tool that *requires* learning, not avoiding it"
-
-### 20. Open-source / self-hostable tier
-- Qustodio is closed-cloud SaaS
-- A self-hostable parental control would win privacy-conscious parents
-  (HN/Reddit/Mastodon demographic)
-- Free OSS core; paid managed-cloud / mobile push add-ons
-
----
-
-## Smaller polish / hygiene items
-
-- Replace SHA-256 password hash with `bcrypt`/`argon2` (server)
-- Server: rate-limit `/auth/login` and `/agent/pair/start`
-- Server: rotate agent tokens periodically
-- Mobile: dark / light theme switcher (currently dark only)
-- Mobile: device avatar / per-device color
-- Mobile: "this week" usage chart on device detail
-- Mobile: tap-to-call / tap-to-message the kid (iOS/Android intents)
-- Server: weekly summary email to the parent
-- Server: webhook on events (Slack/Discord for tech-savvy parents)
-- Agent: log rotation (currently NSSM appends forever)
-
----
-
-## Research sources (Qustodio + competitors)
-
-- [Qustodio Reviews — Trustpilot](https://www.trustpilot.com/review/www.qustodio.com) — 2.4/5, common complaints: tech issues, billing, support
-- [Qustodio Review 2026 — SafetyDetectives](https://www.safetydetectives.com/best-parental-control/qustodio/)
-- [Qustodio vs Norton Family — Impulsec](https://impulsec.com/parental-control-software/qustodio-vs-norton-family/)
-- [Best Parental Control Apps 2026 — TechRadar](https://www.techradar.com/best/best-parental-control-app-of-year)
-- [How kids bypass Parental Controls on Windows — TheWindowsClub](https://www.thewindowsclub.com/how-kids-bypass-and-get-around-parental-controls)
-- [Microsoft Family Safety Bypass — Mobicip](https://www.mobicip.com/blog/bypass-microsoft-family-safety)
-
-### Key takeaways from the research
-1. **32 % of parents** report kids bypassing controls (TechJury survey)
-2. Top bypass methods: VPN, Tor on USB, DNS swap, clock drift, uninstall+reinstall
-3. Trustpilot 2.4/5 for Qustodio, BBB C-rating for unanswered complaints
-4. iOS is the weakest target for every product — sandbox prevents real monitoring
-5. False-alert fatigue: Bark/Qustodio flag harmless, miss real threats
-6. Cost stacks per device — pain point for families with 3+ kids
-7. Teen relationship damage is a real product risk — surveillance vibe
-
----
-
-## Suggested next two
-
-If picking two for max differentiation per dev hour:
-
-- **#11 (kid dashboard) + #13 (request more time)** — solves the
-  relationship-damage complaint nobody else addresses. Mostly mobile work,
-  low risk.
-- **#3 + #4 (VPN + clock-tamper detection)** — kills the #1 complaint
-  about every competitor. Pure agent code.
+Ghosh 2018: 79% of kid reviews of control apps ≤2 stars. Market quits when
+kid quits. Onboarding + kid page address this — but the harder test is the
+parent's first 30 days. RevenueCat: ~30% of annual subs cancel inside 30 days.
+Win the first week with one daily micro-win, not feature catalogs.

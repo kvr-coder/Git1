@@ -15,5 +15,6 @@ export const KEYS = {
   activityRetention: 'git1.activityRetentionDays',
   // Per-device kid age band; keyed `git1.deviceAge.<deviceId>` -> '6-9' | '10-13' | '14-16'.
   deviceAgePrefix: 'git1.deviceAge.',
+  deviceNdPrefix: 'git1.deviceNd.',
   onboarded: 'git1.onboarded',
 };

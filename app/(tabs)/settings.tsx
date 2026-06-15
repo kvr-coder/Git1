@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiBanner } from '../../components/ApiBanner';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -97,6 +97,35 @@ export default function Settings() {
           </View>
           <Button label="Pair" icon="add" onPress={() => router.push('/pair')} />
         </View>
+      </Card>
+
+      <SectionHeader>Privacy</SectionHeader>
+      <Card>
+        <Text style={[typography.h3, { color: colors.text }]}>What we collect</Text>
+        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>
+          • Used minutes + app names on the kid PC (not chats, not screen contents){'\n'}
+          • Time/chore requests your kid sends{'\n'}
+          • Lock/unlock events
+        </Text>
+        <Text style={[typography.h3, { color: colors.text, marginTop: spacing.sm }]}>
+          What we never collect
+        </Text>
+        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>
+          • Messages, DMs, screenshots, search history{'\n'}
+          • Browsing URLs{'\n'}
+          • No third-party ad SDKs. No analytics. No data sale, ever.
+        </Text>
+        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.sm }]}>
+          Data lives only on your server ({getApiBase()}). EPFL found ~70% of
+          parental-control apps share kid data without consent. timeoff is built
+          to be the opposite.
+        </Text>
+        <Button
+          label="Show your kid what's tracked"
+          variant="secondary"
+          icon="eye-outline"
+          onPress={() => Linking.openURL(`${getApiBase()}/kid`).catch(() => {})}
+        />
       </Card>
 
       <SectionHeader>Notifications</SectionHeader>

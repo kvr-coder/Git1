@@ -564,11 +564,49 @@ export interface InsightInputs {
   recentTamperEvents?: number;
   // Whether the user has any enabled schedule for this device.
   hasSchedule?: boolean;
+  // Recent time requests (pending + resolved), oldest first.
+  recentRequests?: { minutes: number; createdAt: number; status: string }[];
+  // Per-device executive-function / ND mode toggle.
+  nd?: boolean;
 }
 
 export function computeInsights(input: InsightInputs): Insight[] {
-  const { device, history = [], recentDeniedRequests = 0, recentTamperEvents = 0, hasSchedule } = input;
+  const { device, history = [], recentDeniedRequests = 0, recentTamperEvents = 0, hasSchedule, recentRequests = [], nd } = input;
   const out: Insight[] = [];
+
+  // Repeated late requests at similar time = bedtime is set wrong, not a
+  // discipline problem. Coyne 2023: one negotiated late night per week
+  // reduces conflict without raising average use.
+  if (recentRequests.length >= 3) {
+    const last7 = recentRequests.filter((r) => Date.now() - r.createdAt < 7 * 86400_000);
+    const lateHours = last7
+      .map((r) => new Date(r.createdAt).getHours())
+      .filter((h) => h >= 20 && h <= 23);
+    if (lateHours.length >= 3) {
+      out.push({
+        id: 'bedtime-pattern',
+        severity: 'info',
+        icon: 'moon-outline',
+        title: 'Your kid asks for more time at bedtime, often',
+        body:
+          'Three+ late requests this week. One negotiated extension per week (e.g., Fridays +30) tends to reduce nightly conflict without raising weekly use.',
+        source: 'Coyne et al. 2023',
+      });
+    }
+  }
+
+  // ND mode active: surface executive-function-aware framing.
+  if (nd) {
+    out.push({
+      id: 'nd-mode',
+      severity: 'info',
+      icon: 'flash-outline',
+      title: 'Executive-function support is on',
+      body:
+        'Warmer transition warnings, longer no-surprise grace, and ND-tagged tips appear in Wisdom. Kids with ADHD/ASD respond worse to abrupt lockouts and better to predictable countdowns.',
+      source: 'Barkley 2015 · CHADD',
+    });
+  }
 
   // Streaks under-limit.
   if (device.dailyLimitMinutes > 0 && history.length >= 5) {

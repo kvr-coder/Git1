@@ -27,6 +27,18 @@ const STEPS = [
       "Your kid sees their time bank, today's used minutes, and the schedule. They can request more time or earn it by doing chores. You approve or deny — calmly, on your phone.",
   },
   {
+    icon: 'lock-closed-outline',
+    title: 'Your family’s data stays with you',
+    body:
+      "timeoff is self-hosted on your own server. We don't sell location, scan messages, or embed ad SDKs. EPFL found ~70% of competitors share kid data without consent — we built the opposite.",
+  },
+  {
+    icon: 'eye-outline',
+    title: 'Show your kid what you see',
+    body:
+      "Open /kid in any browser on the PC to see what your kid sees — including the exact list of what's tracked and what isn't. Walking through it together is the single biggest predictor of acceptance (Ghosh 2018).",
+  },
+  {
     icon: 'phone-portrait-outline',
     title: 'Pair the PC, then set a bedtime',
     body:

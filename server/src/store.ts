@@ -393,6 +393,10 @@ export const store = {
   allUsersForSummary(): { id: string }[] {
     return db.prepare('SELECT id FROM users').all() as { id: string }[];
   },
+  emailFor(userId: string): string | null {
+    const r = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined;
+    return r?.email ?? null;
+  },
   setUserPrefs(userId: string, patch: Partial<UserPrefs>) {
     const cur = this.getUserPrefs(userId);
     const next = {

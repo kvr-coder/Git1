@@ -16,7 +16,7 @@ import { AnimatedBar, AnimatedNumber, BounceIn } from '../../components/animated
 import { HourglassIcon, LoadingDots, PadlockIcon } from '../../components/AnimatedIcons';
 import { HintButton } from '../../components/HintButton';
 import { InsightCard } from '../../components/TipCard';
-import { getDeviceAge, setDeviceAge } from '../../lib/deviceAge';
+import { getDeviceAge, getDeviceNd, setDeviceAge, setDeviceNd } from '../../lib/deviceAge';
 import { AgeBand, computeInsights, tipsFor } from '../../lib/wisdom';
 
 export default function DeviceDetail() {
@@ -27,6 +27,21 @@ export default function DeviceDetail() {
   const [age, setAge] = useState<AgeBand | undefined>();
   // Load the per-device age band from local storage when the screen mounts.
   useEffect(() => { if (id) getDeviceAge(String(id)).then(setAge); }, [id]);
+  const [nd, setNd] = useState(false);
+  useEffect(() => { if (id) getDeviceNd(String(id)).then(setNd); }, [id]);
+  const [recentReqs, setRecentReqs] = useState<{ minutes: number; createdAt: number; status: string }[]>([]);
+  useEffect(() => {
+    api.listRequests?.().then((rs: any[]) => {
+      if (!Array.isArray(rs)) return;
+      setRecentReqs(
+        rs.filter((r) => r.deviceId === id).map((r) => ({
+          minutes: r.minutes,
+          createdAt: new Date(r.createdAt).getTime(),
+          status: r.status,
+        })),
+      );
+    }).catch(() => {});
+  }, [id]);
   const [busy, setBusy] = useState(false);
   const [appInput, setAppInput] = useState('');
 
@@ -107,6 +122,17 @@ export default function DeviceDetail() {
             { key: '14-16', label: '14–16' },
           ]}
         />
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.bodyStrong, { color: colors.text }]}>
+              Executive-function support
+            </Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              ADHD / ASD: longer transitions, kinder framing, ND tips.
+            </Text>
+          </View>
+          <Switch value={nd} onValueChange={(v) => { setNd(v); setDeviceNd(String(id), v); }} />
+        </View>
       </Card>
 
       {/* Time hero */}
@@ -156,6 +182,8 @@ export default function DeviceDetail() {
         const ins = computeInsights({
           device,
           hasSchedule: undefined, // we don't know without an extra fetch; safe-default skips this card
+          nd,
+          recentRequests: recentReqs,
         });
         if (!ins.length) return null;
         return (
