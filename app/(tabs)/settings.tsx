@@ -211,7 +211,7 @@ export default function Settings() {
       </View>
 
       <Text style={[typography.caption, { color: colors.textFaint, textAlign: 'center', marginTop: spacing.md }]}>
-        timeoff • v1.0 • rev 3
+        timeoff • v1.1 • rev 10 • OTA LIVE
       </Text>
     </Screen>
   );
