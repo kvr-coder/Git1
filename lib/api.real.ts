@@ -198,6 +198,12 @@ export const realApi = {
       body: JSON.stringify({ kind: 'set_vacation', payload: { until } }),
     });
   },
+  async emailInstaller(code?: string): Promise<{ ok: boolean; sent: boolean; link: string }> {
+    return request('/installer/email', {
+      method: 'POST',
+      body: JSON.stringify(code ? { code } : {}),
+    });
+  },
   async sendFeedback(payload: { body: string; app?: string; version?: string; platform?: string; email?: string }) {
     await request('/feedback', { method: 'POST', body: JSON.stringify(payload) });
   },

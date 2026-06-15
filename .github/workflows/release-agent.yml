@@ -1,0 +1,78 @@
+# Build the timeoff Windows agent installer (timeoff-agent-setup.exe) and
+# attach it to a GitHub Release. Triggered on tag push `agent-v*` so the
+# mobile app + server release cycles stay independent.
+#
+# The installer URL the parent app reads is permanent:
+#   https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe
+# That URL always 302's to the latest tagged release — no per-release wiring.
+
+name: Release agent installer
+
+on:
+  push:
+    tags:
+      - 'agent-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (without leading v)'
+        required: true
+        default: '0.0.0-dev'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -like 'agent-v*') {
+            $v = $tag.Substring(7)
+          } else {
+            $v = "${{ inputs.version }}"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          TIMEOFF_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Qp installer\timeoff-agent.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Hash installer
+        id: hash
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem installer\Output\timeoff-agent-setup.exe
+          $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+          "sha256=$h" >> $env:GITHUB_OUTPUT
+          "$h  timeoff-agent-setup.exe" | Out-File -Encoding ascii installer\Output\timeoff-agent-setup.exe.sha256
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: timeoff agent ${{ steps.ver.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## timeoff agent ${{ steps.ver.outputs.version }}
+
+            **Direct download:** [timeoff-agent-setup.exe](https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe)
+
+            **SHA256:** `${{ steps.hash.outputs.sha256 }}`
+
+            **Unsigned for now.** First run may show a SmartScreen "Unrecognized app" warning — click *More info → Run anyway*. We submit each release to Microsoft for whitelisting; reputation builds over a few days.
+          files: |
+            installer/Output/timeoff-agent-setup.exe
+            installer/Output/timeoff-agent-setup.exe.sha256

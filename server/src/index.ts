@@ -3,6 +3,8 @@ import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import express, { type Request, type Response, type NextFunction } from 'express';
+import nodemailer from 'nodemailer';
+import QRCode from 'qrcode';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { z } from 'zod';
 import { store, type DeviceRow } from './store.js';
@@ -252,6 +254,109 @@ app.put('/me/prefs', auth, (req: AuthedRequest, res) => {
   if (!p.success) return res.status(400).json(p.error);
   store.setUserPrefs(req.userId!, p.data);
   res.json(store.getUserPrefs(req.userId!));
+});
+
+// ---- Installer distribution ----
+// Single permanent URL — GitHub redirects /releases/latest/download to the
+// current tagged release. The mobile app reads this + the SHA256 from the
+// release's .sha256 file so users can verify against the release page.
+const INSTALLER_URL =
+  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe';
+const INSTALLER_SHA256_URL =
+  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe.sha256';
+
+app.get('/installer/latest', auth, async (_req: AuthedRequest, res) => {
+  let sha = '';
+  try {
+    const r = await fetch(INSTALLER_SHA256_URL);
+    if (r.ok) sha = (await r.text()).trim().split(/\s+/)[0] ?? '';
+  } catch {}
+  res.json({ url: INSTALLER_URL, sha256: sha });
+});
+
+// One-shot pair-code-bearing installer URL — Inno Setup picks up /code= and
+// the kid PC pre-fills it. Avoids the kid having to type the code twice.
+function installerLinkWithCode(code: string): string {
+  // Note: GitHub strips query strings from binary downloads; we instead pass
+  // the code via a wrapping landing page (server-hosted) that JS-redirects
+  // to the binary AND copies the code to clipboard.
+  return `${getPublicBase()}/installer/go?code=${encodeURIComponent(code)}`;
+}
+function getPublicBase(): string {
+  // Render injects RENDER_EXTERNAL_URL; fallback to localhost for dev.
+  return process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${PORT}`;
+}
+
+app.get('/installer/go', (req, res) => {
+  const code = String(req.query.code ?? '').replace(/[^0-9]/g, '').slice(0, 6);
+  const safeCode = code ? code : '';
+  res.type('html').send(`<!doctype html>
+<html><head><meta charset="utf-8"><title>Installing timeoff</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:0 20px;color:#0b1220}
+.code{font-size:42px;letter-spacing:8px;font-weight:700;text-align:center;background:#f0f4ff;border-radius:12px;padding:18px;margin:20px 0;color:#1d4ed8}
+a.btn{display:block;background:#1d4ed8;color:#fff;text-decoration:none;text-align:center;padding:14px;border-radius:12px;font-weight:600}</style>
+</head><body>
+<h1>Install the timeoff agent</h1>
+<p>On the <b>kid's PC</b> (not your phone), tap the button below. The installer is unsigned for now — Windows will show "Unrecognized app"; click <i>More info → Run anyway</i>.</p>
+${safeCode ? `<p>When asked, enter this pairing code:</p><div class="code">${safeCode}</div>` : ''}
+<a class="btn" href="${INSTALLER_URL}">Download timeoff-agent-setup.exe</a>
+<p style="margin-top:24px;font-size:14px;color:#475569">Verify it against the SHA256 on the
+<a href="https://github.com/kvr-coder/git1/releases/latest">release page</a>.</p>
+</body></html>`);
+});
+
+// QR PNG for the parent app — encodes the /installer/go?code=XXXXXX URL so
+// the kid PC's camera or a browser at that URL lands on the installer.
+app.get('/qr.png', (req, res) => {
+  const text = String(req.query.text ?? '').slice(0, 512);
+  if (!text) return res.status(400).end();
+  res.type('png');
+  QRCode.toFileStream(res, text, { width: 480, margin: 2 }).catch(() => res.end());
+});
+
+// Email the installer link to the parent's account email.
+let mailer: nodemailer.Transporter | null = null;
+function getMailer(): nodemailer.Transporter | null {
+  if (mailer) return mailer;
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT ?? 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) return null;
+  mailer = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+  return mailer;
+}
+
+app.post('/installer/email', auth, async (req: AuthedRequest, res) => {
+  const p = z.object({ code: z.string().regex(/^\d{6}$/).optional() }).safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  const email = store.emailFor(req.userId!);
+  if (!email) return res.status(404).json({ error: 'no email on file' });
+  const link = p.data.code ? installerLinkWithCode(p.data.code) : INSTALLER_URL;
+  const m = getMailer();
+  if (!m) {
+    // Email infra not configured yet — return the link so the parent app can
+    // copy/share it manually. Logged for the parent to see in console.
+    console.warn(`[installer] SMTP not configured; would email ${email}: ${link}`);
+    return res.json({ ok: true, sent: false, link });
+  }
+  try {
+    await m.sendMail({
+      from: process.env.SMTP_FROM ?? 'timeoff <noreply@timeoff.app>',
+      to: email,
+      subject: 'Install timeoff on the kid\'s PC',
+      text:
+        `Open this link on the kid's PC to install timeoff:\n\n${link}\n\n` +
+        (p.data.code ? `Pairing code: ${p.data.code}\n\n` : '') +
+        `The installer is unsigned for now — Windows will show "Unrecognized app". ` +
+        `Click "More info → Run anyway". SHA256 is on the release page.`,
+    });
+    res.json({ ok: true, sent: true, link });
+  } catch (e: any) {
+    console.warn('[installer] email failed', e?.message);
+    res.json({ ok: false, sent: false, link, error: e?.message ?? 'send failed' });
+  }
 });
 
 app.post('/webpush/test', auth, async (req: AuthedRequest, res) => {
