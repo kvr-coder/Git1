@@ -43,7 +43,7 @@ jobs:
         # subsequent runs just verify it.
         run: |
           if ! node -e "const c=require('./app.json'); process.exit(c.expo?.extra?.eas?.projectId ? 0 : 1)"; then
-            npx eas init --non-interactive --force
+            eas init --non-interactive --force
           fi
 
       - name: Publish update
