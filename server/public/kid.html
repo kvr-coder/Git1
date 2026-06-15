@@ -104,6 +104,12 @@
 </style>
 </head>
 <body>
+<div id="preview-banner" style="display:none; background:#3a2e0e; border:1px solid #fbbf24;
+  color:#fbbf24; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px;">
+  <strong>👀 Preview — sample data.</strong> This page shows the layout with
+  example numbers. Your kid's <em>real</em> dashboard runs on their PC and shows
+  their actual time, schedule, and apps.
+</div>
 <h1>Hi <span id="kid-name">there</span> 👋</h1>
 <p class="muted">Your time, your bank, your way to ask for more.</p>
 
@@ -271,6 +277,12 @@ const $ = (id) => document.getElementById(id);
 // On the server PREVIEW the page is at "/kid" and the mock API is under
 // "/kid/status". Detect which context we're in so one file works in both.
 const API = location.pathname.replace(/\/+$/, '').endsWith('/kid') ? '/kid' : '';
+// The /kid route on the server is a demo with sample data. The real dashboard
+// is served by the agent on the kid's PC at "/" with live data. Flag the demo.
+if (API === '/kid') {
+  const b = document.getElementById('preview-banner');
+  if (b) b.style.display = 'block';
+}
 const flash = (msg) => {
   const el = $('flash'); el.textContent = msg; el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2400);
