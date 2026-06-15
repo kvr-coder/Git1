@@ -12,10 +12,43 @@
     --success: #86efac; --warn: #fbbf24; --soft: #c4b5fd;
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body { background: var(--bg); color: var(--text);
-    font: 15px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
-    margin: 0; padding: 20px; max-width: 600px; margin: 0 auto;
-    padding-bottom: 60px; }
+    font: 16px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+    margin: 0; padding: 16px; max-width: 600px; margin: 0 auto;
+    padding-bottom: 80px;
+    /* Respect notches on iOS. */
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  /* Two-column layout on PC / tablets — hero stays prominent, primary
+     actions sit next to it instead of stacking. Single column on phone. */
+  @media (min-width: 860px) {
+    body { max-width: 980px; padding: 28px 32px; font-size: 16px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .grid > * { margin: 0; }
+    .hero .big { font-size: 96px; }
+    h1 { font-size: 28px; }
+  }
+  @media (max-width: 480px) {
+    body { padding: 12px; padding-bottom: 80px; }
+    button { padding: 16px 18px; font-size: 16px; }
+    .chip-btn { padding: 18px 14px; font-size: 16px; }
+    .hero { padding: 24px 16px; }
+    .hero .big { font-size: 64px; }
+    input, select { padding: 14px 12px; font-size: 16px; }
+  }
+  /* Touch-pointer fine tuning: big enough thumb targets. */
+  @media (pointer: coarse) {
+    button, .chip-btn, select, input { min-height: 48px; }
+  }
   h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
   .muted { color: var(--muted); font-size: 13px; }
   .card { background: var(--surface); border: 1px solid var(--border);
@@ -74,6 +107,9 @@
 <h1>Hi <span id="kid-name">there</span> 👋</h1>
 <p class="muted">Your time, your bank, your way to ask for more.</p>
 
+<div class="grid">
+<!-- LEFT COL (PC) / TOP (phone) -->
+<div>
 <!-- HERO: today's remaining time, the only number that matters to the kid -->
 <div class="card hero" id="hero">
   <div class="label" id="hero-label">Time left today</div>
@@ -91,6 +127,9 @@
   <button class="full" id="save-btn">Ask for 3 minutes to save</button>
 </div>
 
+</div>
+<!-- RIGHT COL (PC) / BELOW (phone) -->
+<div>
 <!-- PRIMARY ACTION: ask for more time, big and obvious -->
 <div class="card">
   <strong>Need more time?</strong>
@@ -186,6 +225,9 @@
   <div id="borrow-warn" style="margin-top: 10px; padding: 10px;
     background: #3a1e1e; color: var(--warn); border-radius: 10px;
     font-size: 13px;"></div>
+</div>
+
+</div>
 </div>
 
 <!-- The boring stuff: collapsed by default. Kept for transparency, not friction. -->

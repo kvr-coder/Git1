@@ -95,13 +95,24 @@ def _open_dashboard(_icon=None, _item=None) -> None:
     webbrowser.open(DASH_URL)
 
 
+def _ask_more(_icon=None, _item=None) -> None:
+    webbrowser.open(DASH_URL + "/?save=1")
+
+
+def _do_chore(_icon=None, _item=None) -> None:
+    # Jump straight to the chore section.
+    webbrowser.open(DASH_URL + "/#chore-templates")
+
+
 def main() -> None:
     icon = pystray.Icon(
-        "Git1",
-        _icon_image((59, 130, 246)),  # blue
-        "Git1 — My time",
+        "timeoff",
+        _icon_image((96, 165, 250)),  # soft blue (matches dashboard palette)
+        "timeoff — my time",
         menu=pystray.Menu(
             pystray.MenuItem("Open my dashboard", _open_dashboard, default=True),
+            pystray.MenuItem("Ask for more time", _ask_more),
+            pystray.MenuItem("Earn time (chore)", _do_chore),
             pystray.MenuItem("Quit", lambda i, _: i.stop()),
         ),
     )
@@ -115,19 +126,22 @@ def main() -> None:
             bank = int(s.get("bankedMinutes") or 0)
             over = limit and used >= limit
             blocked = bool(s.get("internetBlocked"))
-            tip = f"Git1 — {_fmt(left)} left today"
+            tip = f"timeoff — {_fmt(left)} left today"
             if bank:
                 tip += f"  ·  bank {_fmt(bank)}"
             if blocked:
                 tip += "  ·  internet off"
             if not s:
-                tip = "Git1 — agent not running"
+                tip = "timeoff — agent not running"
             try:
                 icon.title = tip
+                # Match the dashboard palette: blue (paused/blocked, not red),
+                # amber under 15 min, green when ample. Reactance research:
+                # red signals threat, so reserve it for genuine errors.
                 color = (
-                    (239, 68, 68) if over or blocked
-                    else (245, 158, 11) if limit and left <= 15
-                    else (34, 197, 94) if limit else (148, 163, 184)
+                    (96, 165, 250) if over or blocked
+                    else (251, 191, 36) if limit and left <= 15
+                    else (134, 239, 172) if limit else (148, 163, 184)
                 )
                 icon.icon = _icon_image(color)
             except Exception:  # noqa: BLE001
