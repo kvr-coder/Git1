@@ -97,7 +97,7 @@ export default function Wisdom() {
       {section === 'tips' && (
         <>
           <SectionHeader>
-            Evidence-based tips{age !== 'all' ? ` · ${tipsForAge.length} for ${age}` : ''}
+            {`Evidence-based tips${age !== 'all' ? ` · ${tipsForAge.length} for ${age}` : ''}`}
           </SectionHeader>
           {tipsForAge.map((t) => (
             <TipCard key={t.id} tip={t} />

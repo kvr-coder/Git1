@@ -50,11 +50,14 @@ export function Stat({
   );
 }
 
-export function SectionHeader({ children, style }: { children: string; style?: ViewStyle }) {
+export function SectionHeader({ children, style }: { children: string | number | (string | number)[]; style?: ViewStyle }) {
   const { colors } = useTheme();
+  // Coerce any children (string, array of strings, numbers) to a single string
+  // so an accidental array child can never crash via .toUpperCase().
+  const text = (Array.isArray(children) ? children.join('') : String(children ?? '')).toUpperCase();
   return (
     <Text style={[typography.tiny, { color: colors.textFaint, marginLeft: 4, marginTop: spacing.sm }, style as any]}>
-      {children.toUpperCase()}
+      {text}
     </Text>
   );
 }
