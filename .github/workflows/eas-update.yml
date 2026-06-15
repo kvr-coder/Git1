@@ -28,7 +28,11 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install` (not `ci`) so the OTA still ships when package-lock
+        # drifts from package.json mid-iteration — common when only mobile
+        # source files change but a transitive dep bumped. Lockfile is
+        # refreshed on the runner; not committed back.
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
       - name: Publish update
         run: |
