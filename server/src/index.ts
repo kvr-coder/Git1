@@ -1276,17 +1276,31 @@ wss.on('connection', (ws, req) => {
         });
         notifyUser(device.userId,'Bank spent', message, { deviceId: device.id, kind: 'bank_spent' });
       } else {
+        // Friendlier titles/messages for the real tamper signals.
+        let title = 'timeoff';
+        let notifyMsg = message;
+        if (msg.name === 'code_tamper') {
+          title = 'Tampering detected';
+          const n = Array.isArray((msg.payload as any)?.files) ? (msg.payload as any).files.length : 0;
+          notifyMsg = `${device.name}: agent files were edited${n ? ` (${n} file${n > 1 ? 's' : ''})` : ''} — reverted automatically`;
+        } else if (msg.name === 'clock_tamper') {
+          title = 'Clock tampering';
+          notifyMsg = `${device.name}: system clock was changed to gain time`;
+        } else if (msg.name === 'vpn_detected') {
+          title = 'VPN detected';
+          notifyMsg = `${device.name}: a VPN/proxy appeared — may be dodging the blocklist`;
+        }
         store.appendActivity({
           userId: device.userId,
           deviceId: device.id,
           kind: msg.name,
-          message,
+          message: notifyMsg,
         });
         if (msg.name === 'lock') store.updateDevice(device.id, { status: 'locked' });
         if (msg.name === 'unlock') store.updateDevice(device.id, { status: 'online' });
         if (msg.name === 'shutdown') store.updateDevice(device.id, { shutdownCleanly: true });
         if (shouldNotify(msg.name)) {
-          notifyUser(device.userId, 'Git1', message, { deviceId: device.id, kind: msg.name });
+          notifyUser(device.userId, title, notifyMsg, { deviceId: device.id, kind: msg.name });
         }
       }
     }

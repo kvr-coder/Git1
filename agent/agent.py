@@ -64,6 +64,7 @@ HEARTBEAT_INTERVAL_SEC = 30   # faster so tampering (kill/block) is caught withi
 RELOCK_INTERVAL_SEC = 5
 VPN_CHECK_INTERVAL_SEC = 30
 CLOCK_CHECK_INTERVAL_SEC = 600
+CODE_CHECK_INTERVAL_SEC = 300  # verify agent source integrity every 5 min
 # Deadman switch: if the agent can't reach the server for this long while
 # internet is firewall-blocked, auto-unblock so the parent isn't locked
 # out remotely.
@@ -621,6 +622,7 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
     last_relock = 0.0
     last_vpn_check = 0.0
     last_clock_check = 0.0
+    last_code_check = 0.0
     limit_notified = False
     was_schedule_blocking_net = False
 
@@ -676,6 +678,23 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             if clock.is_tampered():
                 print(f"[clock] drift {drift:.1f}s — tamper")
                 await emit_event(ws, "clock_tamper", {"driftSec": drift})
+
+        # 4b. Code-integrity check — did someone edit the agent's own source to
+        # defeat it? A standard (non-admin) kid can't write the SYSTEM-owned
+        # install dir, but if they somehow do, we catch the dirty tree, report
+        # it as an active tamper signal, and self-heal by reverting the edits.
+        if now - last_code_check >= CODE_CHECK_INTERVAL_SEC:
+            last_code_check = now
+            try:
+                modified = updater.dirty_tracked_files()
+                if modified:
+                    print(f"[integrity] agent files modified: {modified}")
+                    await emit_event(ws, "code_tamper", {"files": modified[:20]})
+                    if updater.self_heal_tree():
+                        print("[integrity] reverted edits; restarting clean")
+                        updater._restart()
+            except Exception as e:  # noqa: BLE001
+                print(f"[integrity] check failed: {e}")
 
         # 5a. Parent manually locked the device — keep re-locking
         if LOCKED_BY_PARENT.get("value"):

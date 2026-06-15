@@ -49,6 +49,34 @@ def current_commit() -> str:
     return out if code == 0 else ""
 
 
+def dirty_tracked_files() -> list[str]:
+    """Tracked files that differ from the committed code — i.e. someone edited
+    the agent's own source. `git status --porcelain` lists changes; we keep
+    only modified/deleted TRACKED files (ignore untracked junk like __pycache__).
+    A non-empty result is a genuine code-tamper signal."""
+    code, out = _git(["status", "--porcelain", "--untracked-files=no"])
+    if code != 0 or not out:
+        return []
+    files = []
+    for line in out.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        # Format: "XY path" — X/Y are status codes. Skip pure-untracked "??".
+        if line.startswith("??"):
+            continue
+        files.append(line[3:].strip())
+    return files
+
+
+def self_heal_tree() -> bool:
+    """Revert any kid edits to tracked files back to the committed version.
+    `git checkout -- .` restores all tracked files; the kid's tampering is
+    undone without losing the install. Returns True if it ran cleanly."""
+    code, _ = _git(["checkout", "--", "."])
+    return code == 0
+
+
 def tracked_branch() -> str:
     b = os.environ.get("GIT1_UPDATE_BRANCH", "").strip()
     if b:

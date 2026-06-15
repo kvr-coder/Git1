@@ -53,7 +53,7 @@ export async function notifyUser(
   // Only genuinely time-critical, actively-suspicious signals bypass quiet
   // hours. "agent offline" is NOT one of them — a PC being off overnight must
   // never wake the parent at 2am.
-  const urgent = kind === 'clock_tamper' || kind === 'vpn_detected';
+  const urgent = kind === 'clock_tamper' || kind === 'vpn_detected' || kind === 'code_tamper';
   if (!urgent) {
     try {
       const prefs = store.getUserPrefs(userId);
@@ -120,6 +120,7 @@ const NOTIFY_KINDS = new Set([
   'boot_blocked',
   'vpn_detected',
   'clock_tamper',
+  'code_tamper',
   'request_minutes',
   'borrow',
   'chore_request',
