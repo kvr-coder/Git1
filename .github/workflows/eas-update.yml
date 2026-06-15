@@ -34,6 +34,15 @@ jobs:
         # refreshed on the runner; not committed back.
         run: npm install --legacy-peer-deps --no-audit --no-fund
 
+      - name: Debug expo config
+        # eas update calls `expo config --json --type public` under the hood
+        # and dies silently if that fails. Run it explicitly so the actual
+        # error reaches the workflow log instead of one-line "exited with 1".
+        run: |
+          set -x
+          npx expo config --type public || true
+          npx expo-doctor || true
+
       - name: Publish update
         run: |
           BRANCH="${GITHUB_REF_NAME}"
