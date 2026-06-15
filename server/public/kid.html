@@ -267,6 +267,10 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+// API base: on the agent the page is served from "/" so endpoints are "/status".
+// On the server PREVIEW the page is at "/kid" and the mock API is under
+// "/kid/status". Detect which context we're in so one file works in both.
+const API = location.pathname.replace(/\/+$/, '').endsWith('/kid') ? '/kid' : '';
 const flash = (msg) => {
   const el = $('flash'); el.textContent = msg; el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2400);
@@ -276,7 +280,7 @@ const fmt = (m) => { m = Math.max(0, m|0); const h = (m/60)|0, mm = m%60;
 
 async function refresh() {
   let s;
-  try { const r = await fetch('/status'); s = await r.json(); }
+  try { const r = await fetch(API + '/status'); s = await r.json(); }
   catch { return; }
 
   const used = s.usedTodayMinutes|0;
@@ -372,7 +376,7 @@ async function refresh() {
 
 async function sendChore(description, minutes) {
   try {
-    const r = await fetch('/chore', {
+    const r = await fetch(API + '/chore', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ description, minutes }),
     });
@@ -390,7 +394,7 @@ $('chore-btn').addEventListener('click', async () => {
 
 $('save-btn').addEventListener('click', async () => {
   try {
-    const r = await fetch('/request', {
+    const r = await fetch(API + '/request', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ minutes: 3, reason: 'save my game' }),
     });
@@ -402,7 +406,7 @@ $('spend-btn').addEventListener('click', async () => {
   const minutes = Number($('spend-minutes').value);
   const btn = $('spend-btn'); btn.disabled = true;
   try {
-    const r = await fetch('/spend', {
+    const r = await fetch(API + '/spend', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ minutes }),
     });
@@ -420,7 +424,7 @@ $('autospend-btn').addEventListener('click', () => {
 $('borrow-btn').addEventListener('click', async () => {
   const minutes = Number($('borrow-minutes').value);
   try {
-    const r = await fetch('/borrow', {
+    const r = await fetch(API + '/borrow', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ minutes }),
     });
@@ -437,7 +441,7 @@ $('request-btn').addEventListener('click', async () => {
   const reason = $('reason').value.trim();
   const btn = $('request-btn'); btn.disabled = true;
   try {
-    const r = await fetch('/request', {
+    const r = await fetch(API + '/request', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ minutes, reason }),
     });
