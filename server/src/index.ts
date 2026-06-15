@@ -1360,12 +1360,15 @@ setInterval(() => {
         kind: 'device_offline',
         message: `${d.name}: went offline`,
       });
-      // Only push a "possible tamper" alert if: parent opted in, it wasn't a
-      // clean shutdown, and it's been silent long enough to be suspicious.
+      // Offline is NOT tampering — a turned-off PC and a killed agent look
+      // identical here, and both have innocent explanations. We never call
+      // this "tamper". Real tampering is ACTIVE behaviour the agent actually
+      // detects and reports (clock rolled back, VPN to dodge the blocklist) —
+      // those alert separately and always. Here we only push a plain
+      // "offline" notice if the parent explicitly opted in.
       const prefs = store.getUserPrefs(d.userId);
       if (prefs.tamperAlertsOn && !d.shutdownCleanly && silentFor > TAMPER_ALERT_AFTER_MS) {
-        const message = `${d.name}: agent offline for ${mins} min — possible tamper`;
-        console.warn(`[tamper] ${message}`);
+        const message = `${d.name}: agent offline for ${mins} min`;
         notifyUser(d.userId, 'Agent offline', message, {
           deviceId: d.id,
           kind: 'tamper_offline',
