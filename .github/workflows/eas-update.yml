@@ -45,6 +45,7 @@ jobs:
           if ! node -e "const c=require('./app.json'); process.exit(c.expo?.extra?.eas?.projectId ? 0 : 1)"; then
             eas init --non-interactive --force
           fi
+          echo "PROJECT_ID_IS=$(node -e "console.log(require('./app.json').expo?.extra?.eas?.projectId||'NONE')")"
 
       - name: Publish update
         run: |
