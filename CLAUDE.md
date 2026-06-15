@@ -3,12 +3,21 @@
 Cross-platform mobile app built with React Native + Expo. Targets Android (primary) and iOS.
 
 ## Local paths on the user's PC (Kvara's Windows machine)
-- **Parent's dev clone (where the user ships OTAs from)**: `C:\Users\Kvara\Git1`
+- **Parent's dev clone (the ONLY place the user works / builds / ships from)**: `C:\Users\Kvara\Git1`
 - **DO NOT use `C:\ProgramData\Git1`** — that's the kid-agent install owned by SYSTEM; the user's account gets "Permission denied" on `git pull` there.
 - **Manual OTA ship**: `cd C:\Users\Kvara\Git1` → `git pull` → `npx eas update --branch preview --platform ios --message "..."`
 - **Helper script (same thing in one step)**: `scripts\ship-app.bat "what changed"`
 - **If `eas` not on PATH**: `npm install -g eas-cli` once.
-- **CI OTA workflow** requires `EXPO_TOKEN` in repo secrets (https://expo.dev → Access tokens → paste into github.com/kvr-coder/Git1/settings/secrets/actions). When absent, the workflow fails and the user must ship manually from the path above.
+
+## EAS / OTA facts (LEARNED THE HARD WAY — do not re-derive)
+- **Expo account**: `expo221` (kvaraciejus@gmail.com). **EAS project**: slug `timeoff`, **projectId `e8e50263-c2c5-471b-ba0a-1cdb67c4349b`**. This is hard-locked in `app.json` (`expo.extra.eas.projectId` + `expo.updates.url`). The user has MULTIPLE Expo projects — never let `eas init` pick a different one.
+- **OTA channel**: branch `claude/**` → `preview`; `main` → `production`. `runtimeVersion.policy = appVersion` (currently 1.1.0). **OTA only reaches a build whose runtime matches.**
+- **An installed app can only receive OTA if it was BUILT with `updates.url` baked in.** Old builds (pre-projectId-lock) cannot get OTA at all — they need ONE fresh `eas build` first. After that, pushes land in ~2 min.
+- **CI OTA workflow** (`.github/workflows/eas-update.yml`) needs `EXPO_TOKEN` in repo secrets (expo.dev → Access tokens → github.com/kvr-coder/Git1/settings/secrets/actions).
+- **`eas.json` must NOT contain an `update` block** — older eas-cli rejects it ("update is not allowed").
+- **Keep `package-lock.json` in sync with `package.json`** or EAS build fails at the "Install dependencies" phase (`npm ci`). Regenerate with `npm install --legacy-peer-deps` and commit.
+- **`app.json` plugins must NOT list `react-native-reanimated`** (v3+ has no config plugin → `expo config` crashes the OTA publish).
+- **Full build (needed for native/config changes)**: `cd C:\Users\Kvara\Git1` → `git pull` → `npx eas build --profile preview --platform ios`.
 
 ## Stack
 - Expo SDK 51 (managed workflow)
