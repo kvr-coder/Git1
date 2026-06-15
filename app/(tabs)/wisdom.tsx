@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { SectionHeader, Segmented } from '../../components/ui';
@@ -16,9 +16,26 @@ export default function Wisdom() {
   const [age, setAge] = useState<AgeBand | 'all'>('all');
   const [section, setSection] = useState<Section>('tips');
 
-  const tipsForAge = WISDOM.filter((t) => age === 'all' || t.ages.length === 0 || t.ages.includes(age));
+  // Filter to the chosen age, then SORT age-specific tips first so switching
+  // the band visibly changes the TOP of the list (otherwise the all-ages tips
+  // dominate and it looks like nothing happened).
+  const matches = WISDOM.filter((t) => age === 'all' || t.ages.length === 0 || t.ages.includes(age));
+  const tipsForAge =
+    age === 'all'
+      ? matches
+      // Tips tagged for fewer age bands are more specific → surface them first
+      // so picking an age visibly reorders the list.
+      : [...matches].sort((a, b) => a.ages.length - b.ages.length);
   const sexTips = tipsForAge.filter((t) => t.tags.includes('sex-diff') || t.tags.includes('social'));
   const scripts = SCRIPTS.filter((s) => age === 'all' || s.ages.includes(age as AgeBand));
+
+  const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    { key: 'tips', label: 'Tips', icon: 'bulb-outline' },
+    { key: 'scripts', label: 'How to talk', icon: 'chatbubble-ellipses-outline' },
+    { key: 'sex', label: 'Boys vs girls', icon: 'people-outline' },
+    { key: 'backfires', label: 'What backfires', icon: 'warning-outline' },
+    { key: 'reading', label: 'Read more', icon: 'library-outline' },
+  ];
 
   const open = (url?: string) => url && Linking.openURL(url).catch(() => {});
 
@@ -47,23 +64,41 @@ export default function Wisdom() {
         />
       </Card>
 
-      <Card padded={false} style={{ padding: 4 } as any}>
-        <Segmented<Section>
-          value={section}
-          onChange={setSection}
-          options={[
-            { key: 'tips', label: 'Tips', icon: 'bulb-outline' },
-            { key: 'scripts', label: 'How to talk', icon: 'chatbubble-ellipses-outline' },
-            { key: 'sex', label: 'Boys vs girls', icon: 'people-outline' },
-            { key: 'backfires', label: 'What backfires', icon: 'warning-outline' },
-            { key: 'reading', label: 'Read more', icon: 'library-outline' },
-          ]}
-        />
-      </Card>
+      {/* Horizontally scrollable tab bar — fits 5 tabs without cramming. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: spacing.xs, paddingVertical: 2 }}
+        style={{ marginBottom: spacing.xs }}
+      >
+        {SECTIONS.map((s) => {
+          const active = s.key === section;
+          return (
+            <Pressable
+              key={s.key}
+              onPress={() => setSection(s.key)}
+              style={[
+                styles.pill,
+                { backgroundColor: active ? colors.primary : colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name={s.icon} size={15} color={active ? '#fff' : colors.textMuted} />
+              <Text
+                numberOfLines={1}
+                style={[typography.caption, { color: active ? '#fff' : colors.text, fontWeight: '600' }]}
+              >
+                {s.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       {section === 'tips' && (
         <>
-          <SectionHeader>Evidence-based tips</SectionHeader>
+          <SectionHeader>
+            Evidence-based tips{age !== 'all' ? ` · ${tipsForAge.length} for ${age}` : ''}
+          </SectionHeader>
           {tipsForAge.map((t) => (
             <TipCard key={t.id} tip={t} />
           ))}
@@ -166,4 +201,13 @@ export default function Wisdom() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
 });

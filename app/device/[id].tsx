@@ -282,10 +282,12 @@ export default function DeviceDetail() {
       <SectionHeader>Reward bank</SectionHeader>
       <Card>
         <View style={styles.spread}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <Text style={[typography.h3, { color: colors.text }]}>Bank balance</Text>
-            {tipsFor('bank', age, 1).map((t) => <HintButton key={t.id} tip={t} />)}
-            <Text style={[typography.caption, { color: colors.textMuted }]}>
+          <View style={{ flex: 1, marginRight: spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <Text style={[typography.h3, { color: colors.text }]}>Bank balance</Text>
+              {tipsFor('bank', age, 1).map((t) => <HintButton key={t.id} tip={t} />)}
+            </View>
+            <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>
               Minutes the kid can spend whenever.
             </Text>
           </View>
