@@ -250,6 +250,7 @@ app.put('/me/prefs', auth, (req: AuthedRequest, res) => {
     quietFromMin: z.number().int().min(-1).max(24 * 60 - 1).optional(),
     quietToMin: z.number().int().min(-1).max(24 * 60 - 1).optional(),
     dailySummaryOn: z.boolean().optional(),
+    tamperAlertsOn: z.boolean().optional(),
   }).safeParse(req.body);
   if (!p.success) return res.status(400).json(p.error);
   store.setUserPrefs(req.userId!, p.data);
@@ -1331,9 +1332,18 @@ function toPublicDevice(d: DeviceRow) {
   };
 }
 
-// Tamper sweep: every minute, alert the parent about devices that have gone
-// silent (agent killed/uninstalled/offline) and weren't already flagged.
+// Tamper sweep: keep marking devices offline, but DON'T spam the parent.
+// A PC that's simply turned off (kid asleep, outdoors) is indistinguishable
+// from a tampered agent over the socket, so "agent offline" alerts are pure
+// noise for most families. We:
+//   * still update status to 'offline' (dashboard stays accurate),
+//   * only PUSH an alert when the parent has opted in (tamperAlertsOn),
+//   * never alert on a clean shutdown,
+//   * require a much longer silence (15 min) so brief sleeps/blips are ignored,
+//   * still write a quiet activity-log entry for the record,
+//   * route the push through notifyUser, which now honours quiet hours.
 const TAMPER_SWEEP_MS = 20 * 1000;
+const TAMPER_ALERT_AFTER_MS = 15 * 60 * 1000; // 15 min, not 90s
 setInterval(() => {
   const now = Date.now();
   for (const d of store.allDevices()) {
@@ -1343,13 +1353,24 @@ setInterval(() => {
       offlineAlerted.add(d.id);
       if (d.status !== 'offline') store.updateDevice(d.id, { status: 'offline' });
       const mins = Math.round(silentFor / 60000);
-      const message = `${d.name}: agent offline for ${mins} min — possible tamper`;
-      console.warn(`[tamper] ${message}`);
-      store.appendActivity({ userId: d.userId, deviceId: d.id, kind: 'tamper_offline', message });
-      notifyUser(d.userId, 'Agent offline', message, {
+      // Log it quietly regardless (parent can review in Activity).
+      store.appendActivity({
+        userId: d.userId,
         deviceId: d.id,
-        kind: 'tamper_offline',
+        kind: 'device_offline',
+        message: `${d.name}: went offline`,
       });
+      // Only push a "possible tamper" alert if: parent opted in, it wasn't a
+      // clean shutdown, and it's been silent long enough to be suspicious.
+      const prefs = store.getUserPrefs(d.userId);
+      if (prefs.tamperAlertsOn && !d.shutdownCleanly && silentFor > TAMPER_ALERT_AFTER_MS) {
+        const message = `${d.name}: agent offline for ${mins} min — possible tamper`;
+        console.warn(`[tamper] ${message}`);
+        notifyUser(d.userId, 'Agent offline', message, {
+          deviceId: d.id,
+          kind: 'tamper_offline',
+        });
+      }
     }
   }
 }, TAMPER_SWEEP_MS).unref();

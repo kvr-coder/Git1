@@ -59,6 +59,10 @@ export interface UserPrefs {
   quietFromMin: number;
   quietToMin: number;
   dailySummaryOn: boolean;
+  // "Agent offline / possible tamper" alerts. OFF by default — a kid turning
+  // the PC off (sleep, outdoors) looks identical to tampering from the server,
+  // so this is pure alert-fatigue spam for most families.
+  tamperAlertsOn: boolean;
 }
 
 /** True if minute-of-day `m` falls inside [fromMin, toMin), handling wrap-around. */
@@ -320,6 +324,7 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN quietFromMin INTEGER NOT NULL DEFAULT -1",
   "ALTER TABLE users ADD COLUMN quietToMin INTEGER NOT NULL DEFAULT -1",
   "ALTER TABLE users ADD COLUMN dailySummaryOn INTEGER NOT NULL DEFAULT 1",
+  "ALTER TABLE users ADD COLUMN tamperAlertsOn INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -383,11 +388,12 @@ export const store = {
     db.prepare('UPDATE users SET passwordHash = ? WHERE id = ?').run(passwordHash, userId);
   },
   getUserPrefs(userId: string): UserPrefs {
-    const r = db.prepare('SELECT quietFromMin, quietToMin, dailySummaryOn FROM users WHERE id = ?').get(userId) as any;
+    const r = db.prepare('SELECT quietFromMin, quietToMin, dailySummaryOn, tamperAlertsOn FROM users WHERE id = ?').get(userId) as any;
     return {
       quietFromMin: typeof r?.quietFromMin === 'number' ? r.quietFromMin : -1,
       quietToMin: typeof r?.quietToMin === 'number' ? r.quietToMin : -1,
       dailySummaryOn: !!(r?.dailySummaryOn ?? 1),
+      tamperAlertsOn: !!(r?.tamperAlertsOn ?? 0),
     };
   },
   allUsersForSummary(): { id: string }[] {
@@ -403,9 +409,10 @@ export const store = {
       quietFromMin: patch.quietFromMin ?? cur.quietFromMin,
       quietToMin: patch.quietToMin ?? cur.quietToMin,
       dailySummaryOn: (patch.dailySummaryOn ?? cur.dailySummaryOn) ? 1 : 0,
+      tamperAlertsOn: (patch.tamperAlertsOn ?? cur.tamperAlertsOn) ? 1 : 0,
     };
-    db.prepare('UPDATE users SET quietFromMin = ?, quietToMin = ?, dailySummaryOn = ? WHERE id = ?')
-      .run(next.quietFromMin, next.quietToMin, next.dailySummaryOn, userId);
+    db.prepare('UPDATE users SET quietFromMin = ?, quietToMin = ?, dailySummaryOn = ?, tamperAlertsOn = ? WHERE id = ?')
+      .run(next.quietFromMin, next.quietToMin, next.dailySummaryOn, next.tamperAlertsOn, userId);
   },
   issueToken(userId: string): string {
     const t = token();

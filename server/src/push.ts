@@ -50,7 +50,10 @@ export async function notifyUser(
   // Quiet hours: skip non-urgent pushes when parent is in their no-disturb window.
   // Urgent kinds (tamper, clock_tamper) bypass.
   const kind = String((data as any)?.kind ?? '');
-  const urgent = kind === 'tamper_offline' || kind === 'clock_tamper' || kind === 'vpn_detected';
+  // Only genuinely time-critical, actively-suspicious signals bypass quiet
+  // hours. "agent offline" is NOT one of them — a PC being off overnight must
+  // never wake the parent at 2am.
+  const urgent = kind === 'clock_tamper' || kind === 'vpn_detected';
   if (!urgent) {
     try {
       const prefs = store.getUserPrefs(userId);

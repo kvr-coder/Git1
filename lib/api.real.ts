@@ -186,10 +186,10 @@ export const realApi = {
   async registerPushToken(token: string) {
     await request('/push/register', { method: 'POST', body: JSON.stringify({ token }) });
   },
-  async getPrefs(): Promise<{ quietFromMin: number; quietToMin: number; dailySummaryOn: boolean }> {
+  async getPrefs(): Promise<{ quietFromMin: number; quietToMin: number; dailySummaryOn: boolean; tamperAlertsOn: boolean }> {
     return request('/me/prefs');
   },
-  async setPrefs(patch: Partial<{ quietFromMin: number; quietToMin: number; dailySummaryOn: boolean }>) {
+  async setPrefs(patch: Partial<{ quietFromMin: number; quietToMin: number; dailySummaryOn: boolean; tamperAlertsOn: boolean }>) {
     return request('/me/prefs', { method: 'PUT', body: JSON.stringify(patch) });
   },
   async setVacation(deviceId: string, until: number) {

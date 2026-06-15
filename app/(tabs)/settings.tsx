@@ -23,6 +23,7 @@ export default function Settings() {
   const [quietFrom, setQuietFrom] = useState('');
   const [quietTo, setQuietTo] = useState('');
   const [summaryOn, setSummaryOn] = useState(true);
+  const [tamperOn, setTamperOn] = useState(false);
   const [prefsSaved, setPrefsSaved] = useState(false);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function Settings() {
         setQuietFrom(p.quietFromMin >= 0 ? fmtHHMM(p.quietFromMin) : '');
         setQuietTo(p.quietToMin >= 0 ? fmtHHMM(p.quietToMin) : '');
         setSummaryOn(p.dailySummaryOn);
+        setTamperOn(!!p.tamperAlertsOn);
       } catch {}
     })();
   }, []);
@@ -41,7 +43,7 @@ export default function Settings() {
     const f = parseHHMM(quietFrom);
     const t = parseHHMM(quietTo);
     try {
-      await realApi.setPrefs({ quietFromMin: f, quietToMin: t, dailySummaryOn: summaryOn });
+      await realApi.setPrefs({ quietFromMin: f, quietToMin: t, dailySummaryOn: summaryOn, tamperAlertsOn: tamperOn });
       setPrefsSaved(true);
       setTimeout(() => setPrefsSaved(false), 1500);
     } catch {}
@@ -163,6 +165,20 @@ export default function Settings() {
             label={summaryOn ? 'On' : 'Off'}
             variant={summaryOn ? 'primary' : 'secondary'}
             onPress={() => setSummaryOn(!summaryOn)}
+          />
+        </View>
+        <View style={[styles.row, { marginTop: spacing.sm }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.bodyStrong, { color: colors.text }]}>“Agent offline” alerts</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Off by default. A PC that&apos;s simply turned off (asleep, outdoors) looks
+              like tampering — leave off unless you want those pings.
+            </Text>
+          </View>
+          <Button
+            label={tamperOn ? 'On' : 'Off'}
+            variant={tamperOn ? 'primary' : 'secondary'}
+            onPress={() => setTamperOn(!tamperOn)}
           />
         </View>
         <Button label="Save" variant="secondary" onPress={savePrefs} />
