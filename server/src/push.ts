@@ -3,7 +3,7 @@
 //   * Web Push (W3C) — instant phone notifications via the browser dashboard,
 //     no Apple Developer account needed. iPhone needs Add-to-Home-Screen once.
 import webpush from 'web-push';
-import { store } from './store.js';
+import { store, inQuietHours } from './store.js';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -47,6 +47,19 @@ export async function notifyUser(
   body: string,
   data?: Record<string, unknown>,
 ) {
+  // Quiet hours: skip non-urgent pushes when parent is in their no-disturb window.
+  // Urgent kinds (tamper, clock_tamper) bypass.
+  const kind = String((data as any)?.kind ?? '');
+  const urgent = kind === 'tamper_offline' || kind === 'clock_tamper' || kind === 'vpn_detected';
+  if (!urgent) {
+    try {
+      const prefs = store.getUserPrefs(userId);
+      const now = new Date();
+      const m = now.getHours() * 60 + now.getMinutes();
+      if (inQuietHours(prefs.quietFromMin, prefs.quietToMin, m)) return;
+    } catch {}
+  }
+
   // Expo path (kept for backwards compatibility; quietly no-ops without tokens).
   void sendPush(store.pushTokensForUser(userId), title, body, data);
 

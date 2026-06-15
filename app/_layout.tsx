@@ -79,7 +79,13 @@ function RootNav() {
     const inAuth = segments[0] === 'login';
     if (!signedIn && !inAuth) router.replace('/login');
     if (signedIn && inAuth) router.replace('/');
-    if (signedIn) registerForPush();
+    if (signedIn) {
+      registerForPush();
+      // First-time parents: route through onboarding once.
+      storage.get(KEYS.onboarded).then((v) => {
+        if (!v && segments[0] !== 'onboarding') router.replace('/onboarding');
+      });
+    }
   }, [signedIn, segments, router, ready]);
 
   if (!ready) {
@@ -113,6 +119,7 @@ function RootNav() {
         <Stack.Screen name="device-bank/[id]" options={{ headerShown: true, title: 'Bank history', ...stackHeader }} />
         <Stack.Screen name="device-templates/[id]" options={{ headerShown: true, title: 'Chores', ...stackHeader }} />
         <Stack.Screen name="feedback" options={{ headerShown: true, title: 'Bug report', presentation: 'modal', ...stackHeader }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       </Stack>
     </AuthContext.Provider>
   );

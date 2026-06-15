@@ -9,7 +9,10 @@ export type CommandKind =
   | 'set_schedules'
   | 'set_borrow_settings'
   | 'add_bank_minutes'
-  | 'set_bank_minutes';
+  | 'set_bank_minutes'
+  | 'set_always_blocklist'
+  | 'rename'
+  | 'set_vacation';
 
 export interface Command {
   id: string;

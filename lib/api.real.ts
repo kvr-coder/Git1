@@ -49,6 +49,7 @@ interface ServerDevice {
   selfBorrowEnabled?: boolean;
   selfBorrowCapMinutes?: number;
   bankedMinutes?: number;
+  vacationUntil?: number;
 }
 
 const adaptDevice = (d: ServerDevice): Device => ({
@@ -65,6 +66,7 @@ const adaptDevice = (d: ServerDevice): Device => ({
   selfBorrowEnabled: !!d.selfBorrowEnabled,
   selfBorrowCapMinutes: d.selfBorrowCapMinutes ?? 30,
   bankedMinutes: d.bankedMinutes ?? 0,
+  vacationUntil: d.vacationUntil ?? 0,
 });
 
 interface ServerActivity {
@@ -183,6 +185,18 @@ export const realApi = {
   },
   async registerPushToken(token: string) {
     await request('/push/register', { method: 'POST', body: JSON.stringify({ token }) });
+  },
+  async getPrefs(): Promise<{ quietFromMin: number; quietToMin: number; dailySummaryOn: boolean }> {
+    return request('/me/prefs');
+  },
+  async setPrefs(patch: Partial<{ quietFromMin: number; quietToMin: number; dailySummaryOn: boolean }>) {
+    return request('/me/prefs', { method: 'PUT', body: JSON.stringify(patch) });
+  },
+  async setVacation(deviceId: string, until: number) {
+    await request(`/devices/${deviceId}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'set_vacation', payload: { until } }),
+    });
   },
   async sendFeedback(payload: { body: string; app?: string; version?: string; platform?: string; email?: string }) {
     await request('/feedback', { method: 'POST', body: JSON.stringify(payload) });

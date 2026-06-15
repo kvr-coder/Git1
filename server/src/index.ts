@@ -239,6 +239,21 @@ app.post('/feedback', auth, (req: AuthedRequest, res) => {
   res.json({ ok: true, id });
 });
 
+// ---- User prefs (quiet hours + daily summary toggle) ----
+app.get('/me/prefs', auth, (req: AuthedRequest, res) => {
+  res.json(store.getUserPrefs(req.userId!));
+});
+app.put('/me/prefs', auth, (req: AuthedRequest, res) => {
+  const p = z.object({
+    quietFromMin: z.number().int().min(-1).max(24 * 60 - 1).optional(),
+    quietToMin: z.number().int().min(-1).max(24 * 60 - 1).optional(),
+    dailySummaryOn: z.boolean().optional(),
+  }).safeParse(req.body);
+  if (!p.success) return res.status(400).json(p.error);
+  store.setUserPrefs(req.userId!, p.data);
+  res.json(store.getUserPrefs(req.userId!));
+});
+
 app.post('/webpush/test', auth, async (req: AuthedRequest, res) => {
   await notifyUser(req.userId!, 'Git1 test', 'Push notifications are working.', { kind: 'test' });
   res.json({ ok: true });
@@ -288,6 +303,7 @@ const commandSchema = z.object({
     'add_bank_minutes',
     'set_bank_minutes',
     'rename',
+    'set_vacation',
   ]),
   payload: z.record(z.unknown()).optional(),
 });
@@ -387,6 +403,22 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     store.updateDevice(d.id, { bankedMinutes: m });
     if (delta !== 0)
       store.appendBankLedger(req.userId!, d.id, delta, m, 'parent_set', null);
+  }
+
+  if (p.data.kind === 'set_vacation') {
+    // Until-epoch-ms; 0 = vacation off. Agent suspends schedules + blocklist
+    // while now < vacationUntil. The mobile UI sets this via a day picker.
+    const until = Math.max(0, Number(p.data.payload?.until ?? 0) | 0);
+    store.updateDevice(d.id, { vacationUntil: until });
+    store.appendActivity({
+      userId: req.userId!,
+      deviceId: d.id,
+      kind: until > Date.now() ? 'vacation_on' : 'vacation_off',
+      message: until > Date.now()
+        ? `${d.name}: vacation mode until ${new Date(until).toLocaleString()}`
+        : `${d.name}: vacation mode off`,
+    });
+    pushSnapshotToAgent(d.id);
   }
 
   if (p.data.kind === 'rename') {
@@ -873,6 +905,8 @@ function buildSnapshot(d: DeviceRow) {
     // and block_internet — so parent's Unlock genuinely unlocks until the
     // current window ends. Reset to 0 once the window passes (or another lock).
     scheduleOverrideUntil: d.scheduleOverrideUntil ?? 0,
+    // While now < vacationUntil the agent treats schedules + blocklist as off.
+    vacationUntil: (d as any).vacationUntil ?? 0,
     repoCommit: REPO_COMMIT,
   };
 }
@@ -1144,13 +1178,13 @@ function toPublicDevice(d: DeviceRow) {
     // (within ~3 minutes of its last heartbeat). Anything longer is treated as
     // "PC is off / asleep" — normal, no alarm. A graceful shutdown sets
     // d.shutdownCleanly, which suppresses the banner too.
+    vacationUntil: (d as any).vacationUntil ?? 0,
     tamperSuspected:
       d.status === 'offline' &&
       !!d.lastSeen &&
       !d.shutdownCleanly &&
       Date.now() - d.lastSeen < 3 * 60 * 1000,
     shutdownCleanly: !!d.shutdownCleanly,
-    lastSeen: d.lastSeen,
   };
 }
 
@@ -1176,6 +1210,41 @@ setInterval(() => {
     }
   }
 }, TAMPER_SWEEP_MS).unref();
+
+// ---- Daily summary push (server's local 21:00) ----
+// Fires once per minute; sends to each user whose dailySummaryOn is true and who
+// hasn't already received today's summary. Quiet hours are respected by
+// notifyUser. Aggregates today's usage + bank deltas + requests per device.
+let lastSummaryDay = '';
+function maybeSendDailySummary() {
+  const now = new Date();
+  if (now.getHours() !== 21 || now.getMinutes() !== 0) return;
+  const day = now.toISOString().slice(0, 10);
+  if (day === lastSummaryDay) return;
+  lastSummaryDay = day;
+  try {
+    const users = store.allUsersForSummary?.() ?? [];
+    for (const u of users) {
+      const prefs = store.getUserPrefs(u.id);
+      if (!prefs.dailySummaryOn) continue;
+      const devices = store.listDevices(u.id);
+      if (!devices.length) continue;
+      const lines = devices.map((d) => {
+        const used = d.usedTodayMinutes | 0;
+        const limit = d.dailyLimitMinutes | 0;
+        const h = Math.floor(used / 60), m = used % 60;
+        return `${d.name}: ${h}h ${m}m / ${Math.floor(limit / 60)}h`;
+      });
+      notifyUser(
+        u.id,
+        'Today in your family',
+        lines.join(' · '),
+        { kind: 'daily_summary' },
+      );
+    }
+  } catch (e) { console.warn('[summary] failed', e); }
+}
+setInterval(maybeSendDailySummary, 60 * 1000).unref();
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`git1-server listening on http://0.0.0.0:${PORT}`);

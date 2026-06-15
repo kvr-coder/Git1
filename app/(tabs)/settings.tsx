@@ -7,6 +7,7 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { SectionHeader, Segmented } from '../../components/ui';
+import { realApi } from '../../lib/api.real';
 import { useAuth } from '../../lib/auth';
 import { getApiBase, setServerUrl } from '../../lib/config';
 import { ThemePref, useTheme } from '../../lib/ThemeContext';
@@ -19,10 +20,32 @@ export default function Settings() {
   const [url, setUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [quietFrom, setQuietFrom] = useState('');
+  const [quietTo, setQuietTo] = useState('');
+  const [summaryOn, setSummaryOn] = useState(true);
+  const [prefsSaved, setPrefsSaved] = useState(false);
 
   useEffect(() => {
     setUrl(getApiBase());
+    (async () => {
+      try {
+        const p = await realApi.getPrefs();
+        setQuietFrom(p.quietFromMin >= 0 ? fmtHHMM(p.quietFromMin) : '');
+        setQuietTo(p.quietToMin >= 0 ? fmtHHMM(p.quietToMin) : '');
+        setSummaryOn(p.dailySummaryOn);
+      } catch {}
+    })();
   }, []);
+
+  const savePrefs = async () => {
+    const f = parseHHMM(quietFrom);
+    const t = parseHHMM(quietTo);
+    try {
+      await realApi.setPrefs({ quietFromMin: f, quietToMin: t, dailySummaryOn: summaryOn });
+      setPrefsSaved(true);
+      setTimeout(() => setPrefsSaved(false), 1500);
+    } catch {}
+  };
 
   const save = async () => {
     setSaving(true);
@@ -76,6 +99,49 @@ export default function Settings() {
         </View>
       </Card>
 
+      <SectionHeader>Notifications</SectionHeader>
+      <Card>
+        <Text style={[typography.h3, { color: colors.text }]}>Quiet hours</Text>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>
+          Don&apos;t ping during these hours (24h, e.g. 23:00 → 07:00). Leave blank for no quiet hours.
+          Urgent alerts (tamper, clock changes) still come through.
+        </Text>
+        <View style={[styles.row, { marginTop: spacing.xs }]}>
+          <TextInput
+            value={quietFrom}
+            onChangeText={setQuietFrom}
+            placeholder="23:00"
+            placeholderTextColor={colors.textFaint}
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text, flex: 1 }]}
+          />
+          <Text style={[typography.body, { color: colors.textMuted }]}>→</Text>
+          <TextInput
+            value={quietTo}
+            onChangeText={setQuietTo}
+            placeholder="07:00"
+            placeholderTextColor={colors.textFaint}
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text, flex: 1 }]}
+          />
+        </View>
+        <View style={[styles.row, { marginTop: spacing.sm }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.bodyStrong, { color: colors.text }]}>Daily summary at 21:00</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              One push per evening: used minutes, requests, chores.
+            </Text>
+          </View>
+          <Button
+            label={summaryOn ? 'On' : 'Off'}
+            variant={summaryOn ? 'primary' : 'secondary'}
+            onPress={() => setSummaryOn(!summaryOn)}
+          />
+        </View>
+        <Button label="Save" variant="secondary" onPress={savePrefs} />
+        {prefsSaved && (
+          <Text style={[typography.caption, { color: colors.success }]}>Saved ✓</Text>
+        )}
+      </Card>
+
       <SectionHeader>Connection</SectionHeader>
       <Card>
         <Text style={[typography.h3, { color: colors.text }]}>Server URL</Text>
@@ -120,6 +186,18 @@ export default function Settings() {
       </Text>
     </Screen>
   );
+}
+
+function parseHHMM(s: string): number {
+  const m = s.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return -1;
+  const h = Number(m[1]), mm = Number(m[2]);
+  if (h > 23 || mm > 59) return -1;
+  return h * 60 + mm;
+}
+function fmtHHMM(min: number): string {
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 const styles = StyleSheet.create({

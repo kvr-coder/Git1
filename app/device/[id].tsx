@@ -278,6 +278,47 @@ export default function DeviceDetail() {
         </View>
       </Card>
 
+      {/* Family vacation mode */}
+      <SectionHeader>Vacation mode</SectionHeader>
+      <Card>
+        <View style={styles.spread}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h3, { color: colors.text }]}>
+              {device.vacationUntil && device.vacationUntil > Date.now()
+                ? `On until ${new Date(device.vacationUntil).toLocaleDateString()}`
+                : 'Off'}
+            </Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Suspends all schedules and the blocklist. Limits stay. Great for
+              trips and sick days — no surprise lockouts.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.btnRow}>
+          <Button
+            full
+            label="+1 day"
+            variant="secondary"
+            onPress={() => run(() => api.setVacation(device.id, Date.now() + 86400_000))}
+          />
+          <Button
+            full
+            label="+3 days"
+            variant="secondary"
+            onPress={() => run(() => api.setVacation(device.id, Date.now() + 3 * 86400_000))}
+          />
+          <Button
+            full
+            label="+7 days"
+            variant="secondary"
+            onPress={() => run(() => api.setVacation(device.id, Date.now() + 7 * 86400_000))}
+          />
+        </View>
+        {!!device.vacationUntil && device.vacationUntil > Date.now() && (
+          <Button label="End vacation now" variant="ghost" onPress={() => run(() => api.setVacation(device.id, 0))} />
+        )}
+      </Card>
+
       {/* Self-borrow */}
       <SectionHeader>Allowances</SectionHeader>
       <Card>

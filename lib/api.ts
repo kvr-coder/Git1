@@ -242,6 +242,19 @@ const mockApi = {
     const i = mockTemplates.findIndex((t) => t.id === templateId);
     if (i >= 0) mockTemplates.splice(i, 1);
   },
+  async getPrefs() {
+    await delay(50);
+    return { quietFromMin: -1, quietToMin: -1, dailySummaryOn: true };
+  },
+  async setPrefs(_p: any) {
+    await delay(50);
+    return { quietFromMin: -1, quietToMin: -1, dailySummaryOn: true };
+  },
+  async setVacation(id: string, until: number) {
+    await delay(80);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) (d as any).vacationUntil = until;
+  },
 };
 
 // Dispatches per call so toggling the server URL at runtime takes effect

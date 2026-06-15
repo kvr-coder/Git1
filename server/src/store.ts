@@ -47,6 +47,26 @@ export interface User {
   id: string;
   email: string;
   passwordHash: string;
+  /** Minute-of-day (0-1439) when push notifications go silent. -1 = disabled. */
+  quietFromMin?: number;
+  /** Minute-of-day (0-1439) when push notifications resume. -1 = disabled. */
+  quietToMin?: number;
+  /** Send a 21:00 daily summary push? 1=yes, 0=no. */
+  dailySummaryOn?: number;
+}
+
+export interface UserPrefs {
+  quietFromMin: number;
+  quietToMin: number;
+  dailySummaryOn: boolean;
+}
+
+/** True if minute-of-day `m` falls inside [fromMin, toMin), handling wrap-around. */
+export function inQuietHours(fromMin: number, toMin: number, m: number): boolean {
+  if (fromMin < 0 || toMin < 0 || fromMin === toMin) return false;
+  if (fromMin < toMin) return m >= fromMin && m < toMin;
+  // wrap (e.g. 23:00 -> 07:00)
+  return m >= fromMin || m < toMin;
 }
 
 export interface DeviceRow {
@@ -68,6 +88,7 @@ export interface DeviceRow {
   bankedMinutes: number;
   lockedByParent: boolean;
   scheduleOverrideUntil: number;
+  vacationUntil: number;
 }
 
 export interface ScheduleRow {
@@ -295,6 +316,10 @@ for (const stmt of [
   "ALTER TABLE devices ADD COLUMN scheduleOverrideUntil INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN alwaysBlocklist TEXT NOT NULL DEFAULT '[]'",
   "ALTER TABLE devices ADD COLUMN shutdownCleanly INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE devices ADD COLUMN vacationUntil INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN quietFromMin INTEGER NOT NULL DEFAULT -1",
+  "ALTER TABLE users ADD COLUMN quietToMin INTEGER NOT NULL DEFAULT -1",
+  "ALTER TABLE users ADD COLUMN dailySummaryOn INTEGER NOT NULL DEFAULT 1",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -321,6 +346,7 @@ const rowToDevice = (r: any): DeviceRow => ({
   bankedMinutes: r.bankedMinutes ?? 0,
   lockedByParent: !!r.lockedByParent,
   scheduleOverrideUntil: Number(r.scheduleOverrideUntil ?? 0),
+  vacationUntil: Number(r.vacationUntil ?? 0),
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
@@ -355,6 +381,27 @@ export const store = {
   },
   setPassword(userId: string, passwordHash: string) {
     db.prepare('UPDATE users SET passwordHash = ? WHERE id = ?').run(passwordHash, userId);
+  },
+  getUserPrefs(userId: string): UserPrefs {
+    const r = db.prepare('SELECT quietFromMin, quietToMin, dailySummaryOn FROM users WHERE id = ?').get(userId) as any;
+    return {
+      quietFromMin: typeof r?.quietFromMin === 'number' ? r.quietFromMin : -1,
+      quietToMin: typeof r?.quietToMin === 'number' ? r.quietToMin : -1,
+      dailySummaryOn: !!(r?.dailySummaryOn ?? 1),
+    };
+  },
+  allUsersForSummary(): { id: string }[] {
+    return db.prepare('SELECT id FROM users').all() as { id: string }[];
+  },
+  setUserPrefs(userId: string, patch: Partial<UserPrefs>) {
+    const cur = this.getUserPrefs(userId);
+    const next = {
+      quietFromMin: patch.quietFromMin ?? cur.quietFromMin,
+      quietToMin: patch.quietToMin ?? cur.quietToMin,
+      dailySummaryOn: (patch.dailySummaryOn ?? cur.dailySummaryOn) ? 1 : 0,
+    };
+    db.prepare('UPDATE users SET quietFromMin = ?, quietToMin = ?, dailySummaryOn = ? WHERE id = ?')
+      .run(next.quietFromMin, next.quietToMin, next.dailySummaryOn, userId);
   },
   issueToken(userId: string): string {
     const t = token();
@@ -435,6 +482,10 @@ export const store = {
       selfBorrowCapMinutes: 30,
       bankedMinutes: 0,
       lockedByParent: false,
+      alwaysBlocklist: [],
+      shutdownCleanly: false,
+      scheduleOverrideUntil: 0,
+      vacationUntil: 0,
     };
     db.prepare(
       `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes, lockedByParent)

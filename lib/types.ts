@@ -16,6 +16,7 @@ export interface Device {
   selfBorrowEnabled: boolean;
   selfBorrowCapMinutes: number;
   bankedMinutes: number;
+  vacationUntil?: number;
 }
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
