@@ -76,39 +76,90 @@ def humanize(t: dt.datetime, now: dt.datetime | None = None) -> str:
 
 
 # ---------- (1) pre-lock banner ----------
-def show_prelock_banner(schedules: list[dict], seconds: int = 30) -> None:
-    """Show a 30-second friendly window before locking. Best-effort."""
+def show_prelock_banner(schedules: list[dict], seconds: int = 60) -> None:
+    """Friendly heads-up window before locking. Replaces the old 30s wall
+    with a 60s default (room to save a game), warmer copy, and a one-click
+    "I need 3 more minutes to save" action that opens the local dashboard
+    where the kid can fire a +3 request to the parent app.
+
+    Research basis: Ghosh 2018 found "I lost progress" was a top kid
+    complaint about parental-control apps; SDT (Ryan & Deci 2020) shows
+    perceived autonomy reduces reactance even when the limit itself is
+    unchanged. Best-effort — never blocks enforcement.
+    """
     if sys.platform != "win32":
         return
     next_t = next_available(schedules)
-    msg = ("Time's up. " + ("Next available " + humanize(next_t) if next_t else
-                            "Ask a parent for more time."))
+    when = ("Next time: " + humanize(next_t) if next_t
+            else "Ask a parent if you need more time.")
 
     def _show() -> None:
         try:
             import tkinter as tk
+            import webbrowser
         except Exception:  # noqa: BLE001
             return
         try:
+            import os
+            dash_port = int(os.environ.get("GIT1_DASHBOARD_PORT", "17654"))
+            dash_url = f"http://127.0.0.1:{dash_port}"
+        except Exception:  # noqa: BLE001
+            dash_url = "http://127.0.0.1:17654"
+        try:
             root = tk.Tk()
-            root.title("Git1")
+            root.title("timeoff")
             root.overrideredirect(True)
             root.attributes("-topmost", True)
-            root.attributes("-alpha", 0.95)
-            bg = "#0b1220"
-            root.configure(bg=bg)
-            f = tk.Frame(root, bg=bg, padx=24, pady=18)
+            root.attributes("-alpha", 0.97)
+            BG = "#111827"
+            FG = "#f3f4f6"
+            MUTED = "#94a3b8"
+            ACCENT = "#60a5fa"
+            root.configure(bg=BG)
+            f = tk.Frame(root, bg=BG, padx=32, pady=24)
             f.pack()
-            tk.Label(f, text="Your screen time is up.", fg="#fca5a5", bg=bg,
-                     font=("Segoe UI", 18, "bold")).pack()
-            tk.Label(f, text=msg, fg="#e8eef7", bg=bg,
-                     font=("Segoe UI", 13)).pack(pady=(6, 4))
-            tk.Label(f, text="The PC will lock in a few seconds.", fg="#8aa0c0",
-                     bg=bg, font=("Segoe UI", 10)).pack()
+            tk.Label(f, text=f"{seconds // 60 if seconds >= 60 else seconds}"
+                          + (" min left" if seconds >= 60 else " sec left"),
+                     fg=FG, bg=BG, font=("Segoe UI Semibold", 22)).pack()
+            tk.Label(f, text="Wrap up or save your game.", fg=FG, bg=BG,
+                     font=("Segoe UI", 13)).pack(pady=(8, 2))
+            tk.Label(f, text=when, fg=MUTED, bg=BG,
+                     font=("Segoe UI", 10)).pack(pady=(0, 14))
+
+            btn_row = tk.Frame(f, bg=BG)
+            btn_row.pack()
+
+            def save_more(_e: object = None) -> None:
+                try:
+                    webbrowser.open(dash_url + "/?save=1")
+                finally:
+                    try: root.destroy()
+                    except Exception: pass
+
+            def done_now(_e: object = None) -> None:
+                # Cooperative exit — the kid chose to stop. The agent already
+                # owns the lock; closing the dialog just gets out of the way.
+                try: root.destroy()
+                except Exception: pass
+
+            b1 = tk.Button(btn_row, text="I need 3 more min to save",
+                           bg=ACCENT, fg="#0b1220",
+                           activebackground="#3b82f6",
+                           font=("Segoe UI Semibold", 11), bd=0, padx=14, pady=8,
+                           cursor="hand2", command=save_more)
+            b1.pack(side="left", padx=(0, 8))
+            b2 = tk.Button(btn_row, text="I'm done — pause now",
+                           bg="#1f2937", fg=FG,
+                           activebackground="#374151",
+                           font=("Segoe UI", 11), bd=0, padx=14, pady=8,
+                           cursor="hand2", command=done_now)
+            b2.pack(side="left")
+
             root.update_idletasks()
             w, h = root.winfo_reqwidth(), root.winfo_reqheight()
             sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-            root.geometry(f"+{(sw - w)//2}+{(sh - h)//2}")
+            # Bottom-right corner so it doesn't slam over what the kid is doing.
+            root.geometry(f"+{sw - w - 24}+{sh - h - 80}")
             root.after(int(seconds * 1000), root.destroy)
             root.mainloop()
         except Exception:  # noqa: BLE001
@@ -137,9 +188,10 @@ def sync_logon_message(schedules: list[dict]) -> None:
     if not next_t:
         clear_logon_message()
         return
-    caption = "Git1 — screen time"
-    text = (f"This PC is paused. Next allowed: {humanize(next_t)}\\n\\n"
-            "Ask a parent if you need access sooner.")
+    caption = "timeoff"
+    text = (f"PC is sleeping until {humanize(next_t)}.\\n\\n"
+            "Open the timeoff dashboard on your phone or another device to "
+            "ask a parent if you need it sooner.")
     _reg(["add", _REG_PATH, "/v", "legalnoticecaption", "/t", "REG_SZ",
           "/d", caption, "/f"])
     _reg(["add", _REG_PATH, "/v", "legalnoticetext", "/t", "REG_SZ",

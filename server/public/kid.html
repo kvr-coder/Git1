@@ -3,55 +3,160 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Git1 — your dashboard</title>
+<title>timeoff — my time</title>
 <style>
   :root {
-    --bg: #0f1115; --surface: #171a21; --alt: #1f2330;
-    --border: #2a2f3d; --text: #f5f7fa; --muted: #9aa3b2;
-    --primary: #4f8cff; --success: #3dd68c; --danger: #ff5c5c;
+    --bg: #0f172a; --surface: #1e293b; --alt: #334155;
+    --border: #334155; --text: #f1f5f9; --muted: #94a3b8;
+    --primary: #60a5fa; --primary-d: #3b82f6;
+    --success: #86efac; --warn: #fbbf24; --soft: #c4b5fd;
   }
   * { box-sizing: border-box; }
   body { background: var(--bg); color: var(--text);
     font: 15px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
-    margin: 0; padding: 24px; max-width: 640px; margin: 0 auto; }
-  h1 { margin: 0 0 4px; font-size: 28px; }
+    margin: 0; padding: 20px; max-width: 600px; margin: 0 auto;
+    padding-bottom: 60px; }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
   .muted { color: var(--muted); font-size: 13px; }
   .card { background: var(--surface); border: 1px solid var(--border);
-    border-radius: 16px; padding: 16px; margin: 16px 0; }
-  .row { display: flex; align-items: center; gap: 12px; }
-  .row > * + * { margin-left: 0; }
-  .bar { background: var(--alt); height: 8px; border-radius: 999px;
-    overflow: hidden; margin: 8px 0; }
-  .fill { background: var(--primary); height: 100%; transition: width .3s; }
-  .fill.over { background: var(--danger); }
-  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
-    font-size: 12px; font-weight: 600; background: var(--alt); color: var(--muted); }
-  .badge.ok { background: #1e3a2a; color: var(--success); }
-  .badge.bad { background: #3a1e1e; color: var(--danger); }
-  button { background: var(--primary); color: white; border: 0;
-    padding: 12px 18px; border-radius: 12px; font-size: 15px;
+    border-radius: 16px; padding: 16px; margin: 12px 0; }
+  .card.hero { padding: 28px 20px; text-align: center;
+    background: linear-gradient(160deg, #1e3a8a22 0%, #1e293b 100%);
+    border-color: #1e40af55; }
+  .hero .big { font-size: 72px; font-weight: 700; line-height: 1; margin: 6px 0;
+    color: var(--success); font-variant-numeric: tabular-nums; }
+  .hero .big.warn { color: var(--warn); }
+  .hero .big.soft { color: var(--soft); }
+  .hero .label { color: var(--muted); font-size: 13px; text-transform: uppercase;
+    letter-spacing: 1.5px; }
+  .ring { display: flex; justify-content: center; margin: 14px 0 6px; gap: 4px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--alt); }
+  .dot.on { background: var(--primary); }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  button { background: var(--primary); color: #0b1220; border: 0;
+    padding: 14px 18px; border-radius: 12px; font-size: 15px;
     font-weight: 600; cursor: pointer; }
+  button.full { width: 100%; }
   button:disabled { opacity: .5; cursor: not-allowed; }
+  button.ghost { background: var(--alt); color: var(--text); }
   input, select { background: var(--alt); color: var(--text); border: 0;
-    padding: 10px 12px; border-radius: 10px; font: inherit; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    padding: 12px; border-radius: 10px; font: inherit; }
+  .chip-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chip-btn { background: var(--alt); border: 1px solid var(--border);
+    color: var(--text); padding: 14px 12px; border-radius: 12px;
+    font-size: 14px; font-weight: 600; cursor: pointer; text-align: left;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .chip-btn:hover { background: #475569; }
+  .chip-btn .mins { color: var(--success); font-variant-numeric: tabular-nums; }
+  details { margin: 0 0 12px; }
+  details summary { color: var(--muted); padding: 8px 4px; cursor: pointer;
+    font-size: 14px; list-style: none; }
+  details summary::before { content: "▸ "; }
+  details[open] summary::before { content: "▾ "; }
+  details .card { margin-top: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { background: var(--alt); border: 1px solid var(--border);
-    padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+    padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--muted); }
   #flash { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--surface); border: 1px solid var(--border); padding: 10px 16px;
-    border-radius: 12px; opacity: 0; transition: opacity .3s; }
+    background: var(--surface); border: 1px solid var(--border); padding: 12px 18px;
+    border-radius: 12px; opacity: 0; transition: opacity .3s;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
   #flash.show { opacity: 1; }
+  .next-line { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .save-cta { display: none; margin: 12px 0; padding: 16px;
+    background: #1e3a8a; border: 1px solid var(--primary);
+    border-radius: 14px; text-align: center; }
+  .save-cta.show { display: block; }
 </style>
 </head>
 <body>
-<h1>Git1 — My time</h1>
-<p class="muted">Your screen time, schedules, and chores — all in one place.</p>
+<h1>Hi <span id="kid-name">there</span> 👋</h1>
+<p class="muted">Your time, your bank, your way to ask for more.</p>
 
-<div class="card" id="autospend-banner" style="display: none; border-color: var(--danger);">
-  <strong style="color: var(--danger);">⏰ Out of time today</strong>
+<!-- HERO: today's remaining time, the only number that matters to the kid -->
+<div class="card hero" id="hero">
+  <div class="label" id="hero-label">Time left today</div>
+  <div class="big" id="hero-big">…</div>
+  <div class="ring" id="ring"></div>
+  <div class="next-line" id="next-line"></div>
+</div>
+
+<!-- Save-game CTA: appears automatically when ?save=1 or under 3 min left -->
+<div class="save-cta" id="save-cta">
+  <strong>Need 3 more minutes to save?</strong>
+  <p class="muted" style="margin: 8px 0 12px;">
+    Tell your parent — they can approve in one tap.
+  </p>
+  <button class="full" id="save-btn">Ask for 3 minutes to save</button>
+</div>
+
+<!-- PRIMARY ACTION: ask for more time, big and obvious -->
+<div class="card">
+  <strong>Need more time?</strong>
+  <div class="row" style="margin-top: 10px;">
+    <select id="minutes" style="width: 100px;">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select>
+    <input id="reason" placeholder="Why? (optional, it helps)" style="flex: 1;" />
+  </div>
+  <button class="full" id="request-btn" style="margin-top: 10px;">
+    Ask for it
+  </button>
+</div>
+
+<!-- EARN TIME: one-tap chore chips for ND-friendly speed -->
+<div class="card">
+  <strong>Earn time by doing a chore</strong>
+  <p class="muted" style="margin: 6px 0 10px;">
+    Tap to send to your parent. They review, then it lands in your bank.
+  </p>
+  <div id="chore-templates" class="chip-row"></div>
+  <details style="margin-top: 12px;">
+    <summary>Or describe something different</summary>
+    <div style="padding: 10px 0;">
+      <input id="chore-desc" placeholder="e.g. helped with groceries"
+        style="width: 100%; margin-bottom: 8px;" />
+      <div class="row" style="gap: 8px;">
+        <select id="chore-minutes" style="width: 100px;">
+          <option value="5">5 min</option>
+          <option value="15" selected>15 min</option>
+          <option value="30">30 min</option>
+          <option value="60">60 min</option>
+          <option value="120">2 h</option>
+        </select>
+        <button id="chore-btn">Send</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<!-- BANK: secondary, with one-tap spend -->
+<div class="card">
+  <div class="between">
+    <strong>Bank</strong>
+    <span id="bank-amount" style="color: var(--success); font-weight: 600;">0m</span>
+  </div>
+  <p class="muted" style="margin: 8px 0;">Reward minutes you've earned. Spend whenever.</p>
+  <div class="row" style="gap: 8px;">
+    <select id="spend-minutes" style="width: 100px;">
+      <option value="5">5 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select>
+    <button id="spend-btn">Use from bank</button>
+  </div>
+</div>
+
+<!-- AUTOSPEND banner (out-of-time + bank balance available) -->
+<div class="card" id="autospend-banner" style="display: none; border-color: var(--warn);">
+  <strong style="color: var(--warn);">⏳ Out of time today</strong>
   <p class="muted" style="margin: 8px 0;">
-    You have <span id="autospend-bank">0</span> in your bank.
-    Spend some to keep going?
+    You have <span id="autospend-bank">0</span> in your bank. Use some?
   </p>
   <div class="row" style="gap: 8px;">
     <select id="autospend-minutes">
@@ -64,85 +169,11 @@
   </div>
 </div>
 
-<div class="card">
-  <div class="row" style="justify-content: space-between;">
-    <strong>Today</strong>
-    <span class="badge" id="status-badge">…</span>
-  </div>
-  <div class="bar"><div class="fill" id="fill"></div></div>
-  <div class="muted" id="usage-text">…</div>
-</div>
-
-<div class="card">
-  <strong>Internet</strong>
-  <div class="muted" id="net-text">…</div>
-</div>
-
-<div class="card">
-  <strong>Schedules</strong>
-  <div id="schedules" class="muted">…</div>
-</div>
-
-<div class="card">
-  <strong>Blocked apps</strong>
-  <div id="blocklist" class="chips" style="margin-top: 8px;"></div>
-</div>
-
-<div class="card">
-  <div class="row" style="justify-content: space-between;">
-    <strong>Bank</strong>
-    <span class="badge ok" id="bank-amount">0m</span>
-  </div>
-  <p class="muted" style="margin: 8px 0;">Reward minutes you've earned. Spend whenever.</p>
-  <div class="row" style="gap: 8px;">
-    <select id="spend-minutes">
-      <option value="5">5 min</option>
-      <option value="15" selected>15 min</option>
-      <option value="30">30 min</option>
-      <option value="60">60 min</option>
-    </select>
-    <button id="spend-btn">Use from bank</button>
-  </div>
-</div>
-
-<div class="card">
-  <strong>Submit a chore for reward</strong>
-  <p class="muted" style="margin: 8px 0;">Tell your parent what you did. They'll review it.</p>
-  <div id="chore-templates" class="chips" style="margin-bottom: 10px;"></div>
-  <input id="chore-desc" placeholder="e.g. Cleaned my room"
-    style="width: 100%; margin-bottom: 8px;" />
-  <div class="row" style="gap: 8px;">
-    <select id="chore-minutes">
-      <option value="5">5 min</option>
-      <option value="15" selected>15 min</option>
-      <option value="30">30 min</option>
-      <option value="60">60 min</option>
-      <option value="120">2 h</option>
-    </select>
-    <button id="chore-btn">Send</button>
-  </div>
-</div>
-
-<div class="card">
-  <strong>Ask for more time</strong>
-  <p class="muted" style="margin: 8px 0;">Send a request to your parent.</p>
-  <div class="row" style="gap: 8px;">
-    <select id="minutes">
-      <option value="5">5 min</option>
-      <option value="15" selected>15 min</option>
-      <option value="30">30 min</option>
-      <option value="60">60 min</option>
-    </select>
-    <input id="reason" placeholder="Why? (optional)" style="flex: 1;" />
-    <button id="request-btn">Request</button>
-  </div>
-</div>
-
+<!-- BORROW (only when enabled) -->
 <div class="card" id="borrow-card" style="display: none;">
   <strong>Borrow from tomorrow</strong>
   <p class="muted" style="margin: 8px 0;">
-    Add minutes to today, but tomorrow's allowance shrinks by the same amount.
-    Your parent gets a notification.
+    Add minutes today; tomorrow shrinks by the same amount. Parent sees it.
   </p>
   <div class="row" style="gap: 8px;">
     <select id="borrow-minutes">
@@ -153,236 +184,230 @@
     <button id="borrow-btn">Borrow</button>
   </div>
   <div id="borrow-warn" style="margin-top: 10px; padding: 10px;
-    background: #3a1e1e; color: var(--danger); border-radius: 10px;
+    background: #3a1e1e; color: var(--warn); border-radius: 10px;
     font-size: 13px;"></div>
 </div>
+
+<!-- The boring stuff: collapsed by default. Kept for transparency, not friction. -->
+<details>
+  <summary>Schedule, blocked apps, and what your parent sees</summary>
+  <div class="card">
+    <strong>Today's schedule</strong>
+    <div id="schedules" class="muted" style="margin-top: 6px;">…</div>
+  </div>
+  <div class="card">
+    <strong>Internet</strong>
+    <div class="muted" id="net-text" style="margin-top: 6px;">…</div>
+  </div>
+  <div class="card">
+    <strong>Blocked apps</strong>
+    <div id="blocklist" class="chips" style="margin-top: 8px;"></div>
+  </div>
+  <div class="card">
+    <strong>What your parent can see</strong>
+    <p class="muted" style="margin: 6px 0;">
+      No secrets — this is the full list:
+    </p>
+    <ul style="margin: 0 0 0 18px; padding: 0; line-height: 1.6;">
+      <li>Minutes used today (not which sites)</li>
+      <li>Apps you launched (names only — not chats, not screens)</li>
+      <li>Lock/unlock events</li>
+      <li>Requests and chores you sent</li>
+      <li>Bank balance and what you spent it on</li>
+    </ul>
+    <p class="muted" style="margin-top: 10px;">
+      <strong>Never:</strong> messages, DMs, screenshots, websites, search history.
+    </p>
+  </div>
+</details>
 
 <div id="flash"></div>
 
 <script>
-const fmt = (m) => m < 60 ? `${Math.round(m)}m` :
-  `${Math.floor(m/60)}h ${Math.round(m%60)}m`;
+const $ = (id) => document.getElementById(id);
+const flash = (msg) => {
+  const el = $('flash'); el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2400);
+};
+const fmt = (m) => { m = Math.max(0, m|0); const h = (m/60)|0, mm = m%60;
+  return h ? `${h}h ${mm}m` : `${mm}m`; };
 
 async function refresh() {
-  try {
-    const r = await fetch('/kid/status');
-    const s = await r.json();
-    const pct = Math.min(1, s.usedTodayMinutes / Math.max(1, s.limitMinutes));
-    const fill = document.getElementById('fill');
-    fill.style.width = `${pct * 100}%`;
-    fill.classList.toggle('over', pct >= 1);
-    document.getElementById('usage-text').textContent =
-      `${fmt(s.usedTodayMinutes)} of ${fmt(s.limitMinutes)} used`;
-    const b = document.getElementById('status-badge');
-    if (!s.scheduleAllowed) { b.textContent = 'Locked by schedule'; b.className = 'badge bad'; }
-    else if (s.usedTodayMinutes >= s.limitMinutes) { b.textContent = 'Over limit'; b.className = 'badge bad'; }
-    else { b.textContent = 'OK'; b.className = 'badge ok'; }
-    document.getElementById('net-text').textContent =
-      s.internetBlocked ? 'Blocked by parent' : 'Allowed';
-    const sched = document.getElementById('schedules');
-    if (!s.schedules || !s.schedules.length) sched.textContent = 'None.';
-    else sched.innerHTML = s.schedules.map(x => {
-      const days = (x.days || []).map(d => d.toUpperCase()).join(' ');
-      const time = `${String(Math.floor(x.startMinute/60)).padStart(2,'0')}:${String(x.startMinute%60).padStart(2,'0')}`
-        + `–${String(Math.floor(x.endMinute/60)).padStart(2,'0')}:${String(x.endMinute%60).padStart(2,'0')}`;
-      return `<div>· ${x.name || 'Schedule'} — ${days} — ${time} ${x.enabled ? '' : '(off)'}</div>`;
-    }).join('');
-    const bl = document.getElementById('blocklist');
-    bl.innerHTML = (s.blocklist && s.blocklist.length)
-      ? s.blocklist.map(n => `<span class="chip">${n}</span>`).join('')
-      : '<span class="muted">None.</span>';
-    const bank = Number(s.bankedMinutes || 0);
-    document.getElementById('bank-amount').textContent = fmt(bank);
-    document.getElementById('spend-btn').disabled = bank <= 0;
-    const sp = document.getElementById('spend-minutes');
-    [...sp.options].forEach(o => { o.disabled = Number(o.value) > bank; });
+  let s;
+  try { const r = await fetch('/status'); s = await r.json(); }
+  catch { return; }
 
-    const out = (s.usedTodayMinutes >= s.limitMinutes) || !s.scheduleAllowed;
-    const banner = document.getElementById('autospend-banner');
-    if (out && bank > 0) {
-      banner.style.display = '';
-      document.getElementById('autospend-bank').textContent = fmt(bank);
-      const asm = document.getElementById('autospend-minutes');
-      [...asm.options].forEach(o => { o.disabled = Number(o.value) > bank; });
-    } else {
-      banner.style.display = 'none';
-    }
+  const used = s.usedTodayMinutes|0;
+  const limit = s.limitMinutes|0;
+  const left = Math.max(0, limit - used);
+  const bank = s.bankedMinutes|0;
+  const blocked = !!s.internetBlocked;
 
-    const tpls = s.choreTemplates || [];
-    const tWrap = document.getElementById('chore-templates');
-    tWrap.innerHTML = tpls.map((t, i) =>
-      `<span class="chip" data-i="${i}" style="cursor: pointer;">${t.description} · ${t.minutes}m</span>`
-    ).join('');
-    [...tWrap.querySelectorAll('.chip')].forEach(el => {
-      el.addEventListener('click', () => {
-        const t = tpls[Number(el.getAttribute('data-i'))];
-        if (!t) return;
-        document.getElementById('chore-desc').value = t.description;
-        document.getElementById('chore-minutes').value = String(t.minutes);
-      });
-    });
-    const bc = document.getElementById('borrow-card');
-    bc.style.display = s.selfBorrowEnabled ? '' : 'none';
-    if (s.selfBorrowEnabled) {
-      const sel = document.getElementById('borrow-minutes');
-      const cap = Number(s.selfBorrowCapMinutes || 0);
-      [...sel.options].forEach(o => { o.disabled = Number(o.value) > cap; });
-      const minutes = Number(sel.value);
-      const proj = Math.max(0, (s.tomorrowProjectedLimit ?? s.baseLimitMinutes ?? s.limitMinutes) - minutes);
-      const tDate = s.tomorrowDate || 'tomorrow';
-      document.getElementById('borrow-warn').textContent =
-        `Heads up: tomorrow (${tDate}) will be ${fmt(proj)} instead of `
-        + `${fmt(s.tomorrowProjectedLimit ?? s.baseLimitMinutes ?? s.limitMinutes)}.`;
-    }
-    pollNotifs(s);
-  } catch (e) { /* offline */ }
-}
-refresh(); setInterval(refresh, 5000);
-
-const flash = (msg) => {
-  const el = document.getElementById('flash');
-  el.textContent = msg; el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2500);
-};
-
-document.getElementById('borrow-minutes').addEventListener('change', refresh);
-
-document.getElementById('borrow-btn').addEventListener('click', async (e) => {
-  const btn = e.target; btn.disabled = true;
-  const minutes = Number(document.getElementById('borrow-minutes').value);
-  if (!confirm(`Borrow ${minutes} minutes from tomorrow? Tomorrow's allowance will shrink by ${minutes} min.`)) {
-    btn.disabled = false; return;
+  // Hero number — what's the kid's primary question? "How much do I have?"
+  const big = $('hero-big');
+  const lbl = $('hero-label');
+  big.classList.remove('warn', 'soft');
+  if (limit === 0) {
+    lbl.textContent = 'Open today'; big.textContent = '∞';
+  } else if (used >= limit && bank > 0) {
+    lbl.textContent = 'In your bank'; big.textContent = fmt(bank);
+    big.classList.add('warn');
+  } else if (used >= limit) {
+    lbl.textContent = 'Time today'; big.textContent = 'Up';
+    big.classList.add('soft');
+  } else {
+    lbl.textContent = 'Time left today'; big.textContent = fmt(left);
+    if (left <= 10) big.classList.add('warn');
   }
-  try {
-    const r = await fetch('/kid/borrow', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ minutes }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (r.ok) { flash(`Borrowed ${minutes} min. Refreshing…`); refresh(); }
-    else flash(body.error || 'Borrow rejected');
-  } catch { flash('Could not borrow.'); }
-  finally { btn.disabled = false; }
-});
 
-// Track which notification IDs have already been shown so we don't repeat them.
-const shownNotifs = new Set();
-function pollNotifs(s) {
-  const list = s.notifications || [];
-  for (const n of list) {
-    if (shownNotifs.has(n.id)) continue;
-    shownNotifs.add(n.id);
-    showNotif(n);
+  // Ring of dots = 10 segments of the day's allowance.
+  const ring = $('ring'); ring.innerHTML = '';
+  const segs = 10;
+  const filled = limit ? Math.min(segs, Math.round((used / limit) * segs)) : 0;
+  for (let i = 0; i < segs; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i < (segs - filled) ? ' on' : '');
+    ring.appendChild(d);
   }
-}
-function showNotif(n) {
-  const el = document.createElement('div');
-  const bg = n.kind === 'success' ? '#1E3A2A' : n.kind === 'danger' ? '#3A1E1E' : 'var(--surface)';
-  const fg = n.kind === 'success' ? 'var(--success)' : n.kind === 'danger' ? 'var(--danger)' : 'var(--text)';
-  el.style.cssText = `position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
-    background: ${bg}; color: ${fg}; border: 1px solid var(--border); padding: 14px 20px;
-    border-radius: 12px; font-weight: 600; z-index: 9999; max-width: 90%; text-align: center;
-    box-shadow: 0 6px 24px rgba(0,0,0,.4); animation: slideIn .25s ease-out;`;
-  el.textContent = n.text;
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; }, 6000);
-  setTimeout(() => el.remove(), 6500);
+
+  // What's next — bedtime, end of schedule, etc. (server already computes)
+  const nxt = (s.schedules || []).find(x => x.enabled);
+  if (nxt) {
+    const sh = (nxt.startMinute/60|0).toString().padStart(2,'0');
+    const sm = (nxt.startMinute%60).toString().padStart(2,'0');
+    $('next-line').textContent = `Next: ${nxt.name} at ${sh}:${sm}`;
+  } else { $('next-line').textContent = ''; }
+
+  // Save-CTA: if URL has ?save=1 OR left <= 3 min, show it.
+  const wantSave = new URLSearchParams(location.search).get('save') === '1';
+  const lowTime = limit > 0 && left > 0 && left <= 3;
+  $('save-cta').classList.toggle('show', wantSave || lowTime);
+
+  // Out-of-time banner: only when bank exists.
+  const showOOT = used >= limit && limit > 0 && bank > 0;
+  $('autospend-banner').style.display = showOOT ? 'block' : 'none';
+  $('autospend-bank').textContent = fmt(bank);
+
+  $('bank-amount').textContent = fmt(bank);
+
+  // Internet line.
+  $('net-text').textContent = blocked ? 'Blocked' : 'Open';
+
+  // Schedules summary (collapsed by default).
+  const list = (s.schedules || []).map(x => {
+    const sh = (x.startMinute/60|0).toString().padStart(2,'0');
+    const sm = (x.startMinute%60).toString().padStart(2,'0');
+    const eh = (x.endMinute/60|0).toString().padStart(2,'0');
+    const em = (x.endMinute%60).toString().padStart(2,'0');
+    return `${x.name}: ${sh}:${sm}–${eh}:${em}`;
+  }).join(' · ') || 'No schedules.';
+  $('schedules').textContent = list;
+
+  // Blocked apps.
+  const bl = $('blocklist'); bl.innerHTML = '';
+  (s.blocklist || []).forEach(name => {
+    const c = document.createElement('span');
+    c.className = 'chip'; c.textContent = name; bl.appendChild(c);
+  });
+
+  // Borrow card.
+  $('borrow-card').style.display = s.selfBorrowEnabled ? 'block' : 'none';
+  $('borrow-warn').textContent = `You can borrow up to ${s.selfBorrowCapMinutes|0} min.`;
+
+  // Chore template chips (the big one-tap row).
+  const ct = $('chore-templates'); ct.innerHTML = '';
+  (s.choreTemplates || []).forEach((t) => {
+    const b = document.createElement('button');
+    b.className = 'chip-btn';
+    b.innerHTML = `<span>${t.description}</span><span class="mins">+${t.minutes}m</span>`;
+    b.onclick = () => sendChore(t.description, t.minutes);
+    ct.appendChild(b);
+  });
+
+  // Pull first name from server if it returns one.
+  if (s.kidName) $('kid-name').textContent = s.kidName;
 }
 
-document.getElementById('chore-btn').addEventListener('click', async (e) => {
-  const btn = e.target; btn.disabled = true;
-  const description = document.getElementById('chore-desc').value.trim();
-  const minutes = Number(document.getElementById('chore-minutes').value);
-  if (!description) { flash('Tell what you did.'); btn.disabled = false; return; }
+async function sendChore(description, minutes) {
   try {
-    const r = await fetch('/kid/chore', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+    const r = await fetch('/chore', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ description, minutes }),
     });
-    const body = await r.json().catch(() => ({}));
-    if (r.ok) { flash('Sent! Wait for parent approval.'); document.getElementById('chore-desc').value = ''; }
-    else flash(body.error || 'Could not send.');
-  } catch { flash('Could not send.'); }
-  finally { btn.disabled = false; }
+    flash(r.ok ? `Sent: ${description} (+${minutes}m)` : 'Could not send');
+  } catch { flash('Could not send'); }
+}
+
+$('chore-btn').addEventListener('click', async () => {
+  const description = $('chore-desc').value.trim();
+  const minutes = Number($('chore-minutes').value);
+  if (!description) return flash('Add a short description');
+  await sendChore(description, minutes);
+  $('chore-desc').value = '';
 });
 
-document.getElementById('autospend-btn').addEventListener('click', async (e) => {
-  const btn = e.target; btn.disabled = true;
-  const minutes = Number(document.getElementById('autospend-minutes').value);
+$('save-btn').addEventListener('click', async () => {
   try {
-    const r = await fetch('/kid/spend', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+    const r = await fetch('/request', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ minutes: 3, reason: 'save my game' }),
+    });
+    flash(r.ok ? 'Sent — your parent will see it now' : 'Could not send');
+  } catch { flash('Could not send'); }
+});
+
+$('spend-btn').addEventListener('click', async () => {
+  const minutes = Number($('spend-minutes').value);
+  const btn = $('spend-btn'); btn.disabled = true;
+  try {
+    const r = await fetch('/spend', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ minutes }),
     });
-    const body = await r.json().catch(() => ({}));
-    if (r.ok) { flash(`Used ${minutes} min from bank.`); refresh(); }
-    else flash(body.error || 'Could not spend.');
-  } catch { flash('Could not spend.'); }
+    flash(r.ok ? `Used ${minutes}m from bank` : 'Could not spend');
+    await refresh();
+  } catch { flash('Could not spend'); }
   finally { btn.disabled = false; }
 });
 
-document.getElementById('spend-btn').addEventListener('click', async (e) => {
-  const btn = e.target; btn.disabled = true;
-  const minutes = Number(document.getElementById('spend-minutes').value);
+$('autospend-btn').addEventListener('click', () => {
+  $('spend-minutes').value = $('autospend-minutes').value;
+  $('spend-btn').click();
+});
+
+$('borrow-btn').addEventListener('click', async () => {
+  const minutes = Number($('borrow-minutes').value);
   try {
-    const r = await fetch('/kid/spend', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+    const r = await fetch('/borrow', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ minutes }),
     });
-    const body = await r.json().catch(() => ({}));
-    if (r.ok) { flash(`Used ${minutes} min from bank.`); refresh(); }
-    else flash(body.error || 'Could not spend.');
-  } catch { flash('Could not spend.'); }
-  finally { btn.disabled = false; }
+    if (r.ok) {
+      const j = await r.json();
+      flash(`Borrowed ${minutes}m — tomorrow now ${j.newLimit || ''}`);
+      await refresh();
+    } else flash('Could not borrow');
+  } catch { flash('Could not borrow'); }
 });
 
-document.getElementById('request-btn').addEventListener('click', async (e) => {
-  const btn = e.target; btn.disabled = true;
-  const minutes = Number(document.getElementById('minutes').value);
-  const reason = document.getElementById('reason').value;
+$('request-btn').addEventListener('click', async () => {
+  const minutes = Number($('minutes').value);
+  const reason = $('reason').value.trim();
+  const btn = $('request-btn'); btn.disabled = true;
   try {
-    const r = await fetch('/kid/request', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+    const r = await fetch('/request', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ minutes, reason }),
     });
-    flash(r.ok ? 'Sent to your parent.' : 'Could not send.');
-    if (r.ok) document.getElementById('reason').value = '';
-  } catch { flash('Could not send.'); }
+    flash(r.ok ? 'Sent to your parent' : 'Could not send');
+    if (r.ok) $('reason').value = '';
+  } catch { flash('Could not send'); }
   finally { btn.disabled = false; }
 });
-</script>
 
-<div class="card" style="margin-top: 16px;">
-  <h3 style="margin: 0 0 8px 0;">What your parent can see</h3>
-  <p style="margin: 0 0 8px 0; opacity: 0.85;">
-    No secrets here — this is everything timeoff shows your parent. We told them
-    you'd see this list too.
-  </p>
-  <ul style="margin: 0 0 0 18px; padding: 0; line-height: 1.6;">
-    <li>How many minutes you used today (not which websites)</li>
-    <li>Which apps you launched (just names — Discord, Minecraft — not chats)</li>
-    <li>When the PC was locked or unlocked</li>
-    <li>Time requests and chores you sent</li>
-    <li>Your bank balance and what you spent it on</li>
-  </ul>
-  <h3 style="margin: 14px 0 8px 0;">What your parent does NOT see</h3>
-  <ul style="margin: 0 0 0 18px; padding: 0; line-height: 1.6;">
-    <li>Your messages, chats, or DMs</li>
-    <li>Your screen contents or screenshots</li>
-    <li>Which websites you visited</li>
-    <li>Your search history</li>
-  </ul>
-  <p style="margin: 12px 0 0 0; opacity: 0.7; font-size: 13px;">
-    If you think a rule is unfair, send a request with a reason — the chat is the
-    point. Research shows kids who talk about limits with their parents end up
-    with more freedom, not less.
-  </p>
-</div>
+refresh();
+setInterval(refresh, 10_000);
+</script>
 
 </body>
 </html>
