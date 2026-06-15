@@ -51,6 +51,18 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Qp installer\timeoff-agent.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
 
+      - name: Stage script installer (BAT fallback)
+        shell: pwsh
+        run: |
+          # Copy the one-file BAT next to the EXE so it's a sibling download.
+          # Antivirus that blocks the unsigned EXE usually lets a plain .bat
+          # through, and vice versa — having both means at least one path
+          # works on every kid PC without us scrambling.
+          New-Item -ItemType Directory -Force -Path installer\Output | Out-Null
+          Copy-Item scripts\Install-Git1-Kid-OneFile.bat installer\Output\timeoff-agent-setup.bat
+          $h = (Get-FileHash installer\Output\timeoff-agent-setup.bat -Algorithm SHA256).Hash.ToLower()
+          "$h  timeoff-agent-setup.bat" | Out-File -Encoding ascii installer\Output\timeoff-agent-setup.bat.sha256
+
       - name: Hash installer
         id: hash
         shell: pwsh
@@ -76,3 +88,5 @@ jobs:
           files: |
             installer/Output/timeoff-agent-setup.exe
             installer/Output/timeoff-agent-setup.exe.sha256
+            installer/Output/timeoff-agent-setup.bat
+            installer/Output/timeoff-agent-setup.bat.sha256

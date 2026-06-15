@@ -33,6 +33,9 @@ export default function Pair() {
   const installerUrl = code.length === 6
     ? `${base}/installer/go?code=${code}`
     : `${base}/installer/go`;
+  // Direct .bat URL for the rare AV that blocks the landing page redirect.
+  const batUrl = 'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.bat';
+  const exeUrl = 'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe';
   const qrUrl = `${base}/qr.png?text=${encodeURIComponent(installerUrl)}`;
 
   const submit = async () => {
@@ -53,10 +56,12 @@ export default function Pair() {
   };
 
   const emailMe = async () => {
+    // Resend-friendly: idempotent on the server, no rate limit, no token
+    // burn. Tap as often as needed.
     setSendingEmail(true);
     try {
       const r = await realApi.emailInstaller(code.length === 6 ? code : undefined);
-      if (r.sent) setEmailedTo('your account email');
+      if (r.sent) setEmailedTo(`sent at ${new Date().toLocaleTimeString()}`);
       else {
         // Email infra not configured yet — fall back to share sheet.
         await Share.share({ message: r.link });
@@ -80,10 +85,14 @@ export default function Pair() {
 
       <Card>
         <Text style={[typography.h3, { color: colors.text }]}>1. Send the installer</Text>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>
+          The link doesn&apos;t expire. Tap as many times as you need — the email
+          and the link work after the first use too.
+        </Text>
         <View style={styles.btnRow}>
           <Button
             full
-            label="Email me"
+            label={emailedTo ? 'Resend email' : 'Email me'}
             icon="mail-outline"
             variant="secondary"
             loading={sendingEmail}
@@ -98,14 +107,14 @@ export default function Pair() {
           />
           <Button
             full
-            label="Share"
+            label="Share link"
             icon="share-outline"
             variant="secondary"
             onPress={() => Share.share({ message: installerUrl })}
           />
         </View>
         {emailedTo && (
-          <Text style={[typography.caption, { color: colors.success }]}>Sent to {emailedTo} ✓</Text>
+          <Text style={[typography.caption, { color: colors.success }]}>Email {emailedTo} ✓</Text>
         )}
         {showQr && (
           <View style={styles.qrWrap}>
@@ -121,6 +130,31 @@ export default function Pair() {
           icon="open-outline"
           onPress={() => Linking.openURL(installerUrl).catch(() => {})}
         />
+      </Card>
+
+      <Card>
+        <Text style={[typography.h3, { color: colors.text }]}>If antivirus blocks it</Text>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>
+          Two installers, same agent. Try the .exe first — it&apos;s
+          SmartScreen-friendlier. If your AV quarantines it, send the .bat
+          instead. Direct links bypass the landing page:
+        </Text>
+        <View style={styles.btnRow}>
+          <Button
+            full
+            label="Share .exe"
+            icon="document-outline"
+            variant="ghost"
+            onPress={() => Share.share({ message: exeUrl })}
+          />
+          <Button
+            full
+            label="Share .bat"
+            icon="terminal-outline"
+            variant="ghost"
+            onPress={() => Share.share({ message: batUrl })}
+          />
+        </View>
       </Card>
 
       <Card>

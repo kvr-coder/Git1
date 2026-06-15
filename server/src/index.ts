@@ -264,14 +264,30 @@ const INSTALLER_URL =
   'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe';
 const INSTALLER_SHA256_URL =
   'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe.sha256';
+// BAT fallback — when an AV blocks the unsigned .exe, the .bat usually goes
+// through (no PE header to flag), and vice versa. Ship both so the parent
+// always has a working path.
+const INSTALLER_BAT_URL =
+  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.bat';
+const INSTALLER_BAT_SHA256_URL =
+  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.bat.sha256';
 
 app.get('/installer/latest', auth, async (_req: AuthedRequest, res) => {
-  let sha = '';
-  try {
-    const r = await fetch(INSTALLER_SHA256_URL);
-    if (r.ok) sha = (await r.text()).trim().split(/\s+/)[0] ?? '';
-  } catch {}
-  res.json({ url: INSTALLER_URL, sha256: sha });
+  const readSha = async (u: string) => {
+    try {
+      const r = await fetch(u);
+      if (r.ok) return (await r.text()).trim().split(/\s+/)[0] ?? '';
+    } catch {}
+    return '';
+  };
+  const [sha, shaBat] = await Promise.all([readSha(INSTALLER_SHA256_URL), readSha(INSTALLER_BAT_SHA256_URL)]);
+  res.json({
+    exe: { url: INSTALLER_URL, sha256: sha },
+    bat: { url: INSTALLER_BAT_URL, sha256: shaBat },
+    // Back-compat for clients reading the old shape.
+    url: INSTALLER_URL,
+    sha256: sha,
+  });
 });
 
 // One-shot pair-code-bearing installer URL — Inno Setup picks up /code= and
@@ -300,9 +316,11 @@ a.btn{display:block;background:#1d4ed8;color:#fff;text-decoration:none;text-alig
 <h1>Install the timeoff agent</h1>
 <p>On the <b>kid's PC</b> (not your phone), tap the button below. The installer is unsigned for now — Windows will show "Unrecognized app"; click <i>More info → Run anyway</i>.</p>
 ${safeCode ? `<p>When asked, enter this pairing code:</p><div class="code">${safeCode}</div>` : ''}
-<a class="btn" href="${INSTALLER_URL}">Download timeoff-agent-setup.exe</a>
-<p style="margin-top:24px;font-size:14px;color:#475569">Verify it against the SHA256 on the
-<a href="https://github.com/kvr-coder/git1/releases/latest">release page</a>.</p>
+<a class="btn" href="${INSTALLER_URL}">Download .exe installer</a>
+<p style="margin:14px 0 6px 0;font-size:14px;color:#475569">If your antivirus blocks the .exe, use the script installer instead:</p>
+<a class="btn" style="background:#475569" href="${INSTALLER_BAT_URL}">Download .bat installer (fallback)</a>
+<p style="margin-top:24px;font-size:14px;color:#475569">Both do the same thing. Verify SHA256 on the
+<a href="https://github.com/kvr-coder/git1/releases/latest">release page</a>. This page can be reopened any time — the link doesn't expire.</p>
 </body></html>`);
 });
 
@@ -349,8 +367,13 @@ app.post('/installer/email', auth, async (req: AuthedRequest, res) => {
       text:
         `Open this link on the kid's PC to install timeoff:\n\n${link}\n\n` +
         (p.data.code ? `Pairing code: ${p.data.code}\n\n` : '') +
-        `The installer is unsigned for now — Windows will show "Unrecognized app". ` +
-        `Click "More info → Run anyway". SHA256 is on the release page.`,
+        `The page offers two installers:\n` +
+        `  * .exe (Inno Setup) — preferred\n` +
+        `  * .bat (script) — fallback when antivirus blocks the .exe\n\n` +
+        `Both are unsigned for now — Windows will show "Unrecognized app". ` +
+        `Click "More info → Run anyway". SHA256s are on the release page.\n\n` +
+        `This link doesn't expire — you can re-open it any time, and you can ` +
+        `also re-send this email from the app whenever you need to.`,
     });
     res.json({ ok: true, sent: true, link });
   } catch (e: any) {
