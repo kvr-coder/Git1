@@ -34,14 +34,17 @@ jobs:
         # refreshed on the runner; not committed back.
         run: npm install --legacy-peer-deps --no-audit --no-fund
 
-      - name: Debug expo config
-        # eas update calls `expo config --json --type public` under the hood
-        # and dies silently if that fails. Run it explicitly so the actual
-        # error reaches the workflow log instead of one-line "exited with 1".
+      - name: Ensure EAS project exists
+        # `eas update` errors out in non-interactive mode if app.json has no
+        # `extra.eas.projectId`. `eas init --non-interactive --force` creates
+        # (or links) the project under the authenticated account and writes
+        # the projectId into app.json. We commit that change locally for the
+        # current run but don't push it back — projectId is idempotent so
+        # subsequent runs just verify it.
         run: |
-          set -x
-          npx expo config --type public || true
-          npx expo-doctor || true
+          if ! node -e "const c=require('./app.json'); process.exit(c.expo?.extra?.eas?.projectId ? 0 : 1)"; then
+            npx eas init --non-interactive --force
+          fi
 
       - name: Publish update
         run: |
