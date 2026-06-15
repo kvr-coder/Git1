@@ -10,11 +10,29 @@ Stdlib only (http.server) — no extra deps.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 
 DEFAULT_PORT = 17654
+
+# Single source of truth for the kid UI: the same kid.html the server preview
+# uses. The agent has the repo checked out, so we read it from disk on every
+# request (cheap, always current after a git-pull self-update). The page
+# auto-detects its API base ("" on the agent → real /status, /request, etc.),
+# so the kid gets the live, redesigned dashboard with REAL data. Falls back to
+# the embedded PAGE below if the file isn't found.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_KID_HTML_PATH = os.path.join(_REPO_ROOT, "server", "public", "kid.html")
+
+
+def _load_kid_html() -> str:
+    try:
+        with open(_KID_HTML_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return PAGE
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -440,7 +458,7 @@ class Dashboard:
 
             def do_GET(self) -> None:
                 if self.path == "/" or self.path.startswith("/index"):
-                    body = PAGE.encode()
+                    body = _load_kid_html().encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Content-Length", str(len(body)))
