@@ -308,6 +308,19 @@ export default function DeviceDetail() {
         </View>
       </Card>
 
+      {/* Stats CTA — high-level trends for the past 4 weeks. */}
+      <Card>
+        <View style={styles.spread}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h3, { color: colors.text }]}>Stats & trends</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              This week vs last, daily chart, top apps, streaks.
+            </Text>
+          </View>
+          <Button label="Open" icon="stats-chart-outline" onPress={() => router.push(`/device-stats/${device.id}`)} />
+        </View>
+      </Card>
+
       {/* Family vacation mode */}
       <SectionHeader>Vacation mode</SectionHeader>
       <Card>

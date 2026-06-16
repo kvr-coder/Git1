@@ -255,6 +255,23 @@ const mockApi = {
     const d = mockDevices.find((x) => x.id === id);
     if (d) (d as any).vacationUntil = until;
   },
+  async getStats(_id: string, days = 28) {
+    await delay(60);
+    // Mock 28 days of plausible-looking history so the screen has something
+    // to render in demo mode.
+    const out: { date: string; totalMinutes: number; appUsage: Record<string, number> }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400_000);
+      const date = d.toISOString().slice(0, 10);
+      const base = 60 + Math.round(Math.sin(i * 0.6) * 35) + (d.getDay() === 0 || d.getDay() === 6 ? 45 : 0);
+      out.push({
+        date,
+        totalMinutes: Math.max(15, base),
+        appUsage: { 'minecraft.exe': 30, 'discord.exe': 18, 'chrome.exe': 12 },
+      });
+    }
+    return { daily: out };
+  },
 };
 
 // Dispatches per call so toggling the server URL at runtime takes effect

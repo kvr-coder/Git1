@@ -198,6 +198,9 @@ export const realApi = {
       body: JSON.stringify({ kind: 'set_vacation', payload: { until } }),
     });
   },
+  async getStats(id: string, days = 28): Promise<{ daily: { date: string; totalMinutes: number; appUsage: Record<string, number> }[] }> {
+    return request(`/devices/${id}/stats?days=${days}`);
+  },
   async emailInstaller(code?: string): Promise<{ ok: boolean; sent: boolean; link: string }> {
     return request('/installer/email', {
       method: 'POST',

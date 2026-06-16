@@ -118,6 +118,7 @@ function RootNav() {
         <Stack.Screen name="schedule/[id]" options={{ headerShown: true, title: 'Schedule', ...stackHeader }} />
         <Stack.Screen name="device-bank/[id]" options={{ headerShown: true, title: 'Bank history', ...stackHeader }} />
         <Stack.Screen name="device-templates/[id]" options={{ headerShown: true, title: 'Chores', ...stackHeader }} />
+        <Stack.Screen name="device-stats/[id]" options={{ headerShown: true, title: 'Stats', ...stackHeader }} />
         <Stack.Screen name="feedback" options={{ headerShown: true, title: 'Bug report', presentation: 'modal', ...stackHeader }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       </Stack>
