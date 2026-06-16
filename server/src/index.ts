@@ -383,6 +383,47 @@ app.post('/installer/email', auth, async (req: AuthedRequest, res) => {
   }
 });
 
+// ---- Self-serve data deletion ----
+// "Clear my history" — soft: drops activity / requests / chores / bank ledger /
+// stats / locations / photos. Devices stay paired, schedules stay, account
+// stays. Anyone reasonably privacy-minded can run this any time, no penalty.
+app.post('/me/clear-history', auth, (req: AuthedRequest, res) => {
+  const p = z.object({ confirm: z.string() }).safeParse(req.body);
+  if (!p.success || p.data.confirm !== 'CLEAR') {
+    return res.status(400).json({ error: 'type CLEAR to confirm' });
+  }
+  const result = store.clearHistoryForUser(req.userId!);
+  console.log(`[history-cleared] user=${req.userId} tables=${JSON.stringify(result.tables)}`);
+  res.json({ ok: true, ...result });
+});
+
+// "Delete my account" — hard: wipes everything tied to this user, revokes
+// agent tokens, signs out. Kid PC will fail to authenticate on next reconnect
+// and would need to be re-paired (the parent gets a fresh 6-digit code).
+// GDPR-compliant nuke.
+app.post('/me/delete', auth, (req: AuthedRequest, res) => {
+  const p = z.object({ confirm: z.string(), email: z.string().email().optional() }).safeParse(req.body);
+  if (!p.success || p.data.confirm !== 'DELETE') {
+    return res.status(400).json({ error: 'type DELETE to confirm' });
+  }
+  // Optional second check: must match the account email.
+  const onFile = store.emailFor(req.userId!) ?? '';
+  if (p.data.email && p.data.email.trim().toLowerCase() !== onFile.toLowerCase()) {
+    return res.status(400).json({ error: 'email does not match account' });
+  }
+  // Close any open agent sockets owned by this user before deleting.
+  for (const d of store.listDevices(req.userId!)) {
+    const ws = agentSockets.get(d.id);
+    if (ws && ws.readyState === ws.OPEN) {
+      try { ws.close(4401, 'account_deleted'); } catch {}
+      agentSockets.delete(d.id);
+    }
+  }
+  const result = store.deleteUserCompletely(req.userId!);
+  console.log(`[account-deleted] user=${req.userId} tables=${JSON.stringify(result.tables)}`);
+  res.json({ ok: true, ...result });
+});
+
 app.post('/webpush/test', auth, async (req: AuthedRequest, res) => {
   await notifyUser(req.userId!, 'Git1 test', 'Push notifications are working.', { kind: 'test' });
   res.json({ ok: true });

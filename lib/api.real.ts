@@ -200,6 +200,12 @@ export const realApi = {
       body: JSON.stringify({ kind: 'set_vacation', payload: { until } }),
     });
   },
+  async clearHistory(): Promise<{ ok: boolean; tables: Record<string, number> }> {
+    return request('/me/clear-history', { method: 'POST', body: JSON.stringify({ confirm: 'CLEAR' }) });
+  },
+  async deleteAccount(email: string): Promise<{ ok: boolean; tables: Record<string, number> }> {
+    return request('/me/delete', { method: 'POST', body: JSON.stringify({ confirm: 'DELETE', email }) });
+  },
   async setNdMode(deviceId: string, on: boolean) {
     await request(`/devices/${deviceId}/command`, {
       method: 'POST',

@@ -402,6 +402,80 @@ export const store = {
   allUsersForSummary(): { id: string }[] {
     return db.prepare('SELECT id FROM users').all() as { id: string }[];
   },
+
+  // ---- Self-serve data deletion -----------------------------------------
+  // The user (or our delete endpoint) calls these to clear server-held data
+  // without touching what lives on the kid's PC. clearHistoryForUser is the
+  // soft option (drops the activity/stats trail); deleteUserCompletely is the
+  // GDPR-style nuke.
+  clearHistoryForUser(userId: string): { tables: Record<string, number> } {
+    const ids = (this as any).parentUserIdsFor
+      ? (this as any).parentUserIdsFor(userId) as string[]
+      : [userId];
+    const placeholders = ids.map(() => '?').join(',');
+    // Devices owned by this family — used to scope per-device tables.
+    const deviceIds = (db
+      .prepare(`SELECT id FROM devices WHERE userId IN (${placeholders})`)
+      .all(...ids) as { id: string }[]).map((r) => r.id);
+    const dPlace = deviceIds.length ? deviceIds.map(() => '?').join(',') : '';
+    const counts: Record<string, number> = {};
+    const wipe = (sql: string, ...args: any[]) => {
+      try {
+        const info = db.prepare(sql).run(...args);
+        const table = sql.match(/FROM (\w+)/i)?.[1] ?? 'unknown';
+        counts[table] = (counts[table] ?? 0) + Number(info.changes ?? 0);
+      } catch (e) { console.warn('[clearHistory]', e); }
+    };
+    wipe(`DELETE FROM activity WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM time_requests WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM chore_requests WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM bank_ledger WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM photo_checkins WHERE userId IN (${placeholders})`, ...ids);
+    if (deviceIds.length) {
+      wipe(`DELETE FROM usage_daily WHERE deviceId IN (${dPlace})`, ...deviceIds);
+      wipe(`DELETE FROM device_locations WHERE deviceId IN (${dPlace})`, ...deviceIds);
+    }
+    // Also drop bug reports they personally submitted.
+    wipe(`DELETE FROM bug_reports WHERE userId = ?`, userId);
+    return { tables: counts };
+  },
+
+  deleteUserCompletely(userId: string): { tables: Record<string, number> } {
+    // Clear history first.
+    const counts = this.clearHistoryForUser(userId).tables;
+    const ids = (this as any).parentUserIdsFor
+      ? (this as any).parentUserIdsFor(userId) as string[]
+      : [userId];
+    const placeholders = ids.map(() => '?').join(',');
+    const wipe = (sql: string, ...args: any[]) => {
+      try {
+        const info = db.prepare(sql).run(...args);
+        const table = sql.match(/FROM (\w+)/i)?.[1] ?? 'unknown';
+        counts[table] = (counts[table] ?? 0) + Number(info.changes ?? 0);
+      } catch (e) { console.warn('[deleteUser]', e); }
+    };
+    // Keep deviceIds before we drop them, for geofence cleanup.
+    const deviceIds = (db
+      .prepare(`SELECT id FROM devices WHERE userId IN (${placeholders})`)
+      .all(...ids) as { id: string }[]).map((r) => r.id);
+    if (deviceIds.length) {
+      const dPlace = deviceIds.map(() => '?').join(',');
+      wipe(`DELETE FROM geofences WHERE deviceId IN (${dPlace})`, ...deviceIds);
+      wipe(`DELETE FROM chore_templates WHERE deviceId IN (${dPlace})`, ...deviceIds);
+    }
+    wipe(`DELETE FROM schedules WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM devices WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM co_parents WHERE primaryUserId IN (${placeholders}) OR coParentUserId IN (${placeholders})`, ...ids, ...ids);
+    wipe(`DELETE FROM co_parent_invites WHERE primaryUserId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM web_push_subs WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM push_tokens WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM auth_tokens WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM pair_recovery WHERE userId IN (${placeholders})`, ...ids);
+    wipe(`DELETE FROM users WHERE id IN (${placeholders})`, ...ids);
+    return { tables: counts };
+  },
+  // -----------------------------------------------------------------------
+
   emailFor(userId: string): string | null {
     const r = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined;
     return r?.email ?? null;

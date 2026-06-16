@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiBanner } from '../../components/ApiBanner';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -25,6 +25,10 @@ export default function Settings() {
   const [summaryOn, setSummaryOn] = useState(true);
   const [tamperOn, setTamperOn] = useState(false);
   const [prefsSaved, setPrefsSaved] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePhrase, setDeletePhrase] = useState('');
+  const [deleteEmail, setDeleteEmail] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setUrl(getApiBase());
@@ -107,7 +111,8 @@ export default function Settings() {
         <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>
           • Used minutes + app names on the kid PC (not chats, not screen contents){'\n'}
           • Time/chore requests your kid sends{'\n'}
-          • Lock/unlock events
+          • Lock/unlock events{'\n'}
+          • Your settings: schedule, blocklist, daily limit, bank balance
         </Text>
         <Text style={[typography.h3, { color: colors.text, marginTop: spacing.sm }]}>
           What we never collect
@@ -117,10 +122,17 @@ export default function Settings() {
           • Browsing URLs{'\n'}
           • No third-party ad SDKs. No analytics. No data sale, ever.
         </Text>
-        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.sm }]}>
-          Data lives only on your server ({getApiBase()}). EPFL found ~70% of
-          parental-control apps share kid data without consent. timeoff is built
-          to be the opposite.
+        <Text style={[typography.h3, { color: colors.text, marginTop: spacing.sm }]}>
+          Where it lives
+        </Text>
+        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>
+          Honestly: on our timeoff server ({getApiBase()}) so the kid PC and your
+          phone can sync through it. We don&apos;t sell it, share it, or analyse it
+          — but it does pass through us. Open source — every line is on GitHub.
+          {'\n\n'}
+          For maximum privacy you can self-host the server (free, takes ~10 min)
+          and point this app at it via &quot;Server URL&quot; below — then your data
+          literally never touches us.
         </Text>
         <Button
           label="Show your kid what's tracked"
@@ -128,7 +140,118 @@ export default function Settings() {
           icon="eye-outline"
           onPress={() => Linking.openURL(`${getApiBase()}/kid`).catch(() => {})}
         />
+        <Button
+          label="Clear my history on the server"
+          variant="secondary"
+          icon="trash-outline"
+          onPress={() => {
+            Alert.alert(
+              'Clear server history?',
+              'Drops every activity log, request, chore, bank ledger entry, stat, photo, and location from our server. Your paired kid PCs and your settings (schedule, blocklist, limit, bank balance) are NOT touched.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Clear',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const r = await realApi.clearHistory();
+                      const total = Object.values(r.tables ?? {}).reduce((s, n) => s + n, 0);
+                      Alert.alert('Cleared', `${total} server-side records removed. Devices and settings untouched.`);
+                    } catch (e: any) {
+                      Alert.alert('Could not clear', e?.message ?? 'network error');
+                    }
+                  },
+                },
+              ],
+            );
+          }}
+        />
+        <Button
+          label="Delete my account & all data"
+          variant="danger"
+          icon="warning-outline"
+          onPress={() => setDeleteOpen(true)}
+        />
       </Card>
+
+      {/* Delete confirm — typed phrase + email match, two factors. */}
+      <Modal
+        visible={deleteOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDeleteOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: spacing.lg }}
+          onPress={() => !deleting && setDeleteOpen(false)}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{ backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm }}
+          >
+            <Text style={[typography.h2, { color: colors.danger }]}>Delete account?</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Wipes everything tied to this account from our server: devices,
+              schedules, history, settings — everything. Every paired kid PC
+              will fail to reconnect and need re-pairing.
+            </Text>
+            <Text style={[typography.caption, { color: colors.text, marginTop: spacing.sm }]}>
+              Type <Text style={{ fontWeight: '700' }}>DELETE</Text> to confirm:
+            </Text>
+            <TextInput
+              value={deletePhrase}
+              onChangeText={setDeletePhrase}
+              autoCapitalize="characters"
+              placeholder="DELETE"
+              placeholderTextColor={colors.textFaint}
+              style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text }]}
+            />
+            <Text style={[typography.caption, { color: colors.text, marginTop: spacing.xs }]}>
+              Confirm account email:
+            </Text>
+            <TextInput
+              value={deleteEmail}
+              onChangeText={setDeleteEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder={email ?? 'you@example.com'}
+              placeholderTextColor={colors.textFaint}
+              style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text }]}
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Cancel"
+                  variant="secondary"
+                  onPress={() => setDeleteOpen(false)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Delete"
+                  variant="danger"
+                  loading={deleting}
+                  disabled={deletePhrase !== 'DELETE' || !deleteEmail.trim()}
+                  onPress={async () => {
+                    setDeleting(true);
+                    try {
+                      await realApi.deleteAccount(deleteEmail.trim());
+                      await signOut();
+                      setDeleteOpen(false);
+                      Alert.alert('Done', 'Account deleted. Signed out.');
+                    } catch (e: any) {
+                      Alert.alert('Could not delete', e?.message ?? 'network error');
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <SectionHeader>Notifications</SectionHeader>
       <Card>
