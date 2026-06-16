@@ -135,6 +135,12 @@ export default function Settings() {
           literally never touches us.
         </Text>
         <Button
+          label="See exactly what's stored"
+          variant="secondary"
+          icon="server-outline"
+          onPress={() => router.push('/privacy-details')}
+        />
+        <Button
           label="Show your kid what's tracked"
           variant="secondary"
           icon="eye-outline"

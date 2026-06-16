@@ -120,6 +120,7 @@ function RootNav() {
         <Stack.Screen name="device-templates/[id]" options={{ headerShown: true, title: 'Chores', ...stackHeader }} />
         <Stack.Screen name="device-stats/[id]" options={{ headerShown: true, title: 'Stats', ...stackHeader }} />
         <Stack.Screen name="feedback" options={{ headerShown: true, title: 'Bug report', presentation: 'modal', ...stackHeader }} />
+        <Stack.Screen name="privacy-details" options={{ headerShown: true, title: "What's stored on the server", ...stackHeader }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       </Stack>
     </AuthContext.Provider>
