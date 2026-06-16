@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../lib/auth';
 import { ChoreCard } from '../../components/ChoreCard';
 import { DeviceCard } from '../../components/DeviceCard';
+import { FamilyRecap } from '../../components/FamilyRecap';
 import { RequestCard } from '../../components/RequestCard';
 import { Screen } from '../../components/Screen';
 import { SectionHeader } from '../../components/ui';
@@ -192,6 +193,9 @@ export default function Home() {
           ))}
         </>
       )}
+
+      {/* Family-wide weekly recap (self-hides until there is real data). */}
+      <FamilyRecap devices={devices} />
 
       {/* Devices */}
       <SectionHeader>Devices</SectionHeader>
