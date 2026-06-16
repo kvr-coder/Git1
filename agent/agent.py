@@ -547,6 +547,30 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         usage.set_bank(int(payload.get("minutes", 0)))
         await emit_event(ws, "set_bank_minutes", {"minutes": usage.banked_minutes})
 
+    elif kind == "clear_local_history":
+        # Hard wipe of the kid PC's local history files. Fired by the parent
+        # app when they delete their account, so the kid PC also forgets its
+        # log (otherwise "delete my data" is only half-true). We keep
+        # agent.json (pairing identity — without it the agent can't reconnect)
+        # but reset usage.json + policy.json + offline queue + clock anchor.
+        # The agent stops collecting only if the server sends a follow-up
+        # disconnect, but the historical record is gone.
+        try:
+            for p in (USAGE_PATH, POLICY_PATH, QUEUE_PATH):
+                try:
+                    if p.exists():
+                        p.unlink()
+                except Exception as e:  # noqa: BLE001
+                    print(f"[wipe] could not delete {p.name}: {e}")
+            # Reset the running counters too — otherwise today's seconds
+            # would re-persist to a fresh usage.json on next save.
+            usage.minutes = 0.0
+            usage.app_seconds = {}
+            usage.banked_minutes = 0
+            print("[wipe] local history cleared (usage, policy, queue)")
+        except Exception as e:  # noqa: BLE001
+            print(f"[wipe] failed: {e}")
+
     await ws.send(json.dumps({"kind": "ack", "id": cid}))
 
 

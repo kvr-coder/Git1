@@ -212,6 +212,12 @@ export const realApi = {
       body: JSON.stringify({ kind: 'set_nd_mode', payload: { on } }),
     });
   },
+  async wipeKidPcHistory(deviceId: string) {
+    await request(`/devices/${deviceId}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'clear_local_history' }),
+    });
+  },
   async getStats(id: string, days = 28): Promise<{ daily: { date: string; totalMinutes: number; appUsage: Record<string, number> }[] }> {
     return request(`/devices/${id}/stats?days=${days}`);
   },

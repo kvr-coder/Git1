@@ -401,7 +401,7 @@ app.post('/me/clear-history', auth, (req: AuthedRequest, res) => {
 // agent tokens, signs out. Kid PC will fail to authenticate on next reconnect
 // and would need to be re-paired (the parent gets a fresh 6-digit code).
 // GDPR-compliant nuke.
-app.post('/me/delete', auth, (req: AuthedRequest, res) => {
+app.post('/me/delete', auth, async (req: AuthedRequest, res) => {
   const p = z.object({ confirm: z.string(), email: z.string().email().optional() }).safeParse(req.body);
   if (!p.success || p.data.confirm !== 'DELETE') {
     return res.status(400).json({ error: 'type DELETE to confirm' });
@@ -411,8 +411,27 @@ app.post('/me/delete', auth, (req: AuthedRequest, res) => {
   if (p.data.email && p.data.email.trim().toLowerCase() !== onFile.toLowerCase()) {
     return res.status(400).json({ error: 'email does not match account' });
   }
-  // Close any open agent sockets owned by this user before deleting.
-  for (const d of store.listDevices(req.userId!)) {
+  // Tell every paired kid PC to wipe its own local history files BEFORE we
+  // drop the row + close the socket — otherwise the agent never gets the
+  // signal and historical JSON sits on disk forever. Best-effort: the
+  // command rides the existing WS; agents that are offline right now miss
+  // it (they re-pair on next reconnect anyway, since the row is gone).
+  const ownedDevices = store.listDevices(req.userId!);
+  for (const d of ownedDevices) {
+    sendToAgent(d.id, {
+      kind: 'command',
+      command: {
+        id: randomBytes(6).toString('hex'),
+        deviceId: d.id,
+        kind: 'clear_local_history',
+        createdAt: Date.now(),
+      },
+    });
+  }
+  // Give the wipe command a moment to flush over the wire before we yank
+  // the sockets (otherwise the ack-and-close race can drop the command).
+  await new Promise((r) => setTimeout(r, 500));
+  for (const d of ownedDevices) {
     const ws = agentSockets.get(d.id);
     if (ws && ws.readyState === ws.OPEN) {
       try { ws.close(4401, 'account_deleted'); } catch {}
@@ -475,6 +494,7 @@ const commandSchema = z.object({
     'rename',
     'set_vacation',
     'set_nd_mode',
+    'clear_local_history',
   ]),
   payload: z.record(z.unknown()).optional(),
 });

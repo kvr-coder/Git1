@@ -13,7 +13,8 @@ export type CommandKind =
   | 'set_always_blocklist'
   | 'rename'
   | 'set_vacation'
-  | 'set_nd_mode';
+  | 'set_nd_mode'
+  | 'clear_local_history';
 
 export interface Command {
   id: string;
