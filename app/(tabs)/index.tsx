@@ -204,13 +204,15 @@ export default function Home() {
           <Card raised accent={colors.primary} style={{ alignItems: 'center', paddingVertical: spacing.xl } as any}>
             <WaveIcon size={120} />
             <Text style={[typography.h2, { color: colors.text, marginTop: spacing.sm }]}>
-              Pair your first device
+              No devices showing yet
             </Text>
             <Text style={[typography.caption, { color: colors.textMuted, textAlign: 'center', marginTop: 2 }]}>
-              Install the agent on the kid's PC, then tap here to enter the 6-digit code it shows.
+              If your kid&apos;s PC is paired, it&apos;ll appear here automatically the next time the agent
+              connects — server restarts can briefly clear this list, the agent re-registers itself.
+              {'\n\n'}New family? Tap below to pair your first device.
             </Text>
             <View style={{ marginTop: spacing.md }}>
-              <Text style={[typography.bodyStrong, { color: colors.primary }]}>Start setup →</Text>
+              <Text style={[typography.bodyStrong, { color: colors.primary }]}>Pair a device →</Text>
             </View>
           </Card>
         </Pressable>
