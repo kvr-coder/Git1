@@ -93,6 +93,7 @@ export interface DeviceRow {
   lockedByParent: boolean;
   scheduleOverrideUntil: number;
   vacationUntil: number;
+  ndMode: boolean;
 }
 
 export interface ScheduleRow {
@@ -325,6 +326,7 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN quietToMin INTEGER NOT NULL DEFAULT -1",
   "ALTER TABLE users ADD COLUMN dailySummaryOn INTEGER NOT NULL DEFAULT 1",
   "ALTER TABLE users ADD COLUMN tamperAlertsOn INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE devices ADD COLUMN ndMode INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -352,6 +354,7 @@ const rowToDevice = (r: any): DeviceRow => ({
   lockedByParent: !!r.lockedByParent,
   scheduleOverrideUntil: Number(r.scheduleOverrideUntil ?? 0),
   vacationUntil: Number(r.vacationUntil ?? 0),
+  ndMode: !!r.ndMode,
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
@@ -497,6 +500,7 @@ export const store = {
       shutdownCleanly: false,
       scheduleOverrideUntil: 0,
       vacationUntil: 0,
+      ndMode: false,
     };
     db.prepare(
       `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes, lockedByParent)

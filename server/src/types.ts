@@ -12,7 +12,8 @@ export type CommandKind =
   | 'set_bank_minutes'
   | 'set_always_blocklist'
   | 'rename'
-  | 'set_vacation';
+  | 'set_vacation'
+  | 'set_nd_mode';
 
 export interface Command {
   id: string;

@@ -76,11 +76,14 @@ def humanize(t: dt.datetime, now: dt.datetime | None = None) -> str:
 
 
 # ---------- (1) pre-lock banner ----------
-def show_prelock_banner(schedules: list[dict], seconds: int = 60) -> None:
-    """Friendly heads-up window before locking. Replaces the old 30s wall
-    with a 60s default (room to save a game), warmer copy, and a one-click
-    "I need 3 more minutes to save" action that opens the local dashboard
-    where the kid can fire a +3 request to the parent app.
+def show_prelock_banner(schedules: list[dict], seconds: int = 60, nd: bool = False) -> None:
+    """Friendly heads-up window before locking.
+
+    Default: 60s heads-up, warm tone, "I need 3 more minutes to save" CTA.
+    `nd=True`: 3-minute heads-up, softer copy ("Let's wrap up together"),
+    and an extended-save request (5 min instead of 3). Barkley 2015 / CHADD:
+    ADHD/ASD kids respond far better to predictable long countdowns than
+    sudden cut-offs.
 
     Research basis: Ghosh 2018 found "I lost progress" was a top kid
     complaint about parental-control apps; SDT (Ryan & Deci 2020) shows
@@ -121,7 +124,11 @@ def show_prelock_banner(schedules: list[dict], seconds: int = 60) -> None:
             tk.Label(f, text=f"{seconds // 60 if seconds >= 60 else seconds}"
                           + (" min left" if seconds >= 60 else " sec left"),
                      fg=FG, bg=BG, font=("Segoe UI Semibold", 22)).pack()
-            tk.Label(f, text="Wrap up or save your game.", fg=FG, bg=BG,
+            body_line = (
+                "Plenty of time — let's wrap up together." if nd
+                else "Wrap up or save your game."
+            )
+            tk.Label(f, text=body_line, fg=FG, bg=BG,
                      font=("Segoe UI", 13)).pack(pady=(8, 2))
             tk.Label(f, text=when, fg=MUTED, bg=BG,
                      font=("Segoe UI", 10)).pack(pady=(0, 14))
@@ -142,7 +149,8 @@ def show_prelock_banner(schedules: list[dict], seconds: int = 60) -> None:
                 try: root.destroy()
                 except Exception: pass
 
-            b1 = tk.Button(btn_row, text="I need 3 more min to save",
+            save_label = "I need 5 more min to save" if nd else "I need 3 more min to save"
+            b1 = tk.Button(btn_row, text=save_label,
                            bg=ACCENT, fg="#0b1220",
                            activebackground="#3b82f6",
                            font=("Segoe UI Semibold", 11), bd=0, padx=14, pady=8,

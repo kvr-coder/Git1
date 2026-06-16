@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { SectionHeader, Segmented } from '../../components/ui';
 import { TipCard } from '../../components/TipCard';
+import { api } from '../../lib/api';
 import { useTheme } from '../../lib/ThemeContext';
 import { spacing, typography } from '../../lib/theme';
 import { ANTI_PATTERNS, AgeBand, READING, SCRIPTS, WISDOM } from '../../lib/wisdom';
@@ -15,11 +16,31 @@ export default function Wisdom() {
   const { colors } = useTheme();
   const [age, setAge] = useState<AgeBand | 'all'>('all');
   const [section, setSection] = useState<Section>('tips');
+  // Auto-detect ND focus: if any paired device has ND mode on, default to ND
+  // filter. Parent can toggle the chip to override.
+  const [ndFocus, setNdFocus] = useState(false);
+  const [ndAvailable, setNdAvailable] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.listDevices?.().then((ds: any[]) => {
+      if (!alive) return;
+      const anyNd = (ds || []).some((d) => !!d.ndMode);
+      setNdAvailable(anyNd);
+      setNdFocus(anyNd);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   // Filter to the chosen age, then SORT age-specific tips first so switching
   // the band visibly changes the TOP of the list (otherwise the all-ages tips
   // dominate and it looks like nothing happened).
-  const matches = WISDOM.filter((t) => age === 'all' || t.ages.length === 0 || t.ages.includes(age));
+  // Age filter, then optional ND focus: when on, surface tips tagged for
+  // ADHD or autism plus general parenting tips (so the list isn't only 2-3
+  // cards). When off, everything passes through.
+  const ageMatches = WISDOM.filter((t) => age === 'all' || t.ages.length === 0 || t.ages.includes(age));
+  const matches = ndFocus
+    ? ageMatches.filter((t) => t.tags.some((tag) => tag === 'adhd' || tag === 'autism' || tag === 'general'))
+    : ageMatches;
   const tipsForAge =
     age === 'all'
       ? matches
@@ -62,6 +83,23 @@ export default function Wisdom() {
             { key: '14-16', label: '14–16' },
           ]}
         />
+        {ndAvailable && (
+          <Pressable
+            onPress={() => setNdFocus((v) => !v)}
+            style={[
+              styles.ndChip,
+              {
+                backgroundColor: ndFocus ? colors.primarySoft : colors.surfaceAlt,
+                borderColor: ndFocus ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Ionicons name="flash-outline" size={14} color={ndFocus ? colors.primary : colors.textMuted} />
+            <Text style={[typography.caption, { color: ndFocus ? colors.primary : colors.textMuted, fontWeight: '600' }]}>
+              {ndFocus ? 'ADHD/ASD focus on' : 'ADHD/ASD focus'}
+            </Text>
+          </Pressable>
+        )}
       </Card>
 
       {/* Horizontally scrollable tab bar — fits 5 tabs without cramming. */}
@@ -209,5 +247,16 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  ndChip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 10,
   },
 });

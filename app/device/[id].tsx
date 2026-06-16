@@ -29,6 +29,15 @@ export default function DeviceDetail() {
   useEffect(() => { if (id) getDeviceAge(String(id)).then(setAge); }, [id]);
   const [nd, setNd] = useState(false);
   useEffect(() => { if (id) getDeviceNd(String(id)).then(setNd); }, [id]);
+  // Server is the truth — when the device snapshot arrives, mirror its ndMode
+  // into local state + storage so the Switch shows the real value even on a
+  // fresh install of the parent app.
+  useEffect(() => {
+    if (!device || !id) return;
+    const serverNd = !!device.ndMode;
+    setNd(serverNd);
+    setDeviceNd(String(id), serverNd).catch(() => {});
+  }, [device?.ndMode, id]);
   const [recentReqs, setRecentReqs] = useState<{ minutes: number; createdAt: number; status: string }[]>([]);
   useEffect(() => {
     api.listRequests?.().then((rs: any[]) => {
@@ -131,7 +140,16 @@ export default function DeviceDetail() {
               ADHD / ASD: longer transitions, kinder framing, ND tips.
             </Text>
           </View>
-          <Switch value={nd} onValueChange={(v) => { setNd(v); setDeviceNd(String(id), v); }} />
+          <Switch
+            value={nd}
+            onValueChange={(v) => {
+              setNd(v);
+              setDeviceNd(String(id), v);
+              // Persist on the server so the agent sees it in the next snapshot
+              // and switches to the 3-min warning / gentler copy.
+              if (id) api.setNdMode(String(id), v).catch(() => {});
+            }}
+          />
         </View>
       </Card>
 

@@ -50,6 +50,7 @@ interface ServerDevice {
   selfBorrowCapMinutes?: number;
   bankedMinutes?: number;
   vacationUntil?: number;
+  ndMode?: boolean;
 }
 
 const adaptDevice = (d: ServerDevice): Device => ({
@@ -67,6 +68,7 @@ const adaptDevice = (d: ServerDevice): Device => ({
   selfBorrowCapMinutes: d.selfBorrowCapMinutes ?? 30,
   bankedMinutes: d.bankedMinutes ?? 0,
   vacationUntil: d.vacationUntil ?? 0,
+  ndMode: !!d.ndMode,
 });
 
 interface ServerActivity {
@@ -196,6 +198,12 @@ export const realApi = {
     await request(`/devices/${deviceId}/command`, {
       method: 'POST',
       body: JSON.stringify({ kind: 'set_vacation', payload: { until } }),
+    });
+  },
+  async setNdMode(deviceId: string, on: boolean) {
+    await request(`/devices/${deviceId}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'set_nd_mode', payload: { on } }),
     });
   },
   async getStats(id: string, days = 28): Promise<{ daily: { date: string; totalMinutes: number; appUsage: Record<string, number> }[] }> {

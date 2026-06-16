@@ -433,6 +433,7 @@ const commandSchema = z.object({
     'set_bank_minutes',
     'rename',
     'set_vacation',
+    'set_nd_mode',
   ]),
   payload: z.record(z.unknown()).optional(),
 });
@@ -532,6 +533,21 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
     store.updateDevice(d.id, { bankedMinutes: m });
     if (delta !== 0)
       store.appendBankLedger(req.userId!, d.id, delta, m, 'parent_set', null);
+  }
+
+  if (p.data.kind === 'set_nd_mode') {
+    // ND / executive-function support: longer pre-lock warnings, gentler
+    // countdown wording, ADHD/ASD tips in Wisdom. Persisted per device and
+    // shipped in the snapshot so the agent honours it.
+    const on = !!p.data.payload?.on;
+    store.updateDevice(d.id, { ndMode: on });
+    store.appendActivity({
+      userId: req.userId!,
+      deviceId: d.id,
+      kind: on ? 'nd_mode_on' : 'nd_mode_off',
+      message: `${d.name}: executive-function support ${on ? 'enabled' : 'disabled'}`,
+    });
+    pushSnapshotToAgent(d.id);
   }
 
   if (p.data.kind === 'set_vacation') {
@@ -1051,6 +1067,8 @@ function buildSnapshot(d: DeviceRow) {
     scheduleOverrideUntil: d.scheduleOverrideUntil ?? 0,
     // While now < vacationUntil the agent treats schedules + blocklist as off.
     vacationUntil: (d as any).vacationUntil ?? 0,
+    // Executive-function support: longer pre-lock warnings + gentler copy.
+    ndMode: !!(d as any).ndMode,
     repoCommit: REPO_COMMIT,
   };
 }
@@ -1337,6 +1355,7 @@ function toPublicDevice(d: DeviceRow) {
     // "PC is off / asleep" — normal, no alarm. A graceful shutdown sets
     // d.shutdownCleanly, which suppresses the banner too.
     vacationUntil: (d as any).vacationUntil ?? 0,
+    ndMode: !!(d as any).ndMode,
     tamperSuspected:
       d.status === 'offline' &&
       !!d.lastSeen &&

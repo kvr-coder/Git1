@@ -270,14 +270,25 @@ def _maybe_show_endofday() -> None:
 _PRELOCK_STATE = {"last": 0.0}
 
 def _maybe_show_prelock_banner() -> None:
-    """Show 'Time's up, next available …' once per ~30 min so the re-lock
-    loop doesn't spam banners. Best-effort; never blocks enforcement."""
+    """Friendly heads-up before locking, debounced per ~30 min.
+
+    Executive-function support: when ND_MODE is on for this device, we give a
+    much longer transition window (3 min instead of 60s) and ask lockmsg to
+    use gentler countdown wording. Barkley 2015 / CHADD: ADHD/ASD kids cope
+    far better with predictable, long countdowns than sudden cut-offs.
+    Best-effort; never blocks enforcement.
+    """
     now = time.time()
     if now - _PRELOCK_STATE["last"] < 30 * 60:
         return
     _PRELOCK_STATE["last"] = now
     try:
-        lockmsg.show_prelock_banner(enforcer_schedule.get_schedules(), seconds=20)
+        seconds = 180 if ND_MODE.get("value") else 60
+        lockmsg.show_prelock_banner(
+            enforcer_schedule.get_schedules(),
+            seconds=seconds,
+            nd=ND_MODE.get("value", False),
+        )
     except Exception:  # noqa: BLE001
         pass
 
@@ -544,6 +555,9 @@ BORROW_STATE: dict[str, Any] = {"enabled": False, "cap": 30}
 CHORE_TEMPLATES: list[dict[str, Any]] = []
 NOTIFICATIONS: list[dict[str, Any]] = []  # recent parent->kid toasts
 LOCKED_BY_PARENT: dict[str, bool] = {"value": False}
+# Executive-function support flag, kept in sync with the server snapshot.
+# Drives the longer pre-lock warning and gentler copy in lockmsg.
+ND_MODE: dict[str, bool] = {"value": False}
 SCHEDULE_OVERRIDE: dict[str, int] = {"untilMs": 0}  # ms-epoch; parent Unlock suppresses schedule lock until this
 PARENT_NET_BLOCK: dict[str, bool] = {"value": False}  # parent's desired internet-block state (from snapshot)
 
@@ -563,6 +577,7 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     enforcer_apps.set_always_blocklist(msg.get("alwaysBlocklist") or [])
     BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
+    ND_MODE["value"] = bool(msg.get("ndMode", False))
     # NOTE: we deliberately do NOT set bank from the snapshot. The agent is the
     # authority on bankedMinutes (it persists locally and reports via heartbeat).
     # Parent-side changes (approved chore/request, +30, Set) arrive as explicit
