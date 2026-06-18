@@ -261,84 +261,27 @@ app.put('/me/prefs', auth, (req: AuthedRequest, res) => {
 // Single permanent URL — GitHub redirects /releases/latest/download to the
 // current tagged release. The mobile app reads this + the SHA256 from the
 // release's .sha256 file so users can verify against the release page.
+// Installer artifacts live in a SEPARATE PUBLIC repo: kvr-coder/Downloads.
+// Keeping them out of the (private) source repo means anonymous downloads
+// just work — no GitHub login wall, no proxy auth, no token plumbing.
+// Convention captured in CLAUDE.md; if these URLs ever move, update there too.
 const INSTALLER_URL =
-  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe';
+  'https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.exe';
 const INSTALLER_SHA256_URL =
-  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe.sha256';
-// BAT fallback — when an AV blocks the unsigned .exe, the .bat usually goes
-// through (no PE header to flag), and vice versa. Ship both so the parent
-// always has a working path.
+  'https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.exe.sha256';
 const INSTALLER_BAT_URL =
-  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.bat';
+  'https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.bat';
 const INSTALLER_BAT_SHA256_URL =
-  'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.bat.sha256';
+  'https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.bat.sha256';
 
-// Public download endpoints — proxy through our server so the kid PC never
-// hits GitHub directly. This matters when the repo is PRIVATE: GitHub's
-// /releases/.../download URL bounces to a sign-in wall otherwise. Streaming
-// via our server keeps the repo private and the downloads anonymous.
-//
-// Requires GITHUB_TOKEN in Render env (a PAT with `repo` scope on this
-// account, or a fine-grained token with Read access to this repo's
-// Contents — that includes Releases).
-async function streamGithubAsset(githubUrl: string, filename: string, res: Response) {
-  const token = process.env.GITHUB_TOKEN;
-  const headers: Record<string, string> = {
-    'User-Agent': 'timeoff-server',
-    Accept: 'application/octet-stream',
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  let upstream: globalThis.Response;
-  try {
-    upstream = await fetch(githubUrl, { headers, redirect: 'follow' });
-  } catch (e: any) {
-    console.warn('[installer] fetch failed', e?.message);
-    return res.status(502).send('upstream fetch failed');
-  }
-  if (!upstream.ok || !upstream.body) {
-    // 401/404 here means the release doesn't exist yet OR the token can't
-    // see it. Tell the parent app something actionable, not a 500.
-    return res
-      .status(upstream.status === 401 || upstream.status === 404 ? 404 : 502)
-      .send(
-        upstream.status === 401
-          ? 'installer release not visible to the server (set GITHUB_TOKEN)'
-          : upstream.status === 404
-          ? 'no installer release published yet — tag agent-v* on the repo'
-          : `upstream ${upstream.status}`,
-      );
-  }
-  res.setHeader('Content-Type', filename.endsWith('.exe') ? 'application/octet-stream' : 'text/plain');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Cache-Control', 'public, max-age=300');
-  const reader = upstream.body.getReader();
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    res.write(Buffer.from(value));
-  }
-  res.end();
-}
-
-app.get('/installer/exe', (_req, res) => {
-  // Public — no auth, so the kid PC can curl/wget it during install.
-  streamGithubAsset(INSTALLER_URL, 'timeoff-agent-setup.exe', res).catch((e) => {
-    console.warn('[installer/exe]', e?.message);
-    res.status(500).end();
-  });
-});
-app.get('/installer/bat', (_req, res) => {
-  streamGithubAsset(INSTALLER_BAT_URL, 'timeoff-agent-setup.bat', res).catch((e) => {
-    console.warn('[installer/bat]', e?.message);
-    res.status(500).end();
-  });
-});
-app.get('/installer/exe.sha256', (_req, res) => {
-  streamGithubAsset(INSTALLER_SHA256_URL, 'timeoff-agent-setup.exe.sha256', res).catch(() => res.status(500).end());
-});
-app.get('/installer/bat.sha256', (_req, res) => {
-  streamGithubAsset(INSTALLER_BAT_SHA256_URL, 'timeoff-agent-setup.bat.sha256', res).catch(() => res.status(500).end());
-});
+// Server-side proxy/redirect endpoints — kept as a stable URL surface so the
+// mobile app and landing page don't break if the artifact location ever moves
+// again (Cloudflare R2, etc.). They now just 302 to the public repo since
+// auth is no longer needed.
+app.get('/installer/exe', (_req, res) => res.redirect(302, INSTALLER_URL));
+app.get('/installer/bat', (_req, res) => res.redirect(302, INSTALLER_BAT_URL));
+app.get('/installer/exe.sha256', (_req, res) => res.redirect(302, INSTALLER_SHA256_URL));
+app.get('/installer/bat.sha256', (_req, res) => res.redirect(302, INSTALLER_BAT_SHA256_URL));
 
 app.get('/installer/latest', auth, async (_req: AuthedRequest, res) => {
   const readSha = async (u: string) => {

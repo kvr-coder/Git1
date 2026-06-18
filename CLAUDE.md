@@ -9,6 +9,17 @@ Cross-platform mobile app built with React Native + Expo. Targets Android (prima
 - **Helper script (same thing in one step)**: `scripts\ship-app.bat "what changed"`
 - **If `eas` not on PATH**: `npm install -g eas-cli` once.
 
+## Public download artifacts — separate repo
+- **Installer artifacts live in a SEPARATE PUBLIC repo**: https://github.com/kvr-coder/Downloads
+- **Why**: this source repo (`kvr-coder/git1`) is private, so GitHub Release assets on it bounce anonymous downloaders to a sign-in wall. The Downloads repo is public-by-design — only release artifacts, no source code, no risk surface.
+- **Permanent URLs the parent app reads (always latest tag)**:
+  - `https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.exe`
+  - `https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.bat`
+  - `.sha256` siblings for verification.
+- **Stable proxy URLs on our server** (point app/landing-page links at these, never at GitHub directly): `https://git1-server.onrender.com/installer/exe`, `/installer/bat`, `.sha256`. They 302 to the Downloads repo. If the artifact host ever moves (Cloudflare R2, etc.), only these constants in `server/src/index.ts` change.
+- **CI publishes there** via `.github/workflows/release-agent.yml`. Needs a `DOWNLOADS_PAT` repo secret in this repo — a fine-grained PAT with **Contents: Read & Write** on `kvr-coder/Downloads`. Generate at https://github.com/settings/personal-access-tokens/new.
+- **Manual copy** (until the workflow + PAT are set up): build the installer locally and drag the EXE/BAT into a new Release on the Downloads repo, tag `agent-vX.Y.Z`. URLs above auto-resolve to it.
+
 ## EAS / OTA facts (LEARNED THE HARD WAY — do not re-derive)
 - **Expo account**: `expo221` (kvaraciejus@gmail.com). **EAS project**: slug `timeoff`, **projectId `e8e50263-c2c5-471b-ba0a-1cdb67c4349b`**. This is hard-locked in `app.json` (`expo.extra.eas.projectId` + `expo.updates.url`). The user has MULTIPLE Expo projects — never let `eas init` pick a different one.
 - **OTA channel**: branch `claude/**` → `preview`; `main` → `production`. `runtimeVersion.policy = appVersion` (currently 1.1.0). **OTA only reaches a build whose runtime matches.**

@@ -1,10 +1,14 @@
-# Build the timeoff Windows agent installer (timeoff-agent-setup.exe) and
-# attach it to a GitHub Release. Triggered on tag push `agent-v*` so the
-# mobile app + server release cycles stay independent.
+# Build the timeoff Windows agent installer and publish it to a SEPARATE
+# PUBLIC repo (kvr-coder/Downloads). This source repo stays private; the
+# Downloads repo only ever contains release artifacts, so anonymous installs
+# work without a GitHub login wall.
 #
-# The installer URL the parent app reads is permanent:
-#   https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe
-# That URL always 302's to the latest tagged release — no per-release wiring.
+# Triggered on tag push `agent-v*` in this repo. Requires DOWNLOADS_PAT
+# (a personal access token with `contents: write` on kvr-coder/Downloads)
+# set as a repo secret here.
+#
+# Permanent download URL the parent app reads (always latest):
+#   https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.exe
 
 name: Release agent installer
 
@@ -72,15 +76,17 @@ jobs:
           "sha256=$h" >> $env:GITHUB_OUTPUT
           "$h  timeoff-agent-setup.exe" | Out-File -Encoding ascii installer\Output\timeoff-agent-setup.exe.sha256
 
-      - name: Publish release
+      - name: Publish release to public Downloads repo
         uses: softprops/action-gh-release@v2
         with:
+          repository: kvr-coder/Downloads
+          token: ${{ secrets.DOWNLOADS_PAT }}
           name: timeoff agent ${{ steps.ver.outputs.version }}
           tag_name: ${{ github.ref_name }}
           body: |
             ## timeoff agent ${{ steps.ver.outputs.version }}
 
-            **Direct download:** [timeoff-agent-setup.exe](https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe)
+            **Direct download:** [timeoff-agent-setup.exe](https://github.com/kvr-coder/Downloads/releases/latest/download/timeoff-agent-setup.exe)
 
             **SHA256:** `${{ steps.hash.outputs.sha256 }}`
 
