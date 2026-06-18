@@ -273,6 +273,73 @@ const INSTALLER_BAT_URL =
 const INSTALLER_BAT_SHA256_URL =
   'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.bat.sha256';
 
+// Public download endpoints — proxy through our server so the kid PC never
+// hits GitHub directly. This matters when the repo is PRIVATE: GitHub's
+// /releases/.../download URL bounces to a sign-in wall otherwise. Streaming
+// via our server keeps the repo private and the downloads anonymous.
+//
+// Requires GITHUB_TOKEN in Render env (a PAT with `repo` scope on this
+// account, or a fine-grained token with Read access to this repo's
+// Contents — that includes Releases).
+async function streamGithubAsset(githubUrl: string, filename: string, res: Response) {
+  const token = process.env.GITHUB_TOKEN;
+  const headers: Record<string, string> = {
+    'User-Agent': 'timeoff-server',
+    Accept: 'application/octet-stream',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let upstream: globalThis.Response;
+  try {
+    upstream = await fetch(githubUrl, { headers, redirect: 'follow' });
+  } catch (e: any) {
+    console.warn('[installer] fetch failed', e?.message);
+    return res.status(502).send('upstream fetch failed');
+  }
+  if (!upstream.ok || !upstream.body) {
+    // 401/404 here means the release doesn't exist yet OR the token can't
+    // see it. Tell the parent app something actionable, not a 500.
+    return res
+      .status(upstream.status === 401 || upstream.status === 404 ? 404 : 502)
+      .send(
+        upstream.status === 401
+          ? 'installer release not visible to the server (set GITHUB_TOKEN)'
+          : upstream.status === 404
+          ? 'no installer release published yet — tag agent-v* on the repo'
+          : `upstream ${upstream.status}`,
+      );
+  }
+  res.setHeader('Content-Type', filename.endsWith('.exe') ? 'application/octet-stream' : 'text/plain');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  const reader = upstream.body.getReader();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    res.write(Buffer.from(value));
+  }
+  res.end();
+}
+
+app.get('/installer/exe', (_req, res) => {
+  // Public — no auth, so the kid PC can curl/wget it during install.
+  streamGithubAsset(INSTALLER_URL, 'timeoff-agent-setup.exe', res).catch((e) => {
+    console.warn('[installer/exe]', e?.message);
+    res.status(500).end();
+  });
+});
+app.get('/installer/bat', (_req, res) => {
+  streamGithubAsset(INSTALLER_BAT_URL, 'timeoff-agent-setup.bat', res).catch((e) => {
+    console.warn('[installer/bat]', e?.message);
+    res.status(500).end();
+  });
+});
+app.get('/installer/exe.sha256', (_req, res) => {
+  streamGithubAsset(INSTALLER_SHA256_URL, 'timeoff-agent-setup.exe.sha256', res).catch(() => res.status(500).end());
+});
+app.get('/installer/bat.sha256', (_req, res) => {
+  streamGithubAsset(INSTALLER_BAT_SHA256_URL, 'timeoff-agent-setup.bat.sha256', res).catch(() => res.status(500).end());
+});
+
 app.get('/installer/latest', auth, async (_req: AuthedRequest, res) => {
   const readSha = async (u: string) => {
     try {
@@ -317,11 +384,10 @@ a.btn{display:block;background:#1d4ed8;color:#fff;text-decoration:none;text-alig
 <h1>Install the timeoff agent</h1>
 <p>On the <b>kid's PC</b> (not your phone), tap the button below. The installer is unsigned for now — Windows will show "Unrecognized app"; click <i>More info → Run anyway</i>.</p>
 ${safeCode ? `<p>When asked, enter this pairing code:</p><div class="code">${safeCode}</div>` : ''}
-<a class="btn" href="${INSTALLER_URL}">Download .exe installer</a>
+<a class="btn" href="${getPublicBase()}/installer/exe">Download .exe installer</a>
 <p style="margin:14px 0 6px 0;font-size:14px;color:#475569">If your antivirus blocks the .exe, use the script installer instead:</p>
-<a class="btn" style="background:#475569" href="${INSTALLER_BAT_URL}">Download .bat installer (fallback)</a>
-<p style="margin-top:24px;font-size:14px;color:#475569">Both do the same thing. Verify SHA256 on the
-<a href="https://github.com/kvr-coder/git1/releases/latest">release page</a>. This page can be reopened any time — the link doesn't expire.</p>
+<a class="btn" style="background:#475569" href="${getPublicBase()}/installer/bat">Download .bat installer (fallback)</a>
+<p style="margin-top:24px;font-size:14px;color:#475569">Both do the same thing. This page can be reopened any time — the link doesn't expire.</p>
 </body></html>`);
 });
 

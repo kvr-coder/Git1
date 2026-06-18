@@ -33,9 +33,11 @@ export default function Pair() {
   const installerUrl = code.length === 6
     ? `${base}/installer/go?code=${code}`
     : `${base}/installer/go`;
-  // Direct .bat URL for the rare AV that blocks the landing page redirect.
-  const batUrl = 'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.bat';
-  const exeUrl = 'https://github.com/kvr-coder/git1/releases/latest/download/timeoff-agent-setup.exe';
+  // Direct installer URLs — proxied through our server so the kid PC never
+  // hits GitHub directly (repo is private; bare GitHub URLs bounce to a
+  // sign-in wall).
+  const batUrl = `${base}/installer/bat`;
+  const exeUrl = `${base}/installer/exe`;
   const qrUrl = `${base}/qr.png?text=${encodeURIComponent(installerUrl)}`;
 
   const submit = async () => {
