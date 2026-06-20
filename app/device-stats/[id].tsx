@@ -10,7 +10,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { SectionHeader } from '../../components/ui';

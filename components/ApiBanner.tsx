@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../lib/ThemeContext';
-import { getApiBase, isMockMode } from '../lib/config';
+import { isMockMode } from '../lib/config';
 import { radius, spacing, typography } from '../lib/theme';
 
 export function ApiBanner() {

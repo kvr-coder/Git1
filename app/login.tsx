@@ -59,7 +59,7 @@ export default function Login() {
           </View>
           <Text style={[typography.display, { color: colors.text }]}>timeoff</Text>
           <Text style={[typography.body, { color: colors.textMuted, textAlign: 'center' }]}>
-            Calm, confident control of your family's screen time.
+            Calm, confident control of your family&apos;s screen time.
           </Text>
         </View>
 

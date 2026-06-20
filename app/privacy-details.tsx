@@ -55,7 +55,7 @@ export default function PrivacyDetails() {
 
   return (
     <Screen>
-      <Text style={[typography.display, { color: colors.text }]}>What's on our server</Text>
+      <Text style={[typography.display, { color: colors.text }]}>What&apos;s on our server</Text>
       <Text style={[typography.caption, { color: colors.textMuted }]}>
         Every category of data we hold, why we hold it, and how long. Mirrors
         the actual database schema. Server: {getApiBase()}
@@ -71,7 +71,7 @@ export default function PrivacyDetails() {
       {HISTORY.map((r, i) => <RowCard key={i} row={r} tone={tone(r.sensitivity)} />)}
       <Card>
         <Text style={[typography.caption, { color: colors.textMuted }]}>
-          Use <Text style={{ color: colors.text, fontWeight: '600' }}>"Clear my history on the server"</Text> in
+          Use <Text style={{ color: colors.text, fontWeight: '600' }}>&quot;Clear my history on the server&quot;</Text> in
           Settings → Privacy to drop everything in this section without
           unpairing your devices.
         </Text>

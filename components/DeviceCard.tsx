@@ -6,7 +6,6 @@ import { formatDuration, formatRelative } from '../lib/format';
 import { radius, spacing, typography } from '../lib/theme';
 import type { Device } from '../lib/types';
 import { AnimatedBar, AnimatedNumber } from './animated';
-import { DesktopIcon, LaptopIcon } from './AnimatedIcons';
 import { Card } from './Card';
 import { StatusBadge } from './StatusBadge';
 

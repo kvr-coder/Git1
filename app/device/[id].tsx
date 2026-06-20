@@ -6,7 +6,7 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { StatusBadge } from '../../components/StatusBadge';
-import { Chip, SectionHeader, Segmented, TimeBar } from '../../components/ui';
+import { Chip, SectionHeader, Segmented } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatDuration, formatRelative } from '../../lib/format';
 import { useTheme } from '../../lib/ThemeContext';
@@ -116,7 +116,7 @@ export default function DeviceDetail() {
       {/* Kid's age band — drives which advice is shown. Stored locally. */}
       <Card>
         <Text style={[typography.caption, { color: colors.textMuted, marginBottom: 6 }]}>
-          Tune advice for kid's age
+          Tune advice for kid&apos;s age
         </Text>
         <Segmented<string>
           value={age ?? ''}
@@ -193,6 +193,65 @@ export default function DeviceDetail() {
           {formatDuration(device.usedTodayMinutes)} of{' '}
           {device.dailyLimitMinutes === 0 ? '∞' : formatDuration(device.dailyLimitMinutes)} used today
         </Text>
+      </Card>
+
+      {/* Daily limit — the core setting: how much screen time per day before
+          the PC locks. Lives right under the hero so it's the first thing a
+          parent can change. */}
+      <SectionHeader>Daily limit</SectionHeader>
+      <Card>
+        <View style={styles.spread}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h3, { color: colors.text }]}>
+              {device.dailyLimitMinutes === 0
+                ? 'No daily limit'
+                : `${formatDuration(device.dailyLimitMinutes)} per day`}
+            </Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              Screen time allowed each day before the PC locks. Bonus grants,
+              bank minutes and borrowing stack on top of this.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.presetRow}>
+          {[30, 60, 90, 120, 180].map((m) => (
+            <Button
+              key={m}
+              label={formatDuration(m)}
+              size="sm"
+              variant={device.dailyLimitMinutes === m ? 'primary' : 'secondary'}
+              disabled={busy}
+              onPress={() => run(() => api.setDailyLimit(device.id, m))}
+            />
+          ))}
+          <Button
+            label="No limit"
+            size="sm"
+            variant={device.dailyLimitMinutes === 0 ? 'primary' : 'secondary'}
+            disabled={busy}
+            onPress={() => run(() => api.setDailyLimit(device.id, 0))}
+          />
+        </View>
+        <View style={styles.btnRow}>
+          <Button
+            full
+            label="−15 min"
+            variant="secondary"
+            disabled={busy || device.dailyLimitMinutes === 0}
+            onPress={() =>
+              run(() => api.setDailyLimit(device.id, Math.max(0, device.dailyLimitMinutes - 15)))
+            }
+          />
+          <Button
+            full
+            label="+15 min"
+            variant="secondary"
+            disabled={busy}
+            onPress={() =>
+              run(() => api.setDailyLimit(device.id, Math.min(24 * 60, device.dailyLimitMinutes + 15)))
+            }
+          />
+        </View>
       </Card>
 
       {/* Behaviour-driven insights — generated from this device's data. */}
@@ -471,6 +530,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   btnRow: { flexDirection: 'row', gap: spacing.sm },
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   input: {
     flex: 1,

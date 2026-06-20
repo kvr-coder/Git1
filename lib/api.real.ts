@@ -120,6 +120,12 @@ export const realApi = {
       body: JSON.stringify({ kind: 'grant_minutes', payload: { minutes } }),
     });
   },
+  async setDailyLimit(id: string, minutes: number) {
+    await request(`/devices/${id}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'set_limit', payload: { minutes } }),
+    });
+  },
   async setInternetBlocked(id: string, blocked: boolean) {
     await request(`/devices/${id}/command`, {
       method: 'POST',
