@@ -4,6 +4,13 @@ Captures the marketing discussion (Jun 2026) — channel reality, the
 phone-bundle question, and the recommended path for a solo bootstrapped
 founder. Pairs with `IDEAS.md` (product strategy).
 
+> **See `RESEARCH_FINDINGS.md`** for the source-cited deep-research backing
+> these recommendations (case studies, conversion benchmarks, validation
+> thresholds, and the regulatory verdict). Key correction from that research:
+> **regulation is NOT a GTM tailwind** — EU DSA / UK OSA / EUDI commoditise the
+> function rather than open a third-party market. Treat any "ride the
+> regulation" idea below as superseded by RESEARCH_FINDINGS.md §6.
+
 ---
 
 ## 1. The discoverability problem
