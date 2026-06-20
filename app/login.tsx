@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiBanner } from '../components/ApiBanner';
 import { Button } from '../components/Button';
 import { useAuth } from '../lib/auth';
 import { getApiBase, isMockMode, setServerUrl } from '../lib/config';
+import { KEYS, storage } from '../lib/storage';
 import { useTheme } from '../lib/ThemeContext';
 import { radius, spacing, typography } from '../lib/theme';
 
@@ -18,10 +19,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [server, setServer] = useState('');
+  const [consent, setConsent] = useState(false);
   const [, force] = useState(0);
 
   useEffect(() => {
     setServer(getApiBase());
+    // Pre-check the box for a returning guardian who already consented, so they
+    // aren't re-prompted every sign-in — but they still see the statement.
+    storage.get(KEYS.guardianConsentAt).then((v) => { if (v) setConsent(true); });
   }, []);
 
   const saveServer = async () => {
@@ -30,9 +35,14 @@ export default function Login() {
   };
 
   const onSubmit = async () => {
+    if (!consent) {
+      setError('Please confirm you are the parent/guardian and consent to monitoring.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
+      await storage.set(KEYS.guardianConsentAt, new Date().toISOString());
       await signIn(email.trim(), password);
     } catch (e: any) {
       setError(e?.message || 'Could not sign in. Check your email and password.');
@@ -105,7 +115,32 @@ export default function Login() {
           {error && (
             <Text style={[typography.caption, { color: colors.danger }]}>{error}</Text>
           )}
-          <Button label="Sign in" onPress={onSubmit} loading={loading} />
+
+          {/* Guardian consent — the lawful basis for monitoring. For a minor's
+              device the parent/guardian is the consenting party. */}
+          <Pressable
+            onPress={() => setConsent((c) => !c)}
+            style={[styles.consentRow, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          >
+            <Ionicons
+              name={consent ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={consent ? colors.primary : colors.textFaint}
+            />
+            <Text style={[typography.caption, { color: colors.textMuted, flex: 1 }]}>
+              I&apos;m this child&apos;s parent or legal guardian and I consent to monitoring
+              this device as described in the{' '}
+              <Text
+                style={{ color: colors.primary, fontWeight: '600' }}
+                onPress={() => Linking.openURL(`${getApiBase()}/privacy`).catch(() => {})}
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
+          </Pressable>
+
+          <Button label="Sign in" onPress={onSubmit} loading={loading} disabled={!consent} />
         </View>
 
         <Text style={[typography.caption, { color: colors.textFaint, textAlign: 'center' }]}>
@@ -120,6 +155,14 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, paddingHorizontal: spacing.lg, gap: spacing.lg, justifyContent: 'center' },
   brand: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   logo: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
