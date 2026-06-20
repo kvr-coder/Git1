@@ -61,12 +61,29 @@ Formats that are also off the table:
 
 | # | Lever | Impact | Cost | Status |
 |---|---|---|---|---|
-| 1 | **Authenticode code-signing** (EV preferred, OV acceptable) | 🟢 Huge | ~$250–400/yr EV, ~$100–200/yr OV | TODO — needs cert |
-| 2 | **Stop downloading runtimes at install time** — bundle Python embeddable | 🟢 High | dev only | TODO |
-| 3 | **Auto-submit each signed release** to Microsoft (and key AV vendors) | 🟡 Medium | free | TODO |
+| 1 | **Authenticode code-signing** (EV preferred, OV acceptable) | 🟢 Huge | ~$250–400/yr EV, ~$100–200/yr OV | **CI scaffold DONE** — add cert secrets to activate |
+| 2 | **Stop downloading runtimes at install time** — bundle Python + Git | 🟢 High | dev only | **DONE** (best-effort bundle + fallback) |
+| 3 | **Auto-submit each signed release** to Microsoft (and key AV vendors) | 🟡 Medium | free | TODO (manual for now — needs MS-account auth) |
 | 4 | **Real publisher identity** — website, privacy policy, support email | 🟡 Medium | low | privacy policy: DONE (`/privacy`) |
 | 5 | Keep **Inno Setup EXE** as the primary format | 🟢 already best | — | DONE |
 | 6 | Keep `.bat` / ZIP as **fallback only** | 🟡 | — | DONE |
+
+### What's now wired in CI (`release-agent.yml`)
+
+- **Signing step** (`Sign installer`): runs `signtool` on the built EXE, gated on
+  `HAS_CODESIGN`. It's a **no-op until** you add two repo secrets:
+  `CODESIGN_PFX_BASE64` (your `.pfx`, base64-encoded) and `CODESIGN_PASSWORD`.
+  The moment those exist, the next `agent-v*` tag produces a signed installer.
+  (EV certs use an HSM/cloud-KMS instead of a `.pfx` — swap the step's auth when
+  you get one.)
+- **Bundling step** (`Stage bundled runtimes`): builds a self-contained Python
+  (embeddable + pip + the agent's deps, with a native-import sanity check) and a
+  portable Git (MinGit) into `installer\payload`. It's `continue-on-error`, and
+  the `.iss` entries are `skipifsourcedoesntexist`, so a bundling failure simply
+  ships the old downloading installer instead of breaking the release.
+- **`Install-Git1-Kid.ps1`** auto-detects `{app}\python` / `{app}\git` and uses
+  them; if the bundle is missing OR its native deps don't load, it falls back to
+  the winget/download path. So a bad bundle can never brick a kid-PC install.
 
 ### 2.1 Code-signing (the real fix)
 
@@ -118,11 +135,11 @@ they are **signed, identifiable, and have a public privacy policy + site**.
 ## 3. Rollout order
 
 1. **Now (no cert needed):**
-   - (a) Add the CI signing scaffold (no-op until secrets set). 
-   - (b) Bundle Python embeddable; drop runtime python/git downloads.
+   - (a) CI signing scaffold (no-op until secrets set). ✅ done
+   - (b) Bundle Python + Git; drop runtime downloads. ✅ done
    - (c) Publish + link the privacy policy. ✅ done
-2. **When the cert arrives:** drop the `.pfx`/KMS creds into repo secrets —
-   signing turns on automatically on the next `agent-v*` tag.
+2. **When the cert arrives:** add `CODESIGN_PFX_BASE64` + `CODESIGN_PASSWORD`
+   repo secrets — signing turns on automatically on the next `agent-v*` tag.
 3. **Each release:** auto-submit to Microsoft; watch for vendor false positives.
 4. **Ongoing:** keep the unsigned `.bat`/ZIP fallback documented for edge cases.
 

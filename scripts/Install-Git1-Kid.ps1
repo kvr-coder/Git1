@@ -22,7 +22,9 @@ param(
   [string]$ChildPassword = "",                 # blank = passwordless kid login
   [string]$Branch      = "claude/setup-git1-dev-environment-QeNdU",
   [string]$RepoUrl     = "https://github.com/kvr-coder/git1.git",
-  [string]$InstallDir  = "C:\ProgramData\Git1" # outside the kid's profile
+  [string]$InstallDir  = "C:\ProgramData\Git1", # outside the kid's profile
+  [string]$PythonHome  = "",  # bundled Python dir (the .exe installer sets this); blank -> install/download
+  [string]$GitHome     = ""   # bundled Git dir   (the .exe installer sets this); blank -> install/download
 )
 
 $ErrorActionPreference = "Stop"
@@ -103,6 +105,41 @@ function Get-LatestPythonUrl {
   return "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
 }
 
+# --- 1b. Prefer runtimes bundled inside the installer payload --------------
+# The .exe installer ships a self-contained Python + Git next to this script
+# ({app}\python, {app}\git). Using them avoids downloading and silently running
+# the python.org / git-for-windows installers at install time — the single
+# biggest antivirus/SmartScreen heuristic this installer used to trip. Each is
+# verified before use; if anything is missing or unusable we fall straight back
+# to the winget/download path below, so the standalone .bat still works and a
+# bad bundle can never brick an install.
+$usedBundledPython = $false
+if (-not $PythonHome) {
+  $cand = Join-Path (Split-Path -Parent $PSScriptRoot) 'python'
+  if (Test-Path (Join-Path $cand 'python.exe')) { $PythonHome = $cand }
+}
+if ($PythonHome -and (Test-Path (Join-Path $PythonHome 'python.exe'))) {
+  $savedPath = $env:Path
+  $env:Path = "$PythonHome;$(Join-Path $PythonHome 'Scripts');$env:Path"
+  try {
+    $v = & "$PythonHome\python.exe" --version 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "python --version exit $LASTEXITCODE" }
+    Write-Host "  using bundled Python ($v) at $PythonHome"
+    $usedBundledPython = $true
+  } catch {
+    Write-Warning "  bundled Python unusable ($_); installing Python normally."
+    $env:Path = $savedPath
+  }
+}
+if (-not $GitHome) {
+  $candG = Join-Path (Split-Path -Parent $PSScriptRoot) 'git'
+  if (Test-Path (Join-Path $candG 'cmd\git.exe')) { $GitHome = $candG }
+}
+if ($GitHome -and (Test-Path (Join-Path $GitHome 'cmd\git.exe'))) {
+  $env:Path = "$(Join-Path $GitHome 'cmd');$env:Path"
+  Write-Host "  using bundled Git at $GitHome"
+}
+
 if (-not (Have python)) {
   # winget Python.Python.3 floats to whatever the current major is.
   if (-not (Winget-Install "Python.Python.3")) {
@@ -120,6 +157,10 @@ if (-not (Have git)) {
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
             [System.Environment]::GetEnvironmentVariable("Path","User") + ";" +
             "C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
+# Re-prepend any bundled runtimes resolved above — the refresh is rebuilt from
+# the registry and would otherwise drop them, sending us back to a download.
+if ($usedBundledPython) { $env:Path = "$PythonHome;$(Join-Path $PythonHome 'Scripts');$env:Path" }
+if ($GitHome -and (Test-Path (Join-Path $GitHome 'cmd\git.exe'))) { $env:Path = "$(Join-Path $GitHome 'cmd');$env:Path" }
 if (-not (Have python)) { throw "Python still not found after install - open a new shell and re-run." }
 if (-not (Have git))    { throw "Git still not found after install - open a new shell and re-run." }
 
@@ -145,6 +186,28 @@ icacls $ipcDir /grant:r "SYSTEM:(OI)(CI)F" "Users:(OI)(CI)M" | Out-Null
 Step "Installing Python dependencies"
 python -m pip install --upgrade pip | Out-Null
 python -m pip install -r (Join-Path $InstallDir "agent\requirements.txt")
+
+# Safety net: if we're on the bundled interpreter, make sure the native deps
+# actually load (pywin32 in particular can misbehave in a stripped-down Python).
+# If they don't, fall back to a full system Python install and reinstall deps —
+# so a bundling mistake degrades gracefully instead of bricking the agent.
+if ($usedBundledPython) {
+  & python -c "import win32api, psutil, websockets" 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "  bundled Python can't load native deps; falling back to a full Python install."
+    $usedBundledPython = $false
+    if (-not (Winget-Install "Python.Python.3")) {
+      if (-not (Winget-Install "Python.Python.3.12")) {
+        Download-And-Install (Get-LatestPythonUrl) "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0"
+      }
+    }
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path","User")
+    if (-not (Have python)) { throw "Python still not found after fallback install - open a new shell and re-run." }
+    python -m pip install --upgrade pip | Out-Null
+    python -m pip install -r (Join-Path $InstallDir "agent\requirements.txt")
+  }
+}
 
 # --- 4. Resolve the child account ---
 # Detect the ACTUAL person at the physical console (the screen+keyboard user).
