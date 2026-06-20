@@ -103,6 +103,12 @@ export default function PrivacyDetails() {
         >
           See the code on GitHub →
         </Text>
+        <Text
+          style={[typography.caption, { color: colors.primary, marginTop: spacing.xs, fontWeight: '600' }]}
+          onPress={() => Linking.openURL(`${getApiBase()}/privacy`).catch(() => {})}
+        >
+          Read the full privacy policy →
+        </Text>
       </Card>
 
       <Card>
