@@ -16,7 +16,10 @@ param(
   [string]$ServiceName = "Git1Agent",
   # Branch the agent self-updates from. MUST be one only you push to (its code
   # runs as SYSTEM). Defaults to this checkout's current branch.
-  [string]$UpdateBranch = ""
+  [string]$UpdateBranch = "",
+  # Absolute path to a bundled nssm.exe (set by the .exe installer). Skips the
+  # install-time download when present.
+  [string]$NssmPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,14 +58,24 @@ if ($ChildUser) {
   }
 }
 
-# --- ensure NSSM is available (download if missing) ---
-$nssm = (Get-Command nssm.exe -ErrorAction SilentlyContinue).Source
+# --- ensure NSSM is available (prefer bundled/vendored; download as last resort) ---
+$arch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
+$nssm = $null
+# 0. Bundled by the .exe installer (passed in) or vendored in the repo checkout.
+#    Using these avoids any install-time download — AV-friendlier and offline.
+foreach ($cand in @(
+  $NssmPath,
+  (Join-Path $PSScriptRoot "vendor\nssm.exe"),
+  (Join-Path $PSScriptRoot "vendor\$arch\nssm.exe")
+)) {
+  if ($cand -and (Test-Path $cand)) { $nssm = $cand; Write-Host "[svc] using bundled nssm: $nssm"; break }
+}
+if (-not $nssm) { $nssm = (Get-Command nssm.exe -ErrorAction SilentlyContinue).Source }
 if (-not $nssm) {
   $nssmDir = Join-Path $AgentDir ".bin"
   $nssm = Join-Path $nssmDir "nssm.exe"
   if (-not (Test-Path $nssm)) {
     New-Item -ItemType Directory -Force -Path $nssmDir | Out-Null
-    $arch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
     $zip = $null
     $foundExe = $null
 

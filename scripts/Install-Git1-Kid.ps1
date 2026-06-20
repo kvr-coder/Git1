@@ -360,8 +360,12 @@ Write-Host "  wrote $cfgPath (UTF-8 no BOM)"
 # --- 7. NOW install the service. Agent starts with the token already on disk,
 #     skips its own pair flow, connects immediately, dashboard goes online.
 Step "Installing hardened agent service"
+# If the .exe installer bundled nssm at {app}\nssm, hand its path to the service
+# installer so it skips the install-time download.
+$bundledNssm = Join-Path (Split-Path -Parent $PSScriptRoot) 'nssm\nssm.exe'
 & (Join-Path $InstallDir "scripts\install-service.ps1") `
-    -Server $Server -ChildUser $ChildUser -UpdateBranch $Branch
+    -Server $Server -ChildUser $ChildUser -UpdateBranch $Branch `
+    -NssmPath $(if (Test-Path $bundledNssm) { $bundledNssm } else { '' })
 
 # Wait for the agent to actually connect, so we can report success clearly.
 Step "Verifying agent is online"

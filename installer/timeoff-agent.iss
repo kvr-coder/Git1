@@ -61,6 +61,7 @@ Source: "..\scripts\Install-Git1-Kid.bat"; DestDir: "{app}\scripts"; Flags: igno
 ; time — which is the main antivirus heuristic this installer used to trip.
 Source: "payload\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "payload\git\*"; DestDir: "{app}\git"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "payload\nssm\*"; DestDir: "{app}\nssm"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Run]
 ; Hand-off to the existing installer. Inno Setup is already elevated, so the
