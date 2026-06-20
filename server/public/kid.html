@@ -269,6 +269,28 @@
   </div>
 </details>
 
+<!-- One-time transparency notice. A monitored child should be informed; this is
+     notice + acknowledge, NOT a consent veto (the parent/guardian consents). -->
+<div id="privacy-notice" style="display:none; position:fixed; inset:0; z-index:50;
+     background:rgba(0,0,0,.6); padding:20px; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:420px; margin:auto;">
+    <strong style="font-size:18px;">Heads up — how timeoff works</strong>
+    <p class="muted" style="margin:10px 0;">
+      Your parent or guardian set up timeoff on this PC. It tracks your screen
+      time and which apps you use so they can help manage it.
+    </p>
+    <p class="muted" style="margin:10px 0;">
+      It <b>cannot</b> see your messages, screenshots, what you type, or the
+      websites you browse.
+    </p>
+    <a href="/privacy" target="_blank" rel="noopener"
+       style="color:var(--primary); display:inline-block; margin-bottom:12px;">
+      Read exactly what it can and can't see →
+    </a>
+    <button class="full" id="privacy-ok">OK, got it</button>
+  </div>
+</div>
+
 <div id="flash"></div>
 
 <footer style="text-align:center; margin:28px 0 8px; font-size:13px; color:var(--muted, #94a3b8);">
@@ -280,6 +302,18 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+// One-time transparency notice for the child (notice + acknowledge, no veto).
+(function () {
+  const KEY = 'timeoff.kidNoticeAck';
+  const el = $('privacy-notice');
+  if (el && !localStorage.getItem(KEY)) el.style.display = 'flex';
+  const ok = $('privacy-ok');
+  if (ok) ok.addEventListener('click', () => {
+    try { localStorage.setItem(KEY, new Date().toISOString()); } catch {}
+    if (el) el.style.display = 'none';
+  });
+})();
 // API base: on the agent the page is served from "/" so endpoints are "/status".
 // On the server PREVIEW the page is at "/kid" and the mock API is under
 // "/kid/status". Detect which context we're in so one file works in both.

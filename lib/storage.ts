@@ -17,4 +17,6 @@ export const KEYS = {
   deviceAgePrefix: 'git1.deviceAge.',
   deviceNdPrefix: 'git1.deviceNd.',
   onboarded: 'git1.onboarded',
+  // ISO timestamp of when the parent/guardian accepted the monitoring consent.
+  guardianConsentAt: 'git1.guardianConsentAt',
 };
