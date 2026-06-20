@@ -135,6 +135,12 @@ export default function Settings() {
           literally never touches us.
         </Text>
         <Button
+          label="Read our full privacy policy"
+          variant="secondary"
+          icon="document-text-outline"
+          onPress={() => Linking.openURL(`${getApiBase()}/privacy`).catch(() => {})}
+        />
+        <Button
           label="See exactly what's stored"
           variant="secondary"
           icon="server-outline"
