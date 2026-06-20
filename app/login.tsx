@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiBanner } from '../components/ApiBanner';
 import { Button } from '../components/Button';
+import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { getApiBase, isMockMode, setServerUrl } from '../lib/config';
 import { KEYS, storage } from '../lib/storage';
@@ -44,6 +45,8 @@ export default function Login() {
     try {
       await storage.set(KEYS.guardianConsentAt, new Date().toISOString());
       await signIn(email.trim(), password);
+      // Best-effort auditable server record; local storage is the actual gate.
+      api.recordConsent?.().catch(() => {});
     } catch (e: any) {
       setError(e?.message || 'Could not sign in. Check your email and password.');
     } finally {

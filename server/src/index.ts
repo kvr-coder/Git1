@@ -269,6 +269,14 @@ app.put('/me/prefs', auth, (req: AuthedRequest, res) => {
   res.json(store.getUserPrefs(req.userId!));
 });
 
+// ---- Guardian monitoring consent (auditable server record) ----
+app.get('/me/consent', auth, (req: AuthedRequest, res) => {
+  res.json({ consentedAt: store.getConsent(req.userId!) });
+});
+app.post('/me/consent', auth, (req: AuthedRequest, res) => {
+  res.json({ consentedAt: store.recordConsent(req.userId!, Date.now()) });
+});
+
 // ---- Installer distribution ----
 // Single permanent URL — GitHub redirects /releases/latest/download to the
 // current tagged release. The mobile app reads this + the SHA256 from the

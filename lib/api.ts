@@ -255,6 +255,14 @@ const mockApi = {
     await delay(50);
     return { quietFromMin: -1, quietToMin: -1, dailySummaryOn: true };
   },
+  async getConsent() {
+    await delay(40);
+    return { consentedAt: Date.now() };
+  },
+  async recordConsent() {
+    await delay(40);
+    return { consentedAt: Date.now() };
+  },
   async setVacation(id: string, until: number) {
     await delay(80);
     const d = mockDevices.find((x) => x.id === id);
