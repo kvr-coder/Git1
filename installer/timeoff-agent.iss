@@ -52,6 +52,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; Embed the existing PowerShell + batch installer.
 Source: "..\scripts\Install-Git1-Kid.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "..\scripts\Install-Git1-Kid.bat"; DestDir: "{app}\scripts"; Flags: ignoreversion
+; Self-contained runtimes built by the release workflow into installer\payload.
+; OPTIONAL (skipifsourcedoesntexist): if the build step that produces them is
+; skipped or fails, the EXE still compiles and the .ps1 falls back to its
+; winget/download path. When present, Install-Git1-Kid.ps1 auto-detects them at
+; {app}\python and {app}\git (relative to {app}\scripts) and uses them instead
+; of downloading + silently running the python.org / git installers at setup
+; time — which is the main antivirus heuristic this installer used to trip.
+Source: "payload\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "payload\git\*"; DestDir: "{app}\git"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Run]
 ; Hand-off to the existing installer. Inno Setup is already elevated, so the
