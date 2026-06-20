@@ -200,6 +200,12 @@ export const realApi = {
   async setPrefs(patch: Partial<{ quietFromMin: number; quietToMin: number; dailySummaryOn: boolean; tamperAlertsOn: boolean }>) {
     return request('/me/prefs', { method: 'PUT', body: JSON.stringify(patch) });
   },
+  async getConsent(): Promise<{ consentedAt: number | null }> {
+    return request('/me/consent');
+  },
+  async recordConsent(): Promise<{ consentedAt: number | null }> {
+    return request('/me/consent', { method: 'POST' });
+  },
   async setVacation(deviceId: string, until: number) {
     await request(`/devices/${deviceId}/command`, {
       method: 'POST',

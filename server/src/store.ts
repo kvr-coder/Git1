@@ -53,6 +53,8 @@ export interface User {
   quietToMin?: number;
   /** Send a 21:00 daily summary push? 1=yes, 0=no. */
   dailySummaryOn?: number;
+  /** Epoch ms when the parent/guardian accepted the monitoring consent. */
+  consentedAt?: number | null;
 }
 
 export interface UserPrefs {
@@ -327,6 +329,7 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN dailySummaryOn INTEGER NOT NULL DEFAULT 1",
   "ALTER TABLE users ADD COLUMN tamperAlertsOn INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN ndMode INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN consentedAt INTEGER",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -389,6 +392,18 @@ export const store = {
   },
   setPassword(userId: string, passwordHash: string) {
     db.prepare('UPDATE users SET passwordHash = ? WHERE id = ?').run(passwordHash, userId);
+  },
+  getConsent(userId: string): number | null {
+    const r = db.prepare('SELECT consentedAt FROM users WHERE id = ?').get(userId) as any;
+    return r && typeof r.consentedAt === 'number' && r.consentedAt > 0 ? r.consentedAt : null;
+  },
+  // Record the first time consent was given; preserve the original timestamp on
+  // subsequent sign-ins so we keep an honest "consented since" record.
+  recordConsent(userId: string, atMs: number): number {
+    const existing = this.getConsent(userId);
+    if (existing) return existing;
+    db.prepare('UPDATE users SET consentedAt = ? WHERE id = ?').run(atMs, userId);
+    return atMs;
   },
   getUserPrefs(userId: string): UserPrefs {
     const r = db.prepare('SELECT quietFromMin, quietToMin, dailySummaryOn, tamperAlertsOn FROM users WHERE id = ?').get(userId) as any;

@@ -2,10 +2,12 @@
 // Linked from Settings → Privacy. Mirrors the actual server schema 1:1.
 // If the schema changes, update this file alongside.
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../components/Card';
 import { Screen } from '../components/Screen';
 import { SectionHeader } from '../components/ui';
+import { api } from '../lib/api';
 import { getApiBase } from '../lib/config';
 import { useTheme } from '../lib/ThemeContext';
 import { spacing, typography } from '../lib/theme';
@@ -50,6 +52,10 @@ const NEVER = [
 
 export default function PrivacyDetails() {
   const { colors } = useTheme();
+  const [consentedAt, setConsentedAt] = useState<number | null>(null);
+  useEffect(() => {
+    api.getConsent?.().then((r) => setConsentedAt(r?.consentedAt ?? null)).catch(() => {});
+  }, []);
   const tone = (s: Row['sensitivity']) =>
     s === 'high' ? colors.danger : s === 'mid' ? colors.warning : colors.success;
 
@@ -118,6 +124,11 @@ export default function PrivacyDetails() {
           or analyse it. You can wipe the history any time and delete the
           account whenever you want — both buttons live in Settings → Privacy.
         </Text>
+        {consentedAt != null && (
+          <Text style={[typography.caption, { color: colors.textFaint, marginTop: spacing.sm }]}>
+            Guardian consent on record since {new Date(consentedAt).toLocaleDateString()}.
+          </Text>
+        )}
       </Card>
     </Screen>
   );
