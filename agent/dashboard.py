@@ -399,8 +399,11 @@ document.getElementById('request-btn').addEventListener('click', async (e) => {
 
 
 class Dashboard:
-    def __init__(self, port: int = DEFAULT_PORT) -> None:
+    def __init__(self, port: int = DEFAULT_PORT, server: str = "") -> None:
         self.port = port
+        # Configured server base, used to redirect /privacy to the hosted policy
+        # page (the localhost dashboard can't serve it itself).
+        self.server = (server or os.environ.get("GIT1_SERVER") or "https://git1-server.onrender.com").rstrip("/")
         self.status: dict[str, Any] = {
             "usedTodayMinutes": 0,
             "limitMinutes": 120,
@@ -466,6 +469,12 @@ class Dashboard:
                     self.wfile.write(body)
                 elif self.path == "/status":
                     self._send_json(200, dash.status)
+                elif self.path == "/privacy":
+                    # The policy lives on the server; redirect there so the kid's
+                    # "what timeoff can/can't see" link works from localhost too.
+                    self.send_response(302)
+                    self.send_header("Location", dash.server + "/privacy")
+                    self.end_headers()
                 else:
                     self._send_json(404, {"error": "not found"})
 

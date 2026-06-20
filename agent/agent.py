@@ -973,7 +973,7 @@ def main() -> None:
 
     # Kid dashboard on http://127.0.0.1:<port>. Override with GIT1_DASHBOARD_PORT.
     dash_port = int(os.environ.get("GIT1_DASHBOARD_PORT", dashboard.DEFAULT_PORT))
-    dash = dashboard.Dashboard(port=dash_port)
+    dash = dashboard.Dashboard(port=dash_port, server=SERVER_HTTP)
     dash.on_request(lambda minutes, reason: bridge.emit(
         "request_minutes", {"minutes": minutes, "reason": reason}
     ))
