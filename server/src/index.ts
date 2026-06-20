@@ -96,6 +96,18 @@ const KID_HTML = (() => {
   }
 })();
 app.get('/kid', (_req, res) => res.type('html').send(KID_HTML));
+
+// Public privacy policy — a real, reachable URL is a trust signal for app
+// stores, code-signing identity, and reducing AV/SmartScreen flags.
+const PRIVACY_HTML = (() => {
+  try {
+    return readFileSync(new URL('../public/privacy.html', import.meta.url), 'utf8');
+  } catch {
+    return '<h1>Privacy policy not found</h1>';
+  }
+})();
+app.get('/privacy', (_req, res) => res.type('html').send(PRIVACY_HTML));
+
 app.get('/kid/status', (_req, res) =>
   res.json({
     usedTodayMinutes: 72,
