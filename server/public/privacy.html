@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>timeoff — Privacy Policy</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #0b1220; color: #e6ecf5;
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 40px 22px 80px; }
+    h1 { font-size: 30px; margin: 0 0 4px; }
+    h2 { font-size: 20px; margin: 36px 0 10px; color: #9fc1ff; }
+    .eff { color: #8a97ad; font-size: 14px; margin-bottom: 24px; }
+    a { color: #7aa2ff; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 14.5px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1d2740; vertical-align: top; }
+    th { color: #9fb0cc; font-weight: 600; }
+    ul { padding-left: 20px; }
+    li { margin: 4px 0; }
+    .never li::marker { content: "✕  "; color: #ff6b6b; }
+    .card { background: #121a2e; border: 1px solid #1d2740; border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+    code { background: #1a2440; padding: 2px 6px; border-radius: 5px; font-size: 13.5px; }
+    footer { margin-top: 40px; color: #8a97ad; font-size: 13.5px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>timeoff — Privacy Policy</h1>
+    <div class="eff">Effective date: 20 June 2026</div>
+
+    <p>timeoff (also "Git1") is a parental screen-time tool: a phone app for the
+      parent, a Windows agent on the child's PC, and a small sync server. This
+      policy lists exactly what data we hold, why, and for how long — it mirrors
+      the actual database schema 1:1. The same breakdown appears in the app under
+      <strong>Settings → Privacy</strong>.</p>
+
+    <h2>Who we are</h2>
+    <div class="card">
+      <p>Product: <strong>timeoff</strong> parental screen-time management.<br />
+      Server: <code>https://git1-server.onrender.com</code> (open source).<br />
+      Contact: <a href="mailto:kvaraciejus@gmail.com">kvaraciejus@gmail.com</a></p>
+      <p>The server is open source and can be <strong>self-hosted</strong>. Point
+        the app at your own server and your data never touches our infrastructure.</p>
+    </div>
+
+    <h2>Account &amp; plumbing (required to operate)</h2>
+    <table>
+      <tr><th>Data</th><th>Why</th><th>Kept</th></tr>
+      <tr><td>Email + password hash</td><td>Log you in</td><td>Until you delete the account</td></tr>
+      <tr><td>Session tokens</td><td>Keep you signed in</td><td>Until you sign out</td></tr>
+      <tr><td>Push tokens (iOS / Web Push)</td><td>Send you alerts</td><td>Until you remove the device</td></tr>
+      <tr><td>Paired kid PCs (id, name, agent token)</td><td>Reconnect after restarts</td><td>Until you unpair</td></tr>
+      <tr><td>Pairing codes (6-digit)</td><td>One-shot device pairing</td><td>Auto-deleted after 10 min</td></tr>
+      <tr><td>Co-parent links</td><td>Both parents see the same kid</td><td>Until you unlink</td></tr>
+    </table>
+
+    <h2>Settings (so the kid PC stays in sync)</h2>
+    <table>
+      <tr><th>Data</th><th>Why</th><th>Kept</th></tr>
+      <tr><td>Daily limit, schedule, blocklist, bank balance, ND mode, vacation</td><td>Kid PC needs them on every reconnect</td><td>Until you change them</td></tr>
+      <tr><td>Chore templates ("Make bed → +5m")</td><td>Consistent kid options</td><td>Until you delete them</td></tr>
+      <tr><td>Geofences (zones you defined)</td><td>Only if you set one up</td><td>Until you delete them</td></tr>
+    </table>
+
+    <h2>History (wipeable any time)</h2>
+    <table>
+      <tr><th>Data</th><th>Why</th><th>Kept</th></tr>
+      <tr><td>Activity log (lock / unlock / limit reached)</td><td>Activity tab</td><td>Until you clear history</td></tr>
+      <tr><td>Time requests ("+15 min please")</td><td>Review past requests</td><td>Until you clear history</td></tr>
+      <tr><td>Chore submissions (description + minutes)</td><td>Review + approve flow</td><td>Until you clear history</td></tr>
+      <tr><td>Bank ledger (every credit / debit)</td><td>Bank screen history</td><td>Until you clear history</td></tr>
+      <tr><td>Daily stats (minutes used + per-app minutes)</td><td>Stats tab trends</td><td>Until you clear history</td></tr>
+      <tr><td>Location points + geofence enter/exit</td><td>Only if you uploaded location</td><td>Last 100 per device, then trimmed</td></tr>
+      <tr><td>Photo check-ins (JPEGs)</td><td>Only if your kid sent one</td><td>Until you clear history</td></tr>
+      <tr><td>Bug reports you submit</td><td>So we can fix what you reported</td><td>Indefinitely</td></tr>
+    </table>
+
+    <h2>What we NEVER collect</h2>
+    <div class="card">
+      <ul class="never">
+        <li>Message contents (DMs, Discord, iMessage, anything)</li>
+        <li>Screenshots or screen contents</li>
+        <li>Search history</li>
+        <li>Browsing URLs</li>
+        <li>Any third-party analytics SDKs</li>
+        <li>Any advertising IDs</li>
+        <li>We never sell or share any data with anyone, for any reason.</li>
+      </ul>
+    </div>
+
+    <h2>Children's data</h2>
+    <p>timeoff is operated <strong>by a parent/guardian</strong> to manage their
+      own child's device. Data about the child is collected at the parent's
+      direction and is visible only to that parent (and any co-parent they
+      explicitly invite). We do not build profiles, do not use this data for
+      advertising, and do not disclose it to third parties.</p>
+
+    <h2>Your controls</h2>
+    <ul>
+      <li><strong>Clear my history on the server</strong> — Settings → Privacy.</li>
+      <li><strong>Delete my account</strong> — Settings → Privacy.</li>
+      <li><strong>Self-host</strong> the open-source server so your data never reaches us.</li>
+    </ul>
+
+    <h2>Where data lives</h2>
+    <p>On the timeoff server (Render) at
+      <code>https://git1-server.onrender.com</code>, in a SQLite database. The
+      server code is public at
+      <a href="https://github.com/kvr-coder/git1">github.com/kvr-coder/git1</a>.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>If we change what we collect, we update this page and the in-app
+      Settings → Privacy screen together. The effective date above reflects the
+      latest version.</p>
+
+    <footer>
+      Questions or data requests:
+      <a href="mailto:kvaraciejus@gmail.com">kvaraciejus@gmail.com</a>
+    </footer>
+  </div>
+</body>
+</html>
+</content>
