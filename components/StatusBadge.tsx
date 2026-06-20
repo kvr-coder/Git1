@@ -2,7 +2,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../lib/ThemeContext';
 import { radius, spacing, typography } from '../lib/theme';
 import type { DeviceStatus } from '../lib/types';
-import { PulseDot } from './animated';
 import { HeartbeatDot } from './AnimatedIcons';
 
 export function StatusBadge({ status }: { status: DeviceStatus }) {

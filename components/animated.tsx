@@ -1,8 +1,7 @@
 // Built-in Animated-API primitives. No native modules => fully OTA-safe.
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
-import { radius } from '../lib/theme';
+import { Animated, Easing, View } from 'react-native';
 
 // ───────────────────────────────────────────────────────────
 // PulseDot — soft "I'm alive" pulse for online status.
@@ -178,5 +177,3 @@ export function PressableScale({ children, onPress, style }: { children: React.R
     </Animated.View>
   );
 }
-
-const _s = StyleSheet.create({ _: { borderRadius: radius.sm } });

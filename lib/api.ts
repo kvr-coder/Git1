@@ -109,6 +109,11 @@ const mockApi = {
     const d = mockDevices.find((x) => x.id === id);
     if (d) d.dailyLimitMinutes += minutes;
   },
+  async setDailyLimit(id: string, minutes: number): Promise<void> {
+    await delay(150);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) d.dailyLimitMinutes = Math.max(0, Math.min(24 * 60, minutes));
+  },
   async pairDevice(code: string): Promise<Device> {
     await delay(400);
     if (!/^\d{6}$/.test(code)) throw new Error('Invalid code');

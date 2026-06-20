@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { IconBadge, SectionHeader, Segmented } from '../../components/ui';
@@ -9,7 +9,7 @@ import { api } from '../../lib/api';
 import { activityBucket, getActivityRetention, Retention, setActivityRetention } from '../../lib/activityPrefs';
 import { formatRelative } from '../../lib/format';
 import { useTheme } from '../../lib/ThemeContext';
-import { radius, spacing, typography } from '../../lib/theme';
+import { spacing, typography } from '../../lib/theme';
 import type { ActivityEvent, ActivityKind } from '../../lib/types';
 
 const iconFor: Record<ActivityKind, keyof typeof Ionicons.glyphMap> = {

@@ -16,7 +16,7 @@ import { spacing, typography } from '../../lib/theme';
 import type { ChoreRequest, Device, TimeRequest } from '../../lib/types';
 import { AnimatedNumber, BounceIn } from '../../components/animated';
 import { Confetti } from '../../components/Confetti';
-import { HourglassIcon, RingingBell, WaveIcon } from '../../components/AnimatedIcons';
+import { RingingBell, WaveIcon } from '../../components/AnimatedIcons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 function greetingMeta(): { text: string; icon: keyof typeof Ionicons.glyphMap; tint: 'morning' | 'day' | 'evening' } {
@@ -24,10 +24,6 @@ function greetingMeta(): { text: string; icon: keyof typeof Ionicons.glyphMap; t
   if (h < 12) return { text: 'Good morning', icon: 'sunny', tint: 'morning' };
   if (h < 18) return { text: 'Good afternoon', icon: 'partly-sunny', tint: 'day' };
   return { text: 'Good evening', icon: 'moon', tint: 'evening' };
-}
-
-function greeting() {
-  return greetingMeta().text;
 }
 
 export default function Home() {

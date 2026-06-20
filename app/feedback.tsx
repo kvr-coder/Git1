@@ -3,7 +3,7 @@
 import * as Application from 'expo-application';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, StyleSheet, Text, TextInput } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Screen } from '../components/Screen';
