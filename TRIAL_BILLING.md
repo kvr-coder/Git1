@@ -154,22 +154,21 @@ and parent app read the same fields. (App reads via `GET /me/plan`.)
 The hardware fingerprint is a **persistent unique identifier → personal data**
 (GDPR "online identifier"; Apple "Device ID"). It **must be disclosed**. No consent
 prompt is needed — abuse/fraud prevention is a valid **legitimate-interest** basis —
-but disclosure is mandatory, and our policy promises to "mirror the actual database
-schema 1:1," so the schema change and the disclosure must land together.
+but disclosure is mandatory.
 
-**Exact wording to publish** (drop into every surface below):
-> **Device fingerprint (kid PC)** — a one-way hash of stable hardware IDs (e.g.
-> motherboard/BIOS UUID). **Why:** to enforce one free trial per device and prevent
-> abuse. **Not** used for advertising or tracking, never sold or shared. Kept while
-> the device is known to us.
+**Already disclosed as *planned*** (in advance, marked "not collected yet") across:
+`PRIVACY.md`, `server/public/privacy.html`, `app/privacy-details.tsx`,
+`app/(tabs)/settings.tsx`. The policy framing was changed from "mirrors the schema
+1:1" to **"complete list — we never collect anything not on it; planned items are
+labeled until live,"** which is what allows the advance disclosure to sit inline.
 
-**Update ALL of these in the same PR that adds `device_trials`:**
-- [ ] `PRIVACY.md` — move the planned note into the live "what we collect" tables
-- [ ] `server/public/privacy.html` — add a row (served at `/privacy`)
-- [ ] `app/privacy-details.tsx` — add to the `SETTINGS`/essential rows ("mirrors the schema")
-- [ ] `app/(tabs)/settings.tsx` — the "What we collect" summary card
-- [ ] **Apple App Privacy label** (App Store Connect) — declare *Identifiers → Device ID*, purpose *App Functionality / Fraud Prevention*; keep it OUT of "Tracking"
-- [ ] Keep the **"Never collected"** lists truthful — a fraud hash is NOT an advertising ID, so those promises still hold; say so explicitly
+**When the feature actually ships, in the SAME PR:**
+- [ ] Drop the `— planned` / "not collected yet" markers in all four surfaces above
+      (the rows are already there; just flip them to active)
+- [ ] **Apple App Privacy label** (App Store Connect) — declare *Identifiers →
+      Device ID*, purpose *App Functionality / Fraud Prevention*; keep it OUT of "Tracking"
+- [ ] Re-confirm the **"Never collected"** lists stay truthful — a fraud hash is NOT
+      an advertising ID, so those promises still hold
 
 ## 9. Build order when ready
 

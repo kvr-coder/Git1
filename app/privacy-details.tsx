@@ -1,6 +1,7 @@
 // What's stored on the server — explicit, honest, category-by-category.
-// Linked from Settings → Privacy. Mirrors the actual server schema 1:1.
-// If the schema changes, update this file alongside.
+// Linked from Settings → Privacy. This is the complete list of what we collect;
+// we never collect anything not listed here. Items not yet collected are labeled
+// "planned". If the schema changes, update this file alongside.
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
@@ -21,6 +22,7 @@ const ESSENTIAL: Row[] = [
   { label: 'Paired kid PCs (id, name, agent token)', kept: 'Until you unpair',       why: 'So the kid PC can reconnect after restarts',                       sensitivity: 'mid' },
   { label: 'Pairing codes (6-digit)',         kept: 'Auto-deleted after 10 min',     why: 'One-shot, then gone',                                              sensitivity: 'low' },
   { label: 'Co-parent links',                 kept: 'Until you unlink',              why: 'So both parents see the same kid',                                 sensitivity: 'low' },
+  { label: 'Device fingerprint (kid PC) — planned', kept: 'While the device is known to us', why: 'Not collected yet. When paid plans launch: enforce one free trial per device + prevent abuse. Hashed hardware ID — not an ad ID, never shared.', sensitivity: 'mid' },
 ];
 
 const SETTINGS: Row[] = [
@@ -63,8 +65,8 @@ export default function PrivacyDetails() {
     <Screen>
       <Text style={[typography.display, { color: colors.text }]}>What&apos;s on our server</Text>
       <Text style={[typography.caption, { color: colors.textMuted }]}>
-        Every category of data we hold, why we hold it, and how long. Mirrors
-        the actual database schema. Server: {getApiBase()}
+        The complete list of what we collect, why, and for how long — we never
+        collect anything that isn&apos;t here. Server: {getApiBase()}
       </Text>
 
       <SectionHeader>Account & plumbing — required</SectionHeader>
