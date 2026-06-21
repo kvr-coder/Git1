@@ -292,6 +292,12 @@
   </div>
 </div>
 
+<!-- Live transparency: reflects what the parent currently has turned on. -->
+<div class="card" id="transparency">
+  <strong>What your parent can see &amp; control</strong>
+  <ul id="transparency-list" style="margin:10px 0 0; padding-left:20px; color:var(--muted);"></ul>
+</div>
+
 <div id="flash"></div>
 
 <footer style="text-align:center; margin:28px 0 8px; font-size:13px; color:var(--muted, #94a3b8);">
@@ -334,6 +340,29 @@ const flash = (msg) => {
 const fmt = (m) => { m = Math.max(0, m|0); const h = (m/60)|0, mm = m%60;
   return h ? `${h}h ${mm}m` : `${mm}m`; };
 
+function renderTransparency(s) {
+  const ul = $('transparency-list');
+  if (!ul) return;
+  const esc = (t) => String(t).replace(/[<>&]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  const items = [];
+  // Always on:
+  items.push('Your daily screen time and <b>which apps you use, and for how long</b>.');
+  if (s.limitMinutes|0) items.push('A daily time limit of <b>' + fmt(s.limitMinutes|0) + '</b>.');
+  if (Array.isArray(s.schedules) && s.schedules.length)
+    items.push('Scheduled offline hours (e.g. bedtime).');
+  // Reflect parent toggles, live:
+  if (s.webFilter) items.push('<b>Adult &amp; dangerous sites are blocked.</b>');
+  if (Array.isArray(s.webFilterTerms) && s.webFilterTerms.length)
+    items.push('These are blocked: <b>' + s.webFilterTerms.map(esc).join(', ') + '</b>.');
+  if (Array.isArray(s.blocklist) && s.blocklist.length)
+    items.push('Some apps are blocked during locked time.');
+  if (s.internetBlocked) items.push('Internet is <b>paused right now</b>.');
+  if (s.ndMode) items.push('Gentler, longer warnings before time is up.');
+  // Never:
+  items.push('It <b>cannot</b> see your messages, what you type, screenshots, or the sites you browse.');
+  ul.innerHTML = items.map((t) => '<li style="margin:4px 0;">' + t + '</li>').join('');
+}
+
 async function refresh() {
   let s;
   try { const r = await fetch(API + '/status'); s = await r.json(); }
@@ -344,6 +373,8 @@ async function refresh() {
   const left = Math.max(0, limit - used);
   const bank = s.bankedMinutes|0;
   const blocked = !!s.internetBlocked;
+
+  renderTransparency(s);
 
   // Hero number — what's the kid's primary question? "How much do I have?"
   const big = $('hero-big');

@@ -136,6 +136,9 @@ app.get('/kid/status', (_req, res) =>
     notifications: [
       { id: 1, text: 'Chore approved: +10 min to bank', kind: 'success', ts: 0 },
     ],
+    webFilter: true,
+    webFilterTerms: ['lrytas', 'example.com'],
+    ndMode: false,
   }),
 );
 app.post('/kid/request', (_req, res) => res.json({ ok: true, demo: true }));
