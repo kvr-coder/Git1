@@ -31,6 +31,7 @@ import websockets
 import clock
 import dashboard
 import enforcer_apps
+import enforcer_dns
 import enforcer_logon
 import enforcer_net
 import enforcer_schedule
@@ -525,6 +526,12 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         enforcer_apps.set_always_blocklist(names)
         await emit_event(ws, "set_always_blocklist", {"count": len(names)})
 
+    elif kind == "set_web_filter":
+        on = bool(payload.get("on", False))
+        enforcer_dns.set_web_filter(on, payload.get("resolver"))
+        enforcer_dns.enforce()
+        await emit_event(ws, "set_web_filter", {"on": on})
+
     elif kind == "set_schedules":
         items = list(payload.get("schedules") or [])
         enforcer_schedule.set_schedules(items)
@@ -602,6 +609,12 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
     BORROW_STATE["enabled"] = bool(msg.get("selfBorrowEnabled", False))
     BORROW_STATE["cap"] = int(msg.get("selfBorrowCapMinutes", 30))
     ND_MODE["value"] = bool(msg.get("ndMode", False))
+    # Web content filter: block adult/dangerous sites via family DNS. Applied
+    # (and re-asserted) by enforcer_dns.enforce() in the main loop.
+    enforcer_dns.set_web_filter(
+        bool(msg.get("webFilter", False)),
+        msg.get("webFilterResolver") or None,
+    )
     # NOTE: we deliberately do NOT set bank from the snapshot. The agent is the
     # authority on bankedMinutes (it persists locally and reports via heartbeat).
     # Parent-side changes (approved chore/request, +30, Set) arrive as explicit
@@ -701,6 +714,13 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         # killed when bedtime/limit hits" list, so the kid keeps full access
         # outside lock windows. The decision is computed a few lines below
         # (lock_active) and applied as step 2b.
+
+        # 2c. Web content filter (family DNS) — cheap no-op once steady; it
+        # re-asserts itself periodically so the kid can't switch DNS back.
+        try:
+            enforcer_dns.enforce()
+        except Exception as e:  # noqa: BLE001
+            print(f"[dns] enforce failed: {e}")
 
         # 3. VPN / Tor adapter check
         if now - last_vpn_check >= VPN_CHECK_INTERVAL_SEC:

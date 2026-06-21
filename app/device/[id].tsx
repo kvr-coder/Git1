@@ -355,6 +355,27 @@ export default function DeviceDetail() {
         />
       </Card>
 
+      {/* Web safety — block adult/dangerous sites via family DNS on the kid PC. */}
+      <SectionHeader>Web safety</SectionHeader>
+      <Card>
+        <View style={styles.spread}>
+          <View style={{ flex: 1, marginRight: spacing.sm }}>
+            <Text style={[typography.h3, { color: colors.text }]}>Block adult &amp; dangerous sites</Text>
+            <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>
+              Filters adult, malware and phishing sites in every browser using a
+              family DNS. Re-applies itself so it can&apos;t be switched off.
+            </Text>
+          </View>
+          <Switch
+            value={!!device.webFilter}
+            onValueChange={(v) => run(() => api.setWebFilter(device.id, v))}
+            trackColor={{ true: colors.primary, false: colors.surfaceAlt }}
+            thumbColor="#fff"
+            disabled={busy}
+          />
+        </View>
+      </Card>
+
       {/* Bank */}
       <SectionHeader>Reward bank</SectionHeader>
       <Card>

@@ -51,6 +51,7 @@ interface ServerDevice {
   bankedMinutes?: number;
   vacationUntil?: number;
   ndMode?: boolean;
+  webFilter?: boolean;
 }
 
 const adaptDevice = (d: ServerDevice): Device => ({
@@ -69,6 +70,7 @@ const adaptDevice = (d: ServerDevice): Device => ({
   bankedMinutes: d.bankedMinutes ?? 0,
   vacationUntil: d.vacationUntil ?? 0,
   ndMode: !!d.ndMode,
+  webFilter: !!d.webFilter,
 });
 
 interface ServerActivity {
@@ -222,6 +224,12 @@ export const realApi = {
     await request(`/devices/${deviceId}/command`, {
       method: 'POST',
       body: JSON.stringify({ kind: 'set_nd_mode', payload: { on } }),
+    });
+  },
+  async setWebFilter(deviceId: string, on: boolean) {
+    await request(`/devices/${deviceId}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'set_web_filter', payload: { on } }),
     });
   },
   async wipeKidPcHistory(deviceId: string) {

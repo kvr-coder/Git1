@@ -96,6 +96,7 @@ export interface DeviceRow {
   scheduleOverrideUntil: number;
   vacationUntil: number;
   ndMode: boolean;
+  webFilter: boolean;
 }
 
 export interface ScheduleRow {
@@ -330,6 +331,7 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN tamperAlertsOn INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE devices ADD COLUMN ndMode INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE users ADD COLUMN consentedAt INTEGER",
+  "ALTER TABLE devices ADD COLUMN webFilter INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
@@ -358,6 +360,7 @@ const rowToDevice = (r: any): DeviceRow => ({
   scheduleOverrideUntil: Number(r.scheduleOverrideUntil ?? 0),
   vacationUntil: Number(r.vacationUntil ?? 0),
   ndMode: !!r.ndMode,
+  webFilter: !!r.webFilter,
 });
 
 const rowToSchedule = (r: any): ScheduleRow => ({
@@ -590,6 +593,7 @@ export const store = {
       scheduleOverrideUntil: 0,
       vacationUntil: 0,
       ndMode: false,
+      webFilter: false,
     };
     db.prepare(
       `INSERT INTO devices (id, userId, name, agentToken, pairedAt, lastSeen, status, dailyLimitMinutes, usedTodayMinutes, internetBlocked, blocklist, selfBorrowEnabled, selfBorrowCapMinutes, bankedMinutes, lockedByParent)
@@ -682,7 +686,7 @@ export const store = {
     const values = fields.map((f) => {
       const v = (patch as any)[f];
       if (f === 'blocklist' || f === 'alwaysBlocklist') return JSON.stringify(v ?? []);
-      if (f === 'internetBlocked' || f === 'selfBorrowEnabled' || f === 'lockedByParent' || f === 'shutdownCleanly')
+      if (f === 'internetBlocked' || f === 'selfBorrowEnabled' || f === 'lockedByParent' || f === 'shutdownCleanly' || f === 'webFilter')
         return v ? 1 : 0;
       return v;
     });
