@@ -4,9 +4,10 @@
 
 timeoff (also referred to as "Git1") is a parental screen-time tool: a phone
 app for the parent, a Windows agent on the child's PC, and a small sync server.
-This policy describes exactly what data we hold, why, and for how long. It
-mirrors the actual database schema 1:1 — there is nothing collected that is not
-listed here. The same breakdown is shown in the app at **Settings → Privacy**.
+This policy describes exactly what data we hold, why, and for how long. It is the
+**complete list of what we collect about you and your family — we never collect
+anything that isn't on it.** Anything we plan to add is marked *planned* until it
+goes live. The same breakdown is shown in the app at **Settings → Privacy**.
 
 The canonical, always-current version of this policy is served at:
 **https://git1-server.onrender.com/privacy**
@@ -36,6 +37,7 @@ infrastructure at all.
 | Paired kid PCs (id, name, agent token) | Reconnect the PC after restarts | Until you unpair |
 | Pairing codes (6-digit) | One-shot device pairing | Auto-deleted after 10 minutes |
 | Co-parent links | Let both parents see the same kid | Until you unlink |
+| Device fingerprint (kid PC) — *planned* | Enforce one free trial per device + prevent abuse (one-way hash of hardware IDs; not an ad ID, never sold/shared) | While the device is known to us |
 
 ### Settings (so the kid PC stays in sync)
 | Data | Why | Kept |
@@ -99,6 +101,13 @@ SQLite database. The server code is public at
 https://github.com/kvr-coder/git1.
 
 ---
+
+## About items marked *planned*
+
+A *planned* item is one we've disclosed in advance but **do not collect yet** — it
+starts only when the related feature (e.g. paid plans) launches. Today the only
+*planned* item is the **device fingerprint** above. Planned items never change the
+"Never collected" promises.
 
 ## Changes to this policy
 

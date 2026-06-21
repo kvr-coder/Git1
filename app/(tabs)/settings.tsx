@@ -112,7 +112,8 @@ export default function Settings() {
           • Used minutes + app names on the kid PC (not chats, not screen contents){'\n'}
           • Time/chore requests your kid sends{'\n'}
           • Lock/unlock events{'\n'}
-          • Your settings: schedule, blocklist, daily limit, bank balance
+          • Your settings: schedule, blocklist, daily limit, bank balance{'\n'}
+          • Device fingerprint (kid PC) — planned, for one free trial per device
         </Text>
         <Text style={[typography.h3, { color: colors.text, marginTop: spacing.sm }]}>
           What we never collect

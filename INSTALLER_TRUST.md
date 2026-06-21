@@ -63,7 +63,7 @@ Formats that are also off the table:
 |---|---|---|---|---|
 | 1 | **Authenticode code-signing** (EV preferred, OV acceptable) | 🟢 Huge | ~$250–400/yr EV, ~$100–200/yr OV | **CI scaffold DONE** — add cert secrets to activate |
 | 2 | **Stop downloading runtimes at install time** — bundle Python + Git | 🟢 High | dev only | **DONE** (best-effort bundle + fallback) |
-| 3 | **Auto-submit each signed release** to Microsoft (and key AV vendors) | 🟡 Medium | free | TODO (manual for now — needs MS-account auth) |
+| 3 | **Submit each release** to Microsoft (and key AV vendors) | 🟡 Medium | free | **CI reminder DONE** (auto-submit needs MS-account auth) |
 | 4 | **Real publisher identity** — website, privacy policy, support email | 🟡 Medium | low | privacy policy: DONE (`/privacy`) |
 | 5 | Keep **Inno Setup EXE** as the primary format | 🟢 already best | — | DONE |
 | 6 | Keep `.bat` / ZIP as **fallback only** | 🟡 | — | DONE |
@@ -77,10 +77,15 @@ Formats that are also off the table:
   (EV certs use an HSM/cloud-KMS instead of a `.pfx` — swap the step's auth when
   you get one.)
 - **Bundling step** (`Stage bundled runtimes`): builds a self-contained Python
-  (embeddable + pip + the agent's deps, with a native-import sanity check) and a
-  portable Git (MinGit) into `installer\payload`. It's `continue-on-error`, and
-  the `.iss` entries are `skipifsourcedoesntexist`, so a bundling failure simply
-  ships the old downloading installer instead of breaking the release.
+  (embeddable + pip + the agent's deps, with a native-import sanity check), a
+  portable Git (MinGit), and **nssm** into `installer\payload`. It's
+  `continue-on-error`, and the `.iss` entries are `skipifsourcedoesntexist`, so a
+  bundling failure simply ships the old downloading installer instead of breaking
+  the release. `install-service.ps1` prefers the bundled nssm (via `-NssmPath`)
+  before any download.
+- **Submission reminder** (`Microsoft false-positive submission reminder`): posts
+  the portal link, the EXE SHA256, and download URL to the run summary on every
+  release so you can clear Defender/SmartScreen false positives in 1–3 days.
 - **`Install-Git1-Kid.ps1`** auto-detects `{app}\python` / `{app}\git` and uses
   them; if the bundle is missing OR its native deps don't load, it falls back to
   the winget/download path. So a bad bundle can never brick a kid-PC install.
