@@ -276,8 +276,9 @@
   <div class="card" style="max-width:420px; margin:auto;">
     <strong style="font-size:18px;">Heads up — how timeoff works</strong>
     <p class="muted" style="margin:10px 0;">
-      Your parent or guardian set up timeoff on this PC. It tracks your screen
-      time and which apps you use so they can help manage it.
+      Your parent or guardian set up timeoff on this PC. They can see your daily
+      screen time and <b>which apps you use and for how long</b> (e.g. Discord 40m,
+      a game 1h) so they can help manage it.
     </p>
     <p class="muted" style="margin:10px 0;">
       It <b>cannot</b> see your messages, screenshots, what you type, or the
@@ -305,7 +306,9 @@ const $ = (id) => document.getElementById(id);
 
 // One-time transparency notice for the child (notice + acknowledge, no veto).
 (function () {
-  const KEY = 'timeoff.kidNoticeAck';
+  // Bumped to v2: the notice now states the parent sees per-app usage, so even
+  // kids who dismissed the old notice get re-informed once.
+  const KEY = 'timeoff.kidNoticeAck.v2';
   const el = $('privacy-notice');
   if (el && !localStorage.getItem(KEY)) el.style.display = 'flex';
   const ok = $('privacy-ok');

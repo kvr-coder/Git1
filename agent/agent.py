@@ -942,6 +942,68 @@ async def run(token: str, usage: Usage, dash: dashboard.Dashboard) -> None:
             bridge.unbind()
 
 
+def relaunch_tray_in_user_session() -> None:
+    """Kill any running tray and start a fresh one IN the active user session.
+    Lets the SYSTEM service push updated tray code (e.g. the foreground tracker)
+    without waiting for the kid to log out/in. No-op when no interactive user is
+    logged in — the login startup shortcut handles the first launch."""
+    if sys.platform != "win32":
+        return
+    try:
+        import win32con  # type: ignore
+        import win32process  # type: ignore
+        import win32profile  # type: ignore
+        import win32ts  # type: ignore
+        import psutil  # type: ignore
+    except Exception as e:  # noqa: BLE001
+        print(f"[tray-relaunch] pywin32/psutil missing: {e}")
+        return
+    try:
+        sess = win32ts.WTSGetActiveConsoleSessionId()
+    except Exception:
+        sess = 0xFFFFFFFF
+    if sess in (0xFFFFFFFF, 0):  # 0xFFFFFFFF = none; 0 = services session
+        return
+    agent_dir = os.path.dirname(os.path.abspath(__file__))
+    tray_py = os.path.join(agent_dir, "tray.py")
+    if not os.path.exists(tray_py):
+        return
+    pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    if not os.path.exists(pyw):
+        pyw = sys.executable
+
+    # 1. Kill the old tray(s) so the new code takes over.
+    for p in psutil.process_iter(attrs=["pid", "cmdline"]):
+        try:
+            if any("tray.py" in str(a) for a in (p.info.get("cmdline") or [])):
+                p.terminate()
+        except Exception:
+            continue
+
+    # 2. Launch a fresh tray in the user's session using their token. SYSTEM has
+    #    SeTcbPrivilege, so WTSQueryUserToken + CreateProcessAsUser is allowed.
+    CREATE_UNICODE_ENVIRONMENT = 0x00000400
+    token = None
+    try:
+        token = win32ts.WTSQueryUserToken(sess)
+        env = win32profile.CreateEnvironmentBlock(token, False)
+        si = win32process.STARTUPINFO()
+        si.lpDesktop = "winsta0\\default"
+        win32process.CreateProcessAsUser(
+            token, None, f'"{pyw}" "{tray_py}"', None, None, False,
+            CREATE_UNICODE_ENVIRONMENT, env, agent_dir, si,
+        )
+        print("[tray-relaunch] launched fresh tray in user session")
+    except Exception as e:  # noqa: BLE001
+        print(f"[tray-relaunch] failed: {e}")
+    finally:
+        try:
+            if token is not None:
+                token.Close()
+        except Exception:
+            pass
+
+
 def main() -> None:
     global queue
     cfg = load_json(CONFIG_PATH)
@@ -1029,6 +1091,13 @@ def main() -> None:
     dash.on_chore(_submit_chore)
     dash.on_spend(_spend_bank)
     dash.start()
+
+    # Push the current tray code into the kid's session now (covers self-updates
+    # mid-session — the new foreground tracker starts without a re-logon).
+    try:
+        relaunch_tray_in_user_session()
+    except Exception as e:  # noqa: BLE001
+        print(f"[tray-relaunch] error: {e}")
 
     last_connected = time.time()
     backoff = 2
