@@ -166,7 +166,7 @@ jobs:
           repository: kvr-coder/Downloads
           token: ${{ secrets.DOWNLOADS_PAT }}
           name: timeoff agent ${{ steps.ver.outputs.version }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: agent-v${{ steps.ver.outputs.version }}
           body: |
             ## timeoff agent ${{ steps.ver.outputs.version }}
 
