@@ -524,6 +524,7 @@ const commandSchema = z.object({
     'set_vacation',
     'set_nd_mode',
     'set_web_filter',
+    'set_web_terms',
     'clear_local_history',
   ]),
   payload: z.record(z.unknown()).optional(),
@@ -652,6 +653,20 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
       kind: on ? 'web_filter_on' : 'web_filter_off',
       message: `${d.name}: adult/dangerous-site filter ${on ? 'enabled' : 'disabled'}`,
     });
+    pushSnapshotToAgent(d.id);
+  }
+
+  if (p.data.kind === 'set_web_terms') {
+    // Parent-defined keyword/domain block list. Sanitised, deduped, capped.
+    const raw = Array.isArray(p.data.payload?.terms) ? (p.data.payload!.terms as unknown[]) : [];
+    const terms = Array.from(
+      new Set(
+        raw
+          .map((t) => String(t).trim().toLowerCase())
+          .filter((t) => t.length >= 2 && t.length <= 100),
+      ),
+    ).slice(0, 200);
+    store.updateDevice(d.id, { webFilterTerms: terms });
     pushSnapshotToAgent(d.id);
   }
 
@@ -1176,6 +1191,8 @@ function buildSnapshot(d: DeviceRow) {
     ndMode: !!(d as any).ndMode,
     // Block adult/dangerous sites via family DNS (agent applies + re-asserts).
     webFilter: !!(d as any).webFilter,
+    // Parent keyword/domain block list (local DNS filter on the agent).
+    webFilterTerms: (d as any).webFilterTerms ?? [],
     repoCommit: REPO_COMMIT,
   };
 }
@@ -1464,6 +1481,7 @@ function toPublicDevice(d: DeviceRow) {
     vacationUntil: (d as any).vacationUntil ?? 0,
     ndMode: !!(d as any).ndMode,
     webFilter: !!(d as any).webFilter,
+    webFilterTerms: (d as any).webFilterTerms ?? [],
     tamperSuspected:
       d.status === 'offline' &&
       !!d.lastSeen &&

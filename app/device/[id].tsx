@@ -53,6 +53,7 @@ export default function DeviceDetail() {
   }, [id]);
   const [busy, setBusy] = useState(false);
   const [appInput, setAppInput] = useState('');
+  const [webTermInput, setWebTermInput] = useState('');
 
   const refresh = () => api.getDevice(id).then(setDevice);
   useEffect(() => {
@@ -80,6 +81,18 @@ export default function DeviceDetail() {
   const removeApp = (name: string) => {
     if (!device) return;
     run(() => api.setBlocklist(device.id, device.blocklist.filter((n) => n !== name)));
+  };
+
+  const addWebTerm = () => {
+    if (!device || webTermInput.trim().length < 2) return;
+    const term = webTermInput.trim().toLowerCase();
+    const next = Array.from(new Set([...(device.webFilterTerms ?? []), term]));
+    setWebTermInput('');
+    run(() => api.setWebTerms(device.id, next));
+  };
+  const removeWebTerm = (term: string) => {
+    if (!device) return;
+    run(() => api.setWebTerms(device.id, (device.webFilterTerms ?? []).filter((t) => t !== term)));
   };
 
   if (!device) {
@@ -374,6 +387,36 @@ export default function DeviceDetail() {
             disabled={busy}
           />
         </View>
+
+        <View style={{ height: spacing.md }} />
+        <Text style={[typography.bodyStrong, { color: colors.text }]}>Block specific sites</Text>
+        <Text style={[typography.caption, { color: colors.textMuted }]}>
+          Add a word or domain — anything containing it is blocked (e.g.{' '}
+          <Text style={{ color: colors.text }}>lrytas</Text> blocks lrytas.lt,
+          sport.lrytas.lt, lrytas.com…). Matches the site address, not words inside pages.
+        </Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            value={webTermInput}
+            onChangeText={setWebTermInput}
+            placeholder="lrytas  or  example.com"
+            placeholderTextColor={colors.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text }]}
+            onSubmitEditing={addWebTerm}
+          />
+          <Button label="Add" icon="add" onPress={addWebTerm} />
+        </View>
+        {(device.webFilterTerms ?? []).length === 0 ? (
+          <Text style={[typography.caption, { color: colors.textFaint }]}>No custom blocks yet.</Text>
+        ) : (
+          <View style={styles.chipRow}>
+            {(device.webFilterTerms ?? []).map((term) => (
+              <Chip key={term} label={term} onRemove={() => removeWebTerm(term)} tone="danger" />
+            ))}
+          </View>
+        )}
       </Card>
 
       {/* Bank */}
