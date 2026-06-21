@@ -61,6 +61,16 @@ def set_terms(terms: list[str] | None) -> None:
     _state["terms"] = sorted({t.strip().lower() for t in (terms or []) if t and t.strip()})
 
 
+def is_enabled() -> bool:
+    """Category (adult/dangerous) filter on?"""
+    return bool(_state["enabled"])
+
+
+def get_terms() -> list[str]:
+    """Parent's custom keyword/domain block list."""
+    return list(_state["terms"])  # type: ignore[arg-type]
+
+
 # ---------------------------------------------------------------- DNS packet
 def _qname(data: bytes) -> str:
     i, labels = 12, []

@@ -842,6 +842,11 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
             bankedMinutes=usage.banked_minutes,
             choreTemplates=list(CHORE_TEMPLATES),
             notifications=list(NOTIFICATIONS),
+            # Surfaced so the kid dashboard's transparency card reflects what the
+            # parent has actually turned on (updates live as they change it).
+            webFilter=enforcer_dns.is_enabled(),
+            webFilterTerms=enforcer_dns.get_terms(),
+            ndMode=ND_MODE["value"],
         )
 
         # 8. Heartbeat
