@@ -100,6 +100,17 @@ https://github.com/kvr-coder/git1.
 
 ---
 
+## Planned — not yet collected (with paid plans)
+
+When free trials / paid subscriptions launch, we will collect one additional item.
+We are disclosing it here in advance; **it is not collected today.**
+
+- **Device fingerprint (kid PC)** — a one-way hash of stable hardware IDs (e.g.
+  motherboard/BIOS UUID). **Why:** to enforce one free trial per device and prevent
+  trial abuse. It is **not** an advertising ID, is **not** used for tracking or ads,
+  and is never sold or shared. This does not change the "Never collected" promises
+  above. This section moves into the live tables above on the day the feature ships.
+
 ## Changes to this policy
 
 If we change what we collect, we update this document and the in-app

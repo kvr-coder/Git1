@@ -149,7 +149,29 @@ and parent app read the same fields. (App reads via `GET /me/plan`.)
 
 ---
 
-## 8. Build order when ready
+## 8. Required privacy disclosures (ship in the SAME PR as the feature)
+
+The hardware fingerprint is a **persistent unique identifier → personal data**
+(GDPR "online identifier"; Apple "Device ID"). It **must be disclosed**. No consent
+prompt is needed — abuse/fraud prevention is a valid **legitimate-interest** basis —
+but disclosure is mandatory, and our policy promises to "mirror the actual database
+schema 1:1," so the schema change and the disclosure must land together.
+
+**Exact wording to publish** (drop into every surface below):
+> **Device fingerprint (kid PC)** — a one-way hash of stable hardware IDs (e.g.
+> motherboard/BIOS UUID). **Why:** to enforce one free trial per device and prevent
+> abuse. **Not** used for advertising or tracking, never sold or shared. Kept while
+> the device is known to us.
+
+**Update ALL of these in the same PR that adds `device_trials`:**
+- [ ] `PRIVACY.md` — move the planned note into the live "what we collect" tables
+- [ ] `server/public/privacy.html` — add a row (served at `/privacy`)
+- [ ] `app/privacy-details.tsx` — add to the `SETTINGS`/essential rows ("mirrors the schema")
+- [ ] `app/(tabs)/settings.tsx` — the "What we collect" summary card
+- [ ] **Apple App Privacy label** (App Store Connect) — declare *Identifiers → Device ID*, purpose *App Functionality / Fraud Prevention*; keep it OUT of "Tracking"
+- [ ] Keep the **"Never collected"** lists truthful — a fraud hash is NOT an advertising ID, so those promises still hold; say so explicitly
+
+## 9. Build order when ready
 
 1. `device_trials` table + `users` plan columns + `resolvePlan()` resolver.
 2. Agent: compute + send hardware fingerprint on register.
