@@ -690,24 +690,17 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         usage.roll_if_new_day()
         now = time.time()
 
-        # 1. Track active session time + per-app seconds (for the Stats page).
-        # All user apps running in the active console session get credited with
-        # the elapsed sample interval — this gives a clear picture of "what the
-        # PC was doing today", not just the foreground app, without needing
-        # cross-session window-focus tracking (which session 0 can't do).
+        # 1. Track active session time (for limits). Per-app usage is NOT done
+        # here: a session-0 service can't see the user's FOREGROUND window, and
+        # crediting every running process equally just logs background helpers
+        # (drivers, crash handlers, updaters) with identical time — useless. The
+        # in-session tray samples the real foreground app and writes it to the
+        # shared IPC file, which we read in the heartbeat below.
         active = idle_seconds() < IDLE_THRESHOLD_SEC
         elapsed = now - last_sample
         last_sample = now
         if active:
             usage.add_seconds(elapsed)
-            try:
-                if sys.platform == "win32":
-                    sess = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
-                    if sess != 0xFFFFFFFF:
-                        for name in enforcer_apps.running_user_apps_by_session(int(sess)):
-                            usage.add_app_seconds(name, elapsed)
-            except Exception as e:
-                print(f"[stats] app sampling failed: {e}")
 
         # 2a. ALWAYS-blocked apps — killed every tick, no matter what (the
         # parent's permanent ban list, separate from the lock-only blocklist).
@@ -855,13 +848,22 @@ async def enforcer(ws: Any, usage: Usage, dash: dashboard.Dashboard) -> None:
         if now - last_heartbeat >= HEARTBEAT_INTERVAL_SEC:
             last_heartbeat = now
             try:
-                # Per-app minutes (Stats page). Keep payload small by sending
-                # only the top 30 apps for the current day.
-                app_minutes = sorted(
-                    ((name, sec / 60.0) for name, sec in usage.app_seconds.items()),
-                    key=lambda x: x[1], reverse=True,
-                )[:30]
-                app_usage = {name: round(mins, 1) for name, mins in app_minutes}
+                # Per-app minutes (Stats page) come from the in-session tray,
+                # which samples the FOREGROUND app and writes appusage.json to the
+                # shared IPC folder. We only trust today's file. If the tray isn't
+                # running we send no per-app data (honest) rather than background junk.
+                app_usage: dict[str, float] = {}
+                try:
+                    ausage = load_json(Path(IPC_DIR) / "appusage.json")
+                    if isinstance(ausage, dict) and ausage.get("date") == usage.date:
+                        apps = ausage.get("apps") or {}
+                        top = sorted(
+                            ((n, float(s) / 60.0) for n, s in apps.items()),
+                            key=lambda x: x[1], reverse=True,
+                        )[:30]
+                        app_usage = {n: round(m, 1) for n, m in top}
+                except Exception as e:
+                    print(f"[stats] tray appusage read failed: {e}")
                 hb_seq += 1
                 hb_sig = _hb_sign(AGENT_TOKEN, hb_seq)
                 await ws.send(
