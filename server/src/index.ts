@@ -523,6 +523,7 @@ const commandSchema = z.object({
     'rename',
     'set_vacation',
     'set_nd_mode',
+    'set_web_filter',
     'clear_local_history',
   ]),
   payload: z.record(z.unknown()).optional(),
@@ -636,6 +637,20 @@ app.post('/devices/:id/command', auth, (req: AuthedRequest, res) => {
       deviceId: d.id,
       kind: on ? 'nd_mode_on' : 'nd_mode_off',
       message: `${d.name}: executive-function support ${on ? 'enabled' : 'disabled'}`,
+    });
+    pushSnapshotToAgent(d.id);
+  }
+
+  if (p.data.kind === 'set_web_filter') {
+    // Block adult/dangerous sites via family DNS on the kid PC. Persisted per
+    // device + shipped in the snapshot; the agent sets + re-asserts the filter.
+    const on = !!p.data.payload?.on;
+    store.updateDevice(d.id, { webFilter: on });
+    store.appendActivity({
+      userId: req.userId!,
+      deviceId: d.id,
+      kind: on ? 'web_filter_on' : 'web_filter_off',
+      message: `${d.name}: adult/dangerous-site filter ${on ? 'enabled' : 'disabled'}`,
     });
     pushSnapshotToAgent(d.id);
   }
@@ -1159,6 +1174,8 @@ function buildSnapshot(d: DeviceRow) {
     vacationUntil: (d as any).vacationUntil ?? 0,
     // Executive-function support: longer pre-lock warnings + gentler copy.
     ndMode: !!(d as any).ndMode,
+    // Block adult/dangerous sites via family DNS (agent applies + re-asserts).
+    webFilter: !!(d as any).webFilter,
     repoCommit: REPO_COMMIT,
   };
 }
@@ -1446,6 +1463,7 @@ function toPublicDevice(d: DeviceRow) {
     // d.shutdownCleanly, which suppresses the banner too.
     vacationUntil: (d as any).vacationUntil ?? 0,
     ndMode: !!(d as any).ndMode,
+    webFilter: !!(d as any).webFilter,
     tamperSuspected:
       d.status === 'offline' &&
       !!d.lastSeen &&

@@ -14,6 +14,7 @@ export type CommandKind =
   | 'rename'
   | 'set_vacation'
   | 'set_nd_mode'
+  | 'set_web_filter'
   | 'clear_local_history';
 
 export interface Command {

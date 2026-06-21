@@ -18,6 +18,7 @@ export interface Device {
   bankedMinutes: number;
   vacationUntil?: number;
   ndMode?: boolean;
+  webFilter?: boolean;
 }
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
