@@ -6,9 +6,41 @@ the agent's main loop.
 """
 from __future__ import annotations
 
+import sys
 from typing import Iterable
 
 import psutil
+
+try:
+    import ctypes  # stdlib; used for the Win32 session-id lookup below
+except Exception:  # pragma: no cover
+    ctypes = None  # type: ignore
+
+# Resolve a process's Windows session id via the Win32 API. psutil exposes no
+# public session-id accessor; the previous code used a PRIVATE attribute
+# (p._proc.session_id()) that doesn't exist on standard psutil builds, so it
+# raised for every process and per-app Stats were ALWAYS empty. ctypes ->
+# kernel32!ProcessIdToSessionId is reliable and callable from the LocalSystem
+# service (session 0).
+_ProcessIdToSessionId = None
+if sys.platform == "win32" and ctypes is not None:
+    try:
+        _ProcessIdToSessionId = ctypes.windll.kernel32.ProcessIdToSessionId
+    except Exception:
+        _ProcessIdToSessionId = None
+
+
+def _session_of(pid: int) -> int | None:
+    if _ProcessIdToSessionId is None:
+        return None
+    out = ctypes.c_ulong(0)  # type: ignore[union-attr]
+    try:
+        if _ProcessIdToSessionId(int(pid), ctypes.byref(out)):  # type: ignore[union-attr]
+            return int(out.value)
+    except Exception:
+        return None
+    return None
+
 
 # Two separate kill lists with different policies:
 #  _blocklist      — killed only while the PC is in a locked state
@@ -54,13 +86,7 @@ def running_user_apps_by_session(session_id: int) -> list[str]:
         return []
     for p in psutil.process_iter(attrs=["pid", "name"]):
         try:
-            # psutil exposes session id on Windows via win_service-or-process detail.
-            # Cheapest check: psutil.Process(pid).num_handles fails for cross-session;
-            # use _ppid/exe walking? Simpler: read p._proc.session_id() on Windows.
-            try:
-                sid = p._proc.session_id()  # type: ignore[attr-defined]
-            except Exception:
-                sid = None
+            sid = _session_of(p.info["pid"])
             if sid is None or int(sid) != int(session_id):
                 continue
             name = (p.info.get("name") or "").strip().lower()
