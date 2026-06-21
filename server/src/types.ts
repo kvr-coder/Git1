@@ -15,6 +15,7 @@ export type CommandKind =
   | 'set_vacation'
   | 'set_nd_mode'
   | 'set_web_filter'
+  | 'set_web_terms'
   | 'clear_local_history';
 
 export interface Command {

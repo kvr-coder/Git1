@@ -278,6 +278,11 @@ const mockApi = {
     const d = mockDevices.find((x) => x.id === id);
     if (d) (d as any).webFilter = on;
   },
+  async setWebTerms(id: string, terms: string[]) {
+    await delay(60);
+    const d = mockDevices.find((x) => x.id === id);
+    if (d) (d as any).webFilterTerms = terms;
+  },
   async getStats(_id: string, days = 28) {
     await delay(60);
     // Mock 28 days of plausible-looking history so the screen has something

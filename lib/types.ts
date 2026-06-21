@@ -19,6 +19,7 @@ export interface Device {
   vacationUntil?: number;
   ndMode?: boolean;
   webFilter?: boolean;
+  webFilterTerms?: string[];
 }
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';

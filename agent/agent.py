@@ -532,6 +532,12 @@ async def handle_command(ws: Any, command: dict, usage: Usage) -> None:
         enforcer_dns.enforce()
         await emit_event(ws, "set_web_filter", {"on": on})
 
+    elif kind == "set_web_terms":
+        terms = list(payload.get("terms") or [])
+        enforcer_dns.set_terms(terms)
+        enforcer_dns.enforce()
+        await emit_event(ws, "set_web_terms", {"count": len(terms)})
+
     elif kind == "set_schedules":
         items = list(payload.get("schedules") or [])
         enforcer_schedule.set_schedules(items)
@@ -615,6 +621,7 @@ def apply_policy(msg: dict, usage: "Usage", persist: bool) -> None:
         bool(msg.get("webFilter", False)),
         msg.get("webFilterResolver") or None,
     )
+    enforcer_dns.set_terms(msg.get("webFilterTerms") or [])
     # NOTE: we deliberately do NOT set bank from the snapshot. The agent is the
     # authority on bankedMinutes (it persists locally and reports via heartbeat).
     # Parent-side changes (approved chore/request, +30, Set) arrive as explicit

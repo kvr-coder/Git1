@@ -52,6 +52,7 @@ interface ServerDevice {
   vacationUntil?: number;
   ndMode?: boolean;
   webFilter?: boolean;
+  webFilterTerms?: string[];
 }
 
 const adaptDevice = (d: ServerDevice): Device => ({
@@ -71,6 +72,7 @@ const adaptDevice = (d: ServerDevice): Device => ({
   vacationUntil: d.vacationUntil ?? 0,
   ndMode: !!d.ndMode,
   webFilter: !!d.webFilter,
+  webFilterTerms: d.webFilterTerms ?? [],
 });
 
 interface ServerActivity {
@@ -230,6 +232,12 @@ export const realApi = {
     await request(`/devices/${deviceId}/command`, {
       method: 'POST',
       body: JSON.stringify({ kind: 'set_web_filter', payload: { on } }),
+    });
+  },
+  async setWebTerms(deviceId: string, terms: string[]) {
+    await request(`/devices/${deviceId}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'set_web_terms', payload: { terms } }),
     });
   },
   async wipeKidPcHistory(deviceId: string) {
