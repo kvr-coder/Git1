@@ -40,6 +40,93 @@ LOCK_SIGNAL = os.path.join(IPC_DIR, "lock.signal")
 TRAY_ALIVE = os.path.join(IPC_DIR, "tray.alive")
 
 
+APPUSAGE = os.path.join(IPC_DIR, "appusage.json")
+FG_SAMPLE_SEC = 7          # how often to check the foreground app
+FG_IDLE_SEC = 90           # don't credit time while the kid is away
+# Windows shell/system surfaces that can briefly hold focus but aren't "apps".
+_FG_IGNORE = {
+    "explorer.exe", "searchhost.exe", "shellexperiencehost.exe",
+    "startmenuexperiencehost.exe", "textinputhost.exe", "lockapp.exe",
+    "applicationframehost.exe", "dwm.exe", "sihost.exe", "",
+}
+
+
+def _idle_seconds() -> float:
+    """Seconds since the last keyboard/mouse input in THIS session."""
+    import ctypes
+
+    class _LASTINPUTINFO(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+    info = _LASTINPUTINFO()
+    info.cbSize = ctypes.sizeof(info)
+    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
+        return 0.0
+    millis = ctypes.windll.kernel32.GetTickCount() - info.dwTime
+    return max(0.0, millis / 1000.0)
+
+
+def _foreground_proc() -> str:
+    """Lowercased exe name of the process owning the foreground window."""
+    import ctypes
+
+    import psutil  # type: ignore
+
+    user32 = ctypes.windll.user32
+    # Declare proper types or a 64-bit HWND gets truncated to 32 bits.
+    user32.GetForegroundWindow.restype = ctypes.c_void_p
+    user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ""
+    pid = ctypes.c_ulong(0)
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if not pid.value:
+        return ""
+    try:
+        return (psutil.Process(pid.value).name() or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _foreground_tracker() -> None:
+    """Sample the active-window app and write per-app seconds to the shared IPC
+    file. Runs IN the kid's session, so unlike the SYSTEM service it can read the
+    real foreground window — this is what makes Stats reflect apps the kid
+    actually uses (Discord, games, browser) instead of background helpers."""
+    if sys.platform != "win32":
+        return
+    import datetime as _dt
+    import json as _json
+
+    def today() -> str:
+        return _dt.date.today().isoformat()
+
+    day = today()
+    secs: dict[str, float] = {}
+    last = time.time()
+    while True:
+        time.sleep(FG_SAMPLE_SEC)
+        now = time.time()
+        elapsed, last = now - last, now
+        d = today()
+        if d != day:                      # new day -> fresh counters
+            day, secs = d, {}
+        try:
+            if _idle_seconds() > FG_IDLE_SEC:
+                continue
+            name = _foreground_proc()
+            if name and name not in _FG_IGNORE:
+                secs[name] = secs.get(name, 0.0) + elapsed
+            os.makedirs(IPC_DIR, exist_ok=True)
+            tmp = APPUSAGE + ".tmp"
+            with open(tmp, "w") as f:
+                _json.dump({"date": day, "apps": {k: round(v) for k, v in secs.items()}}, f)
+            os.replace(tmp, APPUSAGE)
+        except Exception as e:  # noqa: BLE001
+            print(f"[tray] foreground tracker error: {e}")
+
+
 def _lock_watcher() -> None:
     """Poll for the service's lock signal; lock this session cleanly when set."""
     if sys.platform != "win32":
@@ -150,6 +237,7 @@ def main() -> None:
 
     threading.Thread(target=updater, name="git1-tray-updater", daemon=True).start()
     threading.Thread(target=_lock_watcher, name="git1-tray-lock", daemon=True).start()
+    threading.Thread(target=_foreground_tracker, name="git1-tray-fg", daemon=True).start()
     icon.run()
 
 
