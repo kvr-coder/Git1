@@ -108,7 +108,11 @@ def _foreground_tracker() -> None:
     while True:
         time.sleep(FG_SAMPLE_SEC)
         now = time.time()
-        elapsed, last = now - last, now
+        # Cap the sample so a sleep/resume or clock jump (which makes now-last
+        # huge) can't dump hours onto whatever app happens to be in focus —
+        # that's what produced impossible per-app totals like 14h in a 4h day.
+        elapsed = min(max(0.0, now - last), FG_SAMPLE_SEC * 2)
+        last = now
         d = today()
         if d != day:                      # new day -> fresh counters
             day, secs = d, {}
