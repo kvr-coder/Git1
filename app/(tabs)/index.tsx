@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../lib/auth';
 import { ChoreCard } from '../../components/ChoreCard';
@@ -11,6 +11,7 @@ import { Screen } from '../../components/Screen';
 import { SectionHeader } from '../../components/ui';
 import { Card } from '../../components/Card';
 import { api } from '../../lib/api';
+import { KEYS, storage } from '../../lib/storage';
 import { useTheme } from '../../lib/ThemeContext';
 import { spacing, typography } from '../../lib/theme';
 import type { ChoreRequest, Device, TimeRequest } from '../../lib/types';
@@ -35,16 +36,51 @@ export default function Home() {
   const [chores, setChores] = useState<ChoreRequest[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // True when the server returned an empty device list but we have a cached one:
+  // almost always a transient server-DB wipe (Render free tier), not a real
+  // un-pair — so we keep showing the last-known devices instead of blanking.
+  const [devicesStale, setDevicesStale] = useState(false);
+
+  // Seed from the local cache on mount so the home tab never flashes empty
+  // while the (cold) server is still waking up.
+  useEffect(() => {
+    storage.get(KEYS.devicesCache).then((raw) => {
+      if (!raw) return;
+      try {
+        const cached = JSON.parse(raw) as Device[];
+        if (Array.isArray(cached) && cached.length) {
+          setDevices((cur) => (cur.length ? cur : cached));
+        }
+      } catch {}
+    });
+  }, []);
 
   const refresh = useCallback(async () => {
-    const [ds, rs, cs] = await Promise.all([
+    // allSettled so one failing call (e.g. cold-start timeout) can't blank the
+    // whole screen.
+    const [dsR, rsR, csR] = await Promise.allSettled([
       api.listDevices(),
       api.listRequests('pending'),
       api.listChores('pending'),
     ]);
-    setDevices(ds);
-    setRequests(rs);
-    setChores(cs);
+    if (rsR.status === 'fulfilled') setRequests(rsR.value);
+    if (csR.status === 'fulfilled') setChores(csR.value);
+    if (dsR.status === 'fulfilled') {
+      const ds = dsR.value;
+      if (ds.length > 0) {
+        setDevices(ds);
+        setDevicesStale(false);
+        storage.set(KEYS.devicesCache, JSON.stringify(ds)).catch(() => {});
+      } else {
+        // Empty result: keep the last-known list (a wiped server re-learns the
+        // device when the PC next comes online). Flag it as stale for the banner.
+        setDevices((cur) => {
+          if (cur.length) setDevicesStale(true);
+          return cur;
+        });
+      }
+    }
+    // dsR rejected (network/cold start): leave devices untouched.
   }, []);
 
   useFocusEffect(
@@ -214,6 +250,14 @@ export default function Home() {
         </Pressable>
       ) : (
         <>
+          {devicesStale && (
+            <Card style={{ borderColor: colors.warning, borderWidth: StyleSheet.hairlineWidth } as any}>
+              <Text style={[typography.caption, { color: colors.textMuted }]}>
+                Showing last-known devices — the server is waking up or restarted. Live
+                status returns once the kid&apos;s PC reconnects.
+              </Text>
+            </Card>
+          )}
           {devices.map((d, i) => (
             <Animated.View key={d.id} entering={FadeInDown.delay(i * 70).springify().damping(14)}>
               <DeviceCard device={d} />
