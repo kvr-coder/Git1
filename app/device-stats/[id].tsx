@@ -205,23 +205,27 @@ export default function Stats() {
         ) : (
           apps.map((a, i) => (
             <View key={a.name} style={styles.appRow}>
-              <Text style={[typography.body, { color: colors.text, flex: 1 }]} numberOfLines={1}>
+              <Text
+                style={[typography.body, { color: colors.text, flex: 1, marginRight: spacing.sm }]}
+                numberOfLines={2}
+              >
                 {i + 1}. {a.name.replace(/\.exe$/i, '')}
               </Text>
-              <Text style={[typography.bodyStrong, { color: colors.text, width: 70, textAlign: 'right' }]}>
-                {fmt(a.now)}
-              </Text>
-              <Text
-                style={[
-                  typography.caption,
-                  {
-                    color: a.delta > 0 ? colors.danger : a.delta < 0 ? colors.success : colors.textMuted,
-                    width: 60, textAlign: 'right',
-                  },
-                ]}
-              >
-                {a.delta === 0 ? '—' : `${a.delta > 0 ? '+' : ''}${fmt(Math.abs(a.delta))}`}
-              </Text>
+              <View style={{ alignItems: 'flex-end', minWidth: 64 }}>
+                <Text style={[typography.bodyStrong, { color: colors.text }]}>
+                  {fmt(a.now)}
+                </Text>
+                {a.delta !== 0 && (
+                  <Text
+                    style={[
+                      typography.caption,
+                      { color: a.delta > 0 ? colors.danger : colors.success },
+                    ]}
+                  >
+                    {a.delta > 0 ? '+' : ''}{fmt(Math.abs(a.delta))}
+                  </Text>
+                )}
+              </View>
             </View>
           ))
         )}
