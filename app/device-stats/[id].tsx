@@ -26,7 +26,8 @@ interface Day {
 }
 
 const fmt = (m: number) => {
-  const h = Math.floor(m / 60), mm = m % 60;
+  const mins = Math.max(0, Math.round(m));
+  const h = Math.floor(mins / 60), mm = mins % 60;
   return h ? `${h}h ${mm}m` : `${mm}m`;
 };
 const day0 = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
