@@ -19,4 +19,6 @@ export const KEYS = {
   onboarded: 'git1.onboarded',
   // ISO timestamp of when the parent/guardian accepted the monitoring consent.
   guardianConsentAt: 'git1.guardianConsentAt',
+  // Last non-empty device list, so a wiped/cold server doesn't blank the home tab.
+  devicesCache: 'git1.devicesCache',
 };
