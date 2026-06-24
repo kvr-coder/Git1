@@ -15,6 +15,7 @@ import { Card } from '../../components/Card';
 import { Screen } from '../../components/Screen';
 import { SectionHeader } from '../../components/ui';
 import { api } from '../../lib/api';
+import { friendlyAppName } from '../../lib/appNames';
 import { useTheme } from '../../lib/ThemeContext';
 import { radius, spacing, typography } from '../../lib/theme';
 import type { Device } from '../../lib/types';
@@ -209,7 +210,7 @@ export default function Stats() {
                 style={[typography.body, { color: colors.text, flex: 1, marginRight: spacing.sm }]}
                 numberOfLines={2}
               >
-                {i + 1}. {a.name.replace(/\.exe$/i, '')}
+                {i + 1}. {friendlyAppName(a.name)}
               </Text>
               <View style={{ alignItems: 'flex-end', minWidth: 64 }}>
                 <Text style={[typography.bodyStrong, { color: colors.text }]}>
